@@ -1,0 +1,108 @@
+{
+  "stories": [
+    {
+      "id": "US-021",
+      "title": "Dashboard principal con KPIs del sistema",
+      "epic": "Reportes",
+      "sprint": "SP-03",
+      "points": 8,
+      "priority": "alta",
+      "status": "in_progress",
+      "assignee": "MR",
+      "description": "Como administrador quiero ver los KPIs principales del sistema en un dashboard centralizado.",
+      "acceptance": ["Vista resumen con 6 KPIs", "Actualización en tiempo real", "Drill-down por módulo"],
+      "tags": ["frontend", "dashboard"]
+    },
+    {
+      "id": "US-022",
+      "title": "Reporte de transacciones por período",
+      "epic": "Reportes",
+      "sprint": "SP-03",
+      "points": 5,
+      "priority": "alta",
+      "status": "in_progress",
+      "assignee": "SC",
+      "description": "Como operador quiero generar reportes de transacciones filtrando por fecha y tipo.",
+      "acceptance": ["Filtro por rango de fechas", "Export a PDF y Excel", "Paginación de resultados"],
+      "tags": ["backend", "reportes"]
+    },
+    {
+      "id": "US-023",
+      "title": "Gráfica de evolución de cartera mensual",
+      "epic": "Reportes",
+      "sprint": "SP-03",
+      "points": 3,
+      "priority": "media",
+      "status": "todo",
+      "assignee": "JL",
+      "description": "Como gerente quiero ver la evolución mensual de la cartera en una gráfica de líneas.",
+      "acceptance": ["Gráfica con datos de 12 meses", "Comparativo con año anterior"],
+      "tags": ["frontend", "charts"]
+    },
+    {
+      "id": "US-024",
+      "title": "Panel de alertas y notificaciones",
+      "epic": "Reportes",
+      "sprint": "SP-03",
+      "points": 5,
+      "priority": "media",
+      "status": "todo",
+      "assignee": null,
+      "description": "Como usuario quiero recibir alertas cuando hay eventos críticos en el sistema.",
+      "acceptance": ["Lista de alertas priorizadas", "Marcar como leída", "Filtro por tipo"],
+      "tags": ["frontend", "alertas"]
+    },
+    {
+      "id": "US-025",
+      "title": "Endpoint API para KPIs del dashboard",
+      "epic": "API Core",
+      "sprint": "SP-03",
+      "points": 8,
+      "priority": "alta",
+      "status": "review",
+      "assignee": "MR",
+      "description": "Crear endpoints REST para exponer los KPIs del dashboard.",
+      "acceptance": ["GET /api/kpis funcional", "Autenticación JWT", "Cache de 60 segundos"],
+      "tags": ["backend", "api"]
+    },
+    {
+      "id": "US-026",
+      "title": "Configuración de parámetros de reporte",
+      "epic": "Reportes",
+      "sprint": "SP-03",
+      "points": 3,
+      "priority": "baja",
+      "status": "todo",
+      "assignee": null,
+      "description": "Pantalla de configuración para ajustar parámetros de los reportes por usuario.",
+      "acceptance": ["Guardar configuración por usuario"],
+      "tags": ["frontend", "config"]
+    },
+    {
+      "id": "US-027",
+      "title": "Integración módulo de préstamos en dashboard",
+      "epic": "Integración",
+      "sprint": "SP-03",
+      "points": 5,
+      "priority": "alta",
+      "status": "done",
+      "assignee": "SC",
+      "description": "Conectar los datos del módulo de préstamos con el dashboard principal.",
+      "acceptance": ["Widget de préstamos activos", "Saldo total de cartera en tiempo real"],
+      "tags": ["backend", "integracion"]
+    },
+    {
+      "id": "US-028",
+      "title": "Tests unitarios para módulo de reportes",
+      "epic": "QA",
+      "sprint": "SP-03",
+      "points": 5,
+      "priority": "media",
+      "status": "done",
+      "assignee": "JL",
+      "description": "Cobertura mínima 70% para los servicios del módulo de reportes.",
+      "acceptance": ["70% de cobertura mínima", "CI pasa sin errores"],
+      "tags": ["testing"]
+    }
+  ]
+}

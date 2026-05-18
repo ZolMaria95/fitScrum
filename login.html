@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>fitScrum — Ingresar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --brand:     #04BAF0;
+      --brand-dark:#0390BC;
+      --text:      #1A1A2E;
+      --text-mid:  #4A4A6A;
+      --text-muted:#8A8A9A;
+      --bg:        #F2F2F2;
+      --surface:   #FFFFFF;
+      --border:    #E0E0E0;
+      --error:     #E74C3C;
+      --radius:    6px;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-wrap {
+      width: 100%;
+      max-width: 380px;
+      padding: 20px;
+    }
+
+    .login-brand {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .brand-mark {
+      width: 52px;
+      height: 52px;
+      background: var(--brand);
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 18px;
+      color: white;
+      margin-bottom: 14px;
+      letter-spacing: -1px;
+    }
+
+    .brand-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: white;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .login-card {
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 28px;
+    }
+
+    .login-card h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-mid);
+      margin-bottom: 6px;
+    }
+
+    .form-group select,
+    .form-group input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 14px;
+      color: var(--text);
+      font-family: inherit;
+      transition: border-color 0.15s;
+    }
+
+    .form-group select:focus,
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--brand);
+    }
+
+    .form-group input[type="password"] {
+      font-family: var(--font-mono);
+      letter-spacing: 2px;
+    }
+
+    .btn-login {
+      width: 100%;
+      background: var(--brand);
+      color: white;
+      border: none;
+      padding: 11px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.15s;
+    }
+
+    .btn-login:hover { background: var(--brand-dark); }
+    .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .error-msg {
+      background: #FDEDEC;
+      border: 1px solid #F5B7B1;
+      color: var(--error);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 13px;
+      margin-top: 12px;
+      display: none;
+    }
+
+    .error-msg.visible { display: block; }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-brand">
+      <div class="brand-mark">SW</div>
+      <div class="brand-title">fitScrum</div>
+      <div class="brand-subtitle">Soft Warehouse SA — Uso interno</div>
+    </div>
+
+    <div class="login-card">
+      <h2>Ingresar al sistema</h2>
+
+      <form id="login-form" autocomplete="off">
+        <div class="form-group">
+          <label>Usuario</label>
+          <select id="user-select" required>
+            <option value="">Selecciona tu usuario...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="password-input" placeholder="••••••••" required>
+        </div>
+
+        <button type="submit" class="btn-login" id="btn-login">Ingresar</button>
+        <div class="error-msg" id="error-msg">Usuario o contraseña incorrectos.</div>
+      </form>
+    </div>
+
+    <div class="login-footer">Herramienta interna — no compartir credenciales</div>
+  </div>
+
+  <script>
+    const SESSION_KEY = 'fitscrum_session';
+
+    if (sessionStorage.getItem(SESSION_KEY)) {
+      window.location.href = 'index.html';
+    }
+
+    async function sha256(message) {
+      const msgBuffer = new TextEncoder().encode(message);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    let users = [];
+
+    fetch('data/users.json')
+      .then(r => r.json())
+      .then(data => {
+        users = data.users;
+        const select = document.getElementById('user-select');
+        users.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.textContent = `${u.name} — ${u.role}`;
+          select.appendChild(opt);
+        });
+      });
+
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btn-login');
+      const errEl = document.getElementById('error-msg');
+      btn.disabled = true;
+      btn.textContent = 'Verificando...';
+
+      const userId = document.getElementById('user-select').value;
+      const password = document.getElementById('password-input').value;
+      const hash = await sha256(password);
+
+      const user = users.find(u => u.id === userId && u.passwordHash === hash);
+
+      if (user) {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+          id: user.id,
+          name: user.name,
+          role: user.role,
+          color: user.color
+        }));
+        window.location.href = 'index.html';
+      } else {
+        errEl.classList.add('visible');
+        btn.disabled = false;
+        btn.textContent = 'Ingresar';
+        document.getElementById('password-input').value = '';
+        document.getElementById('password-input').focus();
+      }
+    });
+
+    document.getElementById('password-input').addEventListener('input', () => {
+      document.getElementById('error-msg').classList.remove('visible');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "active": "SP-03",
+  "sprints": [
+    {
+      "id": "SP-01",
+      "name": "Sprint 1",
+      "start": "2026-04-07",
+      "end": "2026-04-18",
+      "capacity": 40,
+      "status": "completed",
+      "goal": "Configuración base e infraestructura"
+    },
+    {
+      "id": "SP-02",
+      "name": "Sprint 2",
+      "start": "2026-04-21",
+      "end": "2026-05-02",
+      "capacity": 38,
+      "status": "completed",
+      "goal": "Módulo de autenticación y roles"
+    },
+    {
+      "id": "SP-03",
+      "name": "Sprint 3",
+      "start": "2026-05-05",
+      "end": "2026-05-16",
+      "capacity": 42,
+      "status": "active",
+      "goal": "Dashboard y reportes base"
+    }
+  ]
+}

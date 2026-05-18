@@ -1,0 +1,32 @@
+{
+  "users": [
+    {
+      "id": "MR",
+      "name": "María Rodríguez",
+      "role": "Dev Frontend",
+      "color": "#04BAF0",
+      "passwordHash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+    },
+    {
+      "id": "SC",
+      "name": "Santiago Córdova",
+      "role": "Dev Backend",
+      "color": "#27AE60",
+      "passwordHash": "e38ad214943daad1d64c102faec29de4afe9da3d8e0ca65953eefffee07cb5a6"
+    },
+    {
+      "id": "JL",
+      "name": "José López",
+      "role": "QA Engineer",
+      "color": "#F29E3B",
+      "passwordHash": "727b4a41fa30e12e1bdb89049b31ee13be0af5ffcf9b3b15d07dbb52dfd69c3f"
+    },
+    {
+      "id": "AP",
+      "name": "Ana Paredes",
+      "role": "Scrum Master",
+      "color": "#9B59B6",
+      "passwordHash": "c33e5dcf4f1abaf40a93d9e2f04aff0a5e05c21cf26a38c3e6adcb09e6e3b31d"
+    }
+  ]
+}
