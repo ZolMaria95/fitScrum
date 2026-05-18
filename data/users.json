@@ -1,32 +1,67 @@
 {
   "users": [
     {
-      "id": "MR",
-      "name": "María Rodríguez",
-      "role": "Dev Frontend",
+      "id": "AN",
+      "name": "Andres",
+      "role": "Consultor",
       "color": "#04BAF0",
-      "passwordHash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
     },
     {
-      "id": "SC",
-      "name": "Santiago Córdova",
-      "role": "Dev Backend",
+      "id": "KV",
+      "name": "Kevin",
+      "role": "Consultor",
       "color": "#27AE60",
-      "passwordHash": "e38ad214943daad1d64c102faec29de4afe9da3d8e0ca65953eefffee07cb5a6"
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
     },
     {
-      "id": "JL",
-      "name": "José López",
-      "role": "QA Engineer",
+      "id": "KA",
+      "name": "Karla",
+      "role": "Consultor",
       "color": "#F29E3B",
-      "passwordHash": "727b4a41fa30e12e1bdb89049b31ee13be0af5ffcf9b3b15d07dbb52dfd69c3f"
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
     },
     {
-      "id": "AP",
-      "name": "Ana Paredes",
-      "role": "Scrum Master",
+      "id": "DV",
+      "name": "David",
+      "role": "Consultor",
       "color": "#9B59B6",
-      "passwordHash": "c33e5dcf4f1abaf40a93d9e2f04aff0a5e05c21cf26a38c3e6adcb09e6e3b31d"
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
+    },
+    {
+      "id": "JO",
+      "name": "Joel",
+      "role": "Consultor",
+      "color": "#E74C3C",
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
+    },
+    {
+      "id": "SO",
+      "name": "Sol",
+      "role": "Scrum Master",
+      "color": "#F2811D",
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
+    },
+    {
+      "id": "JU",
+      "name": "Juan",
+      "role": "Supervisor",
+      "color": "#1ABC9C",
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
+    },
+    {
+      "id": "GA",
+      "name": "Gabriel",
+      "role": "Consultor",
+      "color": "#2980B9",
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
+    },
+    {
+      "id": "LI",
+      "name": "Lina",
+      "role": "Supervisor",
+      "color": "#8E44AD",
+      "passwordHash": "3abb260802c103b664bb4696466bc47624b9f7bfc9f6ed4c5b83612344c171bc"
     }
   ]
 }

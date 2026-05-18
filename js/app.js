@@ -1,0 +1,324 @@
+const SESSION_KEY = 'fitscrum_session';
+
+const App = (() => {
+  let _currentView    = 'board';
+  let _currentSprint  = null;
+  let _session        = null;
+
+  async function init() {
+    _session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+    if (!_session) { window.location.href = 'login.html'; return; }
+
+    await AppData.init();
+
+    _currentSprint = AppData.getActiveSprint().id;
+
+    _renderUserChip();
+    _populateSprintSelector();
+    refreshBanner();
+    _setupNav();
+    _setupModals();
+    _setupForms();
+
+    refreshBoard();
+  }
+
+  // ── User chip ────────────────────────────────────────
+  function _renderUserChip() {
+    document.getElementById('user-avatar').style.background = _session.color;
+    document.getElementById('user-avatar').textContent      = _session.id;
+    document.getElementById('user-name-display').textContent = _session.name;
+
+    document.getElementById('btn-logout').addEventListener('click', () => {
+      sessionStorage.removeItem(SESSION_KEY);
+      window.location.href = 'login.html';
+    });
+  }
+
+  // ── Sprint selector ──────────────────────────────────
+  function _populateSprintSelector() {
+    const sprints = AppData.getSprints();
+    const sel = document.getElementById('sprint-selector');
+    sel.innerHTML = sprints.sprints.map(s =>
+      `<option value="${s.id}" ${s.id === sprints.active ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
+
+    sel.addEventListener('change', () => {
+      _currentSprint = sel.value;
+      AppData.setActiveSprint(_currentSprint);
+      refreshBanner();
+      _refreshCurrentView();
+    });
+  }
+
+  // ── Banner ───────────────────────────────────────────
+  function refreshBanner() {
+    const sprint  = AppData.getSprints().sprints.find(s => s.id === _currentSprint);
+    const stories = AppData.getStoriesBySprint(_currentSprint);
+    const total   = stories.reduce((s, x) => s + x.points, 0);
+    const done    = stories.filter(s => s.status === 'done').reduce((s, x) => s + x.points, 0);
+    const pct     = total > 0 ? Math.round((done / total) * 100) : 0;
+
+    const fmt = d => new Date(d + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+
+    document.getElementById('sprint-banner').innerHTML = `
+      <div class="banner-goal">${sprint.name} — ${sprint.goal}</div>
+      <div class="banner-meta">
+        <span>${fmt(sprint.start)} → ${fmt(sprint.end)}</span>
+        <span>${sprint.capacity} pts capacidad</span>
+        <span>${stories.length} historias</span>
+      </div>
+      <div class="banner-progress">
+        <span>${pct}% completado</span>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <span style="font-family:var(--font-mono);font-size:11px">${done}/${total}</span>
+      </div>`;
+  }
+
+  // ── Navigation ───────────────────────────────────────
+  function _setupNav() {
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        _currentView = tab.dataset.view;
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.getElementById(`view-${_currentView}`).classList.add('active');
+        _refreshCurrentView();
+      });
+    });
+  }
+
+  function _refreshCurrentView() {
+    if (_currentView === 'board')     refreshBoard();
+    if (_currentView === 'burndown')  refreshBurndown();
+    if (_currentView === 'progreso')  refreshProgreso();
+    if (_currentView === 'consultas') refreshConsultas();
+  }
+
+  // ── Public refresh methods ───────────────────────────
+  function refreshBoard() {
+    Board.render(AppData.getStoriesBySprint(_currentSprint), AppData.getTeam(), AppData.getClients());
+  }
+
+  function refreshBurndown() {
+    const sprint = AppData.getSprints().sprints.find(s => s.id === _currentSprint);
+    Burndown.render(sprint, AppData.getStoriesBySprint(_currentSprint), AppData.getSprints());
+  }
+
+  function refreshProgreso() {
+    const sprintStoryIds = new Set(AppData.getStoriesBySprint(_currentSprint).map(s => s.id));
+    const entries = AppData.getProgress().filter(e => sprintStoryIds.has(e.storyId));
+    Progreso.render(entries, AppData.getAllStories(), AppData.getTeam());
+  }
+
+  function refreshConsultas() {
+    Consultas.render(AppData.getQueries(), AppData.getAllStories(), AppData.getTeam());
+  }
+
+  // ── Modals ───────────────────────────────────────────
+  function _setupModals() {
+    // Close buttons with data-close attribute
+    document.querySelectorAll('[data-close]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById(btn.dataset.close).classList.add('hidden');
+      });
+    });
+
+    // Click outside to close
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay) overlay.classList.add('hidden');
+      });
+    });
+  }
+
+  // ── Forms ────────────────────────────────────────────
+  function _setupForms() {
+    const team = AppData.getTeam();
+
+    // New sprint
+    document.getElementById('btn-new-sprint').addEventListener('click', () => {
+      const nums = AppData.getSprints().sprints.map(s => parseInt(s.id.replace('SP-', ''), 10));
+      const next = Math.max(0, ...nums) + 1;
+      document.getElementById('nsp-name').value = `Sprint ${next}`;
+      document.getElementById('nsp-goal').value  = '';
+      document.getElementById('nsp-start').value = '';
+      document.getElementById('nsp-end').value   = '';
+      document.getElementById('modal-new-sprint').classList.remove('hidden');
+    });
+
+    document.getElementById('form-new-sprint').addEventListener('submit', e => {
+      e.preventDefault();
+      const sprint = AppData.addSprint({
+        goal:  document.getElementById('nsp-goal').value.trim(),
+        start: document.getElementById('nsp-start').value,
+        end:   document.getElementById('nsp-end').value,
+      });
+      document.getElementById('modal-new-sprint').classList.add('hidden');
+      _currentSprint = sprint.id;
+      _populateSprintSelector();
+      refreshBanner();
+      refreshBoard();
+    });
+
+    // Priority filter
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn[data-filter]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        Board.setPriorityFilter(btn.dataset.filter);
+        refreshBoard();
+      });
+    });
+
+    // New task — abrir modal
+    document.getElementById('btn-new-story').addEventListener('click', () => {
+      _populateTaskForm();
+      document.getElementById('modal-new-story').classList.remove('hidden');
+    });
+
+    // Buscar ticket en Helpdesk API
+    document.getElementById('btn-buscar-ticket').addEventListener('click', () => _buscarTicket());
+    document.getElementById('ns-ticket').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); _buscarTicket(); }
+    });
+
+    async function _buscarTicket() {
+      const ticketNum = document.getElementById('ns-ticket').value.trim();
+      if (!ticketNum) return;
+
+      const btn    = document.getElementById('btn-buscar-ticket');
+      const status = document.getElementById('ticket-search-status');
+
+      btn.disabled    = true;
+      btn.textContent = '...';
+      status.className = 'ticket-search-status loading';
+      status.textContent = 'Buscando en Helpdesk...';
+
+      try {
+        const result = await Helpdesk.lookupTicket(ticketNum);
+
+        if (!result) {
+          status.className   = 'ticket-search-status error';
+          status.textContent = `Ticket #${ticketNum} no encontrado o no pertenece a los clientes registrados.`;
+        } else {
+          // Llenar campos
+          document.getElementById('ns-title').value = result.title;
+
+          const clientSelect = document.getElementById('ns-client');
+          if (result.client) {
+            clientSelect.value = result.client;
+          } else {
+            status.className   = 'ticket-search-status warn';
+            status.textContent = `Cliente "${result.clientRaw}" no mapeado — selecciónalo manualmente.`;
+          }
+
+          // Prioridad
+          document.getElementById('ns-priority').value = result.priority;
+
+          if (result.client) {
+            status.className   = 'ticket-search-status ok';
+            status.textContent = `✓ Ticket encontrado — datos cargados automáticamente.`;
+          }
+        }
+      } catch (err) {
+        status.className   = 'ticket-search-status error';
+        status.textContent = err.message.includes('Failed to fetch')
+          ? 'No se pudo conectar a Helpdesk. Verifica la red o CORS.'
+          : `Error: ${err.message}`;
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = 'Buscar';
+      }
+    }
+
+    function _populateTaskForm() {
+      const clients = AppData.getClients();
+      document.getElementById('ns-client').innerHTML =
+        `<option value="">Seleccionar cliente...</option>` +
+        clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      document.getElementById('ns-assignee').innerHTML =
+        team.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+      document.getElementById('ticket-search-status').textContent = '';
+      document.getElementById('ticket-search-status').className = 'ticket-search-status';
+    }
+
+    document.getElementById('form-new-story').addEventListener('submit', e => {
+      e.preventDefault();
+      AppData.addStory({
+        ticket:      document.getElementById('ns-ticket').value.trim(),
+        client:      document.getElementById('ns-client').value || null,
+        title:       document.getElementById('ns-title').value.trim(),
+        description: document.getElementById('ns-description').value.trim(),
+        assignee:    document.getElementById('ns-assignee').value || null,
+        dueDate:     document.getElementById('ns-duedate').value,
+        priority:    document.getElementById('ns-priority').value,
+      });
+      document.getElementById('modal-new-story').classList.add('hidden');
+      e.target.reset();
+      refreshBoard();
+      refreshBanner();
+    });
+
+    // New progress entry
+    document.getElementById('btn-new-entry').addEventListener('click', () => {
+      Progreso.initForm(AppData.getAllStories(), team);
+      document.getElementById('ne-author').value = _session.id;
+      document.getElementById('modal-new-entry').classList.remove('hidden');
+    });
+
+    document.getElementById('form-new-entry').addEventListener('submit', e => {
+      e.preventDefault();
+      AppData.addProgressEntry({
+        storyId:    document.getElementById('ne-story').value,
+        author:     document.getElementById('ne-author').value,
+        hoursLogged: parseFloat(document.getElementById('ne-hours').value),
+        notes:      document.getElementById('ne-notes').value.trim(),
+      });
+      document.getElementById('modal-new-entry').classList.add('hidden');
+      e.target.reset();
+      if (_currentView === 'progreso') refreshProgreso();
+    });
+
+    // New query
+    document.getElementById('btn-new-query').addEventListener('click', () => {
+      Consultas.initForm(AppData.getAllStories(), team);
+      document.getElementById('nq-author').value = _session.id;
+      document.getElementById('modal-new-query').classList.remove('hidden');
+    });
+
+    document.getElementById('form-new-query').addEventListener('submit', e => {
+      e.preventDefault();
+      AppData.addQuery({
+        title:       document.getElementById('nq-title').value.trim(),
+        storyId:     document.getElementById('nq-story').value || null,
+        priority:    document.getElementById('nq-priority').value,
+        description: document.getElementById('nq-description').value.trim(),
+        author:      document.getElementById('nq-author').value,
+      });
+      document.getElementById('modal-new-query').classList.add('hidden');
+      e.target.reset();
+      if (_currentView === 'consultas') refreshConsultas();
+    });
+
+    // Resolve query
+    document.getElementById('form-resolve').addEventListener('submit', e => {
+      e.preventDefault();
+      AppData.resolveQuery(
+        document.getElementById('resolve-query-id').value,
+        document.getElementById('resolve-response').value.trim(),
+        document.getElementById('resolve-author').value,
+      );
+      document.getElementById('modal-resolve').classList.add('hidden');
+      e.target.reset();
+      refreshConsultas();
+    });
+  }
+
+  return { init, refreshBoard, refreshBurndown, refreshProgreso, refreshConsultas, refreshBanner };
+})();
+
+document.addEventListener('DOMContentLoaded', App.init);

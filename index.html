@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>fitScrum — Soft Warehouse SA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+  <!-- ─── Header ──────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo">SW</div>
+      <div>
+        <div class="brand-name">fitScrum</div>
+        <span class="brand-company">Soft Warehouse SA</span>
+      </div>
+    </div>
+
+    <nav class="app-nav">
+      <button class="nav-tab active" data-view="board">Board</button>
+      <button class="nav-tab" data-view="burndown">Burndown</button>
+      <button class="nav-tab" data-view="progreso">Progreso</button>
+      <button class="nav-tab" data-view="consultas">Consultas</button>
+    </nav>
+
+    <div class="header-right">
+      <select id="sprint-selector" class="sprint-select"></select>
+      <button id="btn-new-sprint" class="btn-new-sprint" title="Nuevo sprint">+</button>
+      <div class="user-chip" id="user-chip">
+        <div class="user-avatar" id="user-avatar"></div>
+        <span class="user-name" id="user-name-display"></span>
+      </div>
+      <button class="btn-logout" id="btn-logout" title="Cerrar sesión">Salir</button>
+    </div>
+  </header>
+
+  <!-- ─── Sprint banner ───────────────────────────────── -->
+  <div class="sprint-banner" id="sprint-banner"></div>
+
+  <!-- ─── Main ────────────────────────────────────────── -->
+  <main class="app-main">
+
+    <!-- Board -->
+    <section id="view-board" class="view active">
+      <div class="board-toolbar">
+        <div class="board-filters">
+          <button class="filter-btn active" data-filter="all">Todas</button>
+          <button class="filter-btn" data-filter="alta">Alta</button>
+          <button class="filter-btn" data-filter="media">Media</button>
+          <button class="filter-btn" data-filter="baja">Baja</button>
+        </div>
+        <div class="board-assignee-filter">
+          <span class="filter-label">Asignado:</span>
+          <div id="assignee-filters" class="assignee-chips"></div>
+        </div>
+        <div id="client-filter-wrap"></div>
+        <button class="btn-primary" id="btn-new-story" style="margin-left:auto">+ Tarea</button>
+      </div>
+
+      <div class="kanban-board">
+        <div class="kanban-col">
+          <div class="col-header">
+            <span class="col-status-dot dot-todo"></span>
+            <span class="col-title">TO DO</span>
+            <span class="col-pts" id="pts-todo"></span>
+            <span class="col-count" id="count-todo">0</span>
+          </div>
+          <div class="col-cards" id="cards-todo" data-status="todo"></div>
+        </div>
+        <div class="kanban-col">
+          <div class="col-header">
+            <span class="col-status-dot dot-in_progress"></span>
+            <span class="col-title">IN PROGRESS</span>
+            <span class="col-pts" id="pts-in_progress"></span>
+            <span class="col-count" id="count-in_progress">0</span>
+          </div>
+          <div class="col-cards" id="cards-in_progress" data-status="in_progress"></div>
+        </div>
+        <div class="kanban-col">
+          <div class="col-header">
+            <span class="col-status-dot dot-review"></span>
+            <span class="col-title">EN CERTIFICACIÓN</span>
+            <span class="col-pts" id="pts-review"></span>
+            <span class="col-count" id="count-review">0</span>
+          </div>
+          <div class="col-cards" id="cards-review" data-status="review"></div>
+        </div>
+        <div class="kanban-col">
+          <div class="col-header">
+            <span class="col-status-dot dot-done"></span>
+            <span class="col-title">DONE</span>
+            <span class="col-pts" id="pts-done"></span>
+            <span class="col-count" id="count-done">0</span>
+          </div>
+          <div class="col-cards" id="cards-done" data-status="done"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Burndown -->
+    <section id="view-burndown" class="view">
+      <div id="metrics-grid" class="metrics-grid"></div>
+      <div class="chart-container">
+        <div class="chart-header">
+          <h3>Burndown — <span id="chart-sprint-name"></span></h3>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-line ideal"></span>Ideal</span>
+            <span class="legend-item"><span class="legend-line actual"></span>Real</span>
+          </div>
+        </div>
+        <canvas id="burndown-chart" width="900" height="320"></canvas>
+      </div>
+      <div class="velocity-section">
+        <h3>Velocidad del equipo</h3>
+        <div id="velocity-bars" class="velocity-bars"></div>
+      </div>
+    </section>
+
+    <!-- Progreso -->
+    <section id="view-progreso" class="view">
+      <div class="section-header">
+        <h2>Registro de Progreso</h2>
+        <button class="btn-primary" id="btn-new-entry">+ Registrar avance</button>
+      </div>
+      <div class="section-filters">
+        <select id="progreso-story-filter" class="select-filter">
+          <option value="">Todas las historias</option>
+        </select>
+        <select id="progreso-author-filter" class="select-filter">
+          <option value="">Todos los miembros</option>
+        </select>
+      </div>
+      <div id="progreso-list" class="progreso-list"></div>
+    </section>
+
+    <!-- Consultas -->
+    <section id="view-consultas" class="view">
+      <div class="section-header">
+        <h2>Consultas y Bloqueos</h2>
+        <button class="btn-primary" id="btn-new-query">+ Nueva consulta</button>
+      </div>
+      <div class="section-filters">
+        <button class="filter-btn active" data-qfilter="all">Todas</button>
+        <button class="filter-btn" data-qfilter="open">Abiertas</button>
+        <button class="filter-btn" data-qfilter="resolved">Resueltas</button>
+      </div>
+      <div id="consultas-list" class="consultas-list"></div>
+    </section>
+
+  </main>
+
+  <!-- ─── Modal: Card detail ───────────────────────────── -->
+  <div id="modal-card" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-id-badge" id="modal-card-id"></span>
+        <button class="modal-close" data-close="modal-card">✕</button>
+      </div>
+      <div class="modal-body" id="modal-card-body"></div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: New task ──────────────────────────────── -->
+  <div id="modal-new-story" class="modal-overlay hidden">
+    <div class="modal modal-form">
+      <div class="modal-header">
+        <span>Nueva Tarea</span>
+        <button class="modal-close" data-close="modal-new-story">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-new-story">
+          <div class="form-group">
+            <label>N° de Ticket *</label>
+            <div class="ticket-search-wrap">
+              <input type="text" id="ns-ticket" required placeholder="Ej: 4521" autocomplete="off">
+              <button type="button" id="btn-buscar-ticket" class="btn-buscar">Buscar</button>
+            </div>
+            <div id="ticket-search-status" class="ticket-search-status"></div>
+          </div>
+          <div class="form-row-two">
+            <div class="form-group">
+              <label>Cliente *</label>
+              <select id="ns-client" required>
+                <option value="">Seleccionar...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Prioridad</label>
+              <select id="ns-priority">
+                <option value="alta">Alta</option>
+                <option value="media" selected>Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Título / Tarea *</label>
+            <input type="text" id="ns-title" required placeholder="¿Qué se debe hacer?">
+          </div>
+          <div class="form-group">
+            <label>Descripción <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+            <textarea id="ns-description" rows="3" placeholder="Detalle adicional, contexto, pasos..."></textarea>
+          </div>
+          <div class="form-row-two">
+            <div class="form-group">
+              <label>Asignado a *</label>
+              <select id="ns-assignee" required></select>
+            </div>
+            <div class="form-group">
+              <label>Fecha de entrega *</label>
+              <input type="date" id="ns-duedate" required>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" data-close="modal-new-story">Cancelar</button>
+            <button type="submit" class="btn-primary">Crear Tarea</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: New progress entry ───────────────────── -->
+  <div id="modal-new-entry" class="modal-overlay hidden">
+    <div class="modal modal-form">
+      <div class="modal-header">
+        <span>Registrar Avance</span>
+        <button class="modal-close" data-close="modal-new-entry">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-new-entry">
+          <div class="form-group">
+            <label>Historia *</label>
+            <select id="ne-story" required></select>
+          </div>
+          <div class="form-row-two">
+            <div class="form-group">
+              <label>Miembro del equipo</label>
+              <select id="ne-author"></select>
+            </div>
+            <div class="form-group">
+              <label>Horas registradas</label>
+              <input type="number" id="ne-hours" min="0.5" max="24" step="0.5" value="4">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Notas *</label>
+            <textarea id="ne-notes" rows="4" required placeholder="¿Qué se completó? ¿Qué queda pendiente? ¿Algún bloqueo?"></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" data-close="modal-new-entry">Cancelar</button>
+            <button type="submit" class="btn-primary">Registrar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: New query ─────────────────────────────── -->
+  <div id="modal-new-query" class="modal-overlay hidden">
+    <div class="modal modal-form">
+      <div class="modal-header">
+        <span>Nueva Consulta / Bloqueo</span>
+        <button class="modal-close" data-close="modal-new-query">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-new-query">
+          <div class="form-group">
+            <label>Título *</label>
+            <input type="text" id="nq-title" required placeholder="¿Cuál es la consulta o bloqueo?">
+          </div>
+          <div class="form-row-two">
+            <div class="form-group">
+              <label>Historia relacionada</label>
+              <select id="nq-story"></select>
+            </div>
+            <div class="form-group">
+              <label>Prioridad</label>
+              <select id="nq-priority">
+                <option value="alta">Alta</option>
+                <option value="media" selected>Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Descripción detallada *</label>
+            <textarea id="nq-description" rows="4" required placeholder="Contexto, qué se intentó, qué se necesita saber..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Quien consulta</label>
+            <select id="nq-author"></select>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" data-close="modal-new-query">Cancelar</button>
+            <button type="submit" class="btn-primary">Enviar Consulta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Resolve query ─────────────────────────── -->
+  <div id="modal-resolve" class="modal-overlay hidden">
+    <div class="modal modal-form resolve-modal">
+      <div class="modal-header">
+        <span>Marcar como resuelta</span>
+        <button class="modal-close" data-close="modal-resolve">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-resolve">
+          <input type="hidden" id="resolve-query-id">
+          <div class="form-group">
+            <label>Respuesta / Resolución *</label>
+            <textarea id="resolve-response" rows="4" required placeholder="Describe la solución o la respuesta a la consulta..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Respondido por</label>
+            <select id="resolve-author"></select>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" data-close="modal-resolve">Cancelar</button>
+            <button type="submit" class="btn-primary">Marcar resuelta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: New sprint ────────────────────────────── -->
+  <div id="modal-new-sprint" class="modal-overlay hidden">
+    <div class="modal modal-form" style="max-width:440px">
+      <div class="modal-header">
+        <span>Nuevo Sprint</span>
+        <button class="modal-close" data-close="modal-new-sprint">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-new-sprint">
+          <div class="form-group">
+            <label>Nombre del sprint</label>
+            <input type="text" id="nsp-name" placeholder="Sprint 2" readonly
+                   style="background:var(--bg);color:var(--text-muted);cursor:default">
+          </div>
+          <div class="form-group">
+            <label>Objetivo *</label>
+            <input type="text" id="nsp-goal" required placeholder="¿Qué se busca lograr en este sprint?">
+          </div>
+          <div class="form-row-two">
+            <div class="form-group">
+              <label>Fecha inicio *</label>
+              <input type="date" id="nsp-start" required>
+            </div>
+            <div class="form-group">
+              <label>Fecha fin *</label>
+              <input type="date" id="nsp-end" required>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;padding:10px;background:var(--warn-light);border-radius:var(--radius)">
+            Al crear el nuevo sprint, el sprint actual se marcará como <strong>completado</strong> y este pasará a ser el activo.
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" data-close="modal-new-sprint">Cancelar</button>
+            <button type="submit" class="btn-primary">Crear Sprint</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/firebase-config.js"></script>
+  <script src="js/helpdesk.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/board.js"></script>
+  <script src="js/burndown.js"></script>
+  <script src="js/progreso.js"></script>
+  <script src="js/consultas.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

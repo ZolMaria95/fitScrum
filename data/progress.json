@@ -1,36 +1,3 @@
 {
-  "entries": [
-    {
-      "id": "PR-001",
-      "storyId": "US-021",
-      "date": "2026-05-14",
-      "author": "MR",
-      "notes": "Completado el diseño del layout del dashboard. Pendiente conectar datos reales del API.",
-      "hoursLogged": 4
-    },
-    {
-      "id": "PR-002",
-      "storyId": "US-022",
-      "date": "2026-05-14",
-      "author": "SC",
-      "notes": "Implementado filtro por fechas. Export a PDF en progreso, bloqueado por decisión de librería.",
-      "hoursLogged": 6
-    },
-    {
-      "id": "PR-003",
-      "storyId": "US-025",
-      "date": "2026-05-13",
-      "author": "MR",
-      "notes": "Endpoint GET /api/kpis implementado con cache Redis. En revisión de código por el equipo.",
-      "hoursLogged": 5
-    },
-    {
-      "id": "PR-004",
-      "storyId": "US-027",
-      "date": "2026-05-12",
-      "author": "SC",
-      "notes": "Integración completada y probada en staging. Widget muestra datos en tiempo real.",
-      "hoursLogged": 7
-    }
-  ]
+  "entries": []
 }
