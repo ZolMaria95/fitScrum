@@ -25,11 +25,16 @@
       <button class="nav-tab" data-view="burndown">Burndown</button>
       <button class="nav-tab" data-view="progreso">Progreso</button>
       <button class="nav-tab" data-view="consultas">Consultas</button>
+      <button class="nav-tab" data-view="helpdesk">Helpdesk</button>
+      <button class="nav-tab" data-view="semanal">HelpDesk Semanal</button>
+      <button class="nav-tab nav-tab-sol hidden" data-view="sol">Mi Panel</button>
     </nav>
 
     <div class="header-right">
       <select id="sprint-selector" class="sprint-select"></select>
+      <button id="btn-edit-sprint" class="btn-edit-sprint" title="Editar sprint actual">✏</button>
       <button id="btn-new-sprint" class="btn-new-sprint" title="Nuevo sprint">+</button>
+      <button id="btn-delete-sprint" class="btn-delete-sprint" title="Eliminar sprint actual">🗑</button>
       <div class="user-chip" id="user-chip">
         <div class="user-avatar" id="user-avatar"></div>
         <span class="user-name" id="user-name-display"></span>
@@ -149,6 +154,184 @@
         <button class="filter-btn" data-qfilter="resolved">Resueltas</button>
       </div>
       <div id="consultas-list" class="consultas-list"></div>
+    </section>
+
+    <!-- Sol / Scrum Master Panel -->
+    <section id="view-sol" class="view">
+
+      <div class="sol-page-header">
+        <div>
+          <h2 class="sol-page-title">Mi Panel</h2>
+          <p class="sol-page-sub">Seguimiento diario — Scrum Master</p>
+        </div>
+        <button class="btn-primary" id="btn-refresh-sol">↻ Actualizar</button>
+      </div>
+
+      <!-- KPIs -->
+      <div class="sol-kpi-row">
+        <div class="sol-kpi sol-kpi-crimson">
+          <div class="sol-kpi-num" id="sol-kpi-actions">—</div>
+          <div class="sol-kpi-label">Acciones pendientes</div>
+          <div class="sol-kpi-desc">Tickets marcados con Acción</div>
+        </div>
+        <div class="sol-kpi sol-kpi-amber">
+          <div class="sol-kpi-num" id="sol-kpi-pending">—</div>
+          <div class="sol-kpi-label">Esperando cliente</div>
+          <div class="sol-kpi-desc">3 o más días sin respuesta</div>
+        </div>
+        <div class="sol-kpi sol-kpi-red">
+          <div class="sol-kpi-num" id="sol-kpi-soon">—</div>
+          <div class="sol-kpi-label">Próximos a vencer</div>
+          <div class="sol-kpi-desc">Vencen en 3 días o menos</div>
+        </div>
+        <div class="sol-kpi sol-kpi-blue">
+          <div class="sol-kpi-num" id="sol-kpi-todo">—</div>
+          <div class="sol-kpi-label">Por asignar</div>
+          <div class="sol-kpi-desc">Tareas en To Do</div>
+        </div>
+      </div>
+
+      <!-- Bloque 0 — Acciones pendientes (tickets marcados en Helpdesk) -->
+      <div class="sol-block sol-block-crimson">
+        <div class="sol-block-header">
+          <span class="sol-block-icon">🔴</span>
+          <div class="sol-block-titles">
+            <span class="sol-block-title">ACCIONES PENDIENTES</span>
+            <span class="sol-block-sub">Tickets marcados con Acción en la tabla de Helpdesk — presionar "Realizado ✓" los quita</span>
+          </div>
+          <span class="sol-block-count" id="sol-count-actions"></span>
+        </div>
+        <div class="sol-block-body sol-block-table-body">
+          <div id="sol-pending-actions"></div>
+        </div>
+      </div>
+
+      <!-- Bloque 1 — Notificar al cliente -->
+      <div class="sol-block sol-block-amber">
+        <div class="sol-block-header">
+          <span class="sol-block-icon">📣</span>
+          <div class="sol-block-titles">
+            <span class="sol-block-title">NOTIFICAR AL CLIENTE</span>
+            <span class="sol-block-sub">Tickets con 3 o más días sin respuesta — registrar nota de seguimiento</span>
+          </div>
+          <span class="sol-block-count" id="sol-count-pending"></span>
+        </div>
+        <div class="sol-block-body">
+          <div id="sol-client-pending" class="sol-cards-grid"></div>
+        </div>
+      </div>
+
+      <!-- Bloque 2 — Próximos a vencer -->
+      <div class="sol-block sol-block-red">
+        <div class="sol-block-header">
+          <span class="sol-block-icon">⏰</span>
+          <div class="sol-block-titles">
+            <span class="sol-block-title">PRÓXIMOS A VENCER</span>
+            <span class="sol-block-sub">Coordinar con el técnico responsable antes de la fecha límite</span>
+          </div>
+          <span class="sol-block-count" id="sol-count-soon"></span>
+        </div>
+        <div class="sol-block-body">
+          <div id="sol-soon-due" class="sol-cards-grid"></div>
+        </div>
+      </div>
+
+      <!-- Bloque 3 — Nuevas tareas -->
+      <div class="sol-block sol-block-blue">
+        <div class="sol-block-header">
+          <span class="sol-block-icon">📋</span>
+          <div class="sol-block-titles">
+            <span class="sol-block-title">NUEVAS TAREAS — POR ASIGNAR</span>
+            <span class="sol-block-sub">Presionar "Asignado ✓" mueve la tarea a In Progress en el board</span>
+          </div>
+          <span class="sol-block-count" id="sol-count-todo"></span>
+        </div>
+        <div class="sol-block-body sol-block-table-body">
+          <div id="sol-new-todo"></div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Helpdesk -->
+    <section id="view-helpdesk" class="view">
+      <div class="section-header">
+        <h2>Tickets Helpdesk</h2>
+        <button class="btn-primary" id="btn-sync-helpdesk">↻ Sincronizar</button>
+      </div>
+
+      <div class="hd-toolbar">
+        <div class="hd-tabs">
+          <button class="hd-tab active" data-hdtab="prioritarios">
+            Prioritarios <span class="hd-tab-count alert" id="hd-count-prio">0</span>
+          </button>
+          <button class="hd-tab" data-hdtab="todos">
+            Todos los tickets <span class="hd-tab-count" id="hd-count-all">0</span>
+          </button>
+          <button class="hd-tab" data-hdtab="estadisticas">
+            Estadísticas
+          </button>
+        </div>
+      </div>
+
+      <div id="hd-status" class="hd-status"></div>
+      <div id="hd-list"></div>
+    </section>
+
+    <!-- HelpDesk Semanal -->
+    <section id="view-semanal" class="view">
+      <div class="section-header">
+        <div>
+          <h2>HelpDesk Semanal</h2>
+          <p class="section-sub">Asignación semanal de soporte emergente — relevos los días viernes</p>
+        </div>
+        <div class="sem-toolbar-actions">
+          <button class="btn-secondary" id="btn-sem-prev" title="Mes anterior">◀</button>
+          <span id="sem-period-label" class="sem-period-label"></span>
+          <button class="btn-secondary" id="btn-sem-next" title="Mes siguiente">▶</button>
+          <button class="btn-secondary" id="btn-sem-today">Hoy</button>
+        </div>
+      </div>
+
+      <div class="sem-layout">
+        <!-- Calendario -->
+        <div class="sem-calendar-wrap">
+          <div class="sem-calendar-header">
+            <h3 id="sem-month-title">—</h3>
+            <span class="sem-legend">
+              <span class="sem-legend-item"><span class="sem-legend-dot dot-current"></span>Semana actual</span>
+              <span class="sem-legend-item"><span class="sem-legend-dot dot-assigned"></span>Asignado</span>
+              <span class="sem-legend-item"><span class="sem-legend-dot dot-empty"></span>Sin asignar</span>
+            </span>
+          </div>
+          <div class="sem-calendar" id="sem-calendar"></div>
+        </div>
+
+        <!-- Resumen lateral -->
+        <aside class="sem-summary">
+          <div class="sem-summary-card sem-current-week">
+            <div class="sem-summary-label">Semana actual</div>
+            <div class="sem-summary-range" id="sem-current-range">—</div>
+            <div class="sem-summary-assignee" id="sem-current-assignee">Sin asignar</div>
+            <button class="btn-primary btn-sm" id="btn-sem-assign-current">Asignar / Editar</button>
+          </div>
+
+          <div class="sem-summary-block">
+            <div class="sem-summary-header">
+              <span class="sem-summary-title">Próximas semanas</span>
+              <span class="sem-summary-count" id="sem-next-count">0</span>
+            </div>
+            <div id="sem-next-weeks" class="sem-week-list"></div>
+          </div>
+
+          <div class="sem-summary-block">
+            <div class="sem-summary-header">
+              <span class="sem-summary-title">Resumen de asignaciones</span>
+            </div>
+            <div id="sem-stats" class="sem-stats"></div>
+          </div>
+        </aside>
+      </div>
     </section>
 
   </main>
@@ -331,6 +514,59 @@
     </div>
   </div>
 
+  <!-- ─── Modal: Edit sprint ──────────────────────────── -->
+  <div id="modal-edit-sprint" class="modal-overlay hidden">
+    <div class="modal modal-form" style="max-width:460px">
+      <div class="modal-header">
+        <div>
+          <span>Editar Sprint</span>
+          <span class="modal-id-badge" id="esp-id-badge" style="margin-left:8px"></span>
+        </div>
+        <button class="modal-close" data-close="modal-edit-sprint">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-edit-sprint">
+          <div class="form-group">
+            <label>Nombre del sprint *</label>
+            <input type="text" id="esp-name" required placeholder="Sprint 1">
+          </div>
+          <div class="form-group">
+            <label>Objetivo</label>
+            <input type="text" id="esp-goal" placeholder="¿Qué se busca lograr en este sprint?">
+          </div>
+          <div class="form-row-two">
+            <div class="form-group">
+              <label>Fecha inicio *</label>
+              <input type="date" id="esp-start" required>
+            </div>
+            <div class="form-group">
+              <label>Fecha fin *</label>
+              <input type="date" id="esp-end" required>
+            </div>
+          </div>
+          <div class="form-row-two">
+            <div class="form-group">
+              <label>Capacidad (puntos)</label>
+              <input type="number" id="esp-capacity" min="0" step="1" placeholder="0">
+            </div>
+            <div class="form-group">
+              <label>Estatus</label>
+              <select id="esp-status">
+                <option value="active">Activo</option>
+                <option value="completed">Completado</option>
+                <option value="planned">Planeado</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" data-close="modal-edit-sprint">Cancelar</button>
+            <button type="submit" class="btn-primary">Guardar cambios</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- ─── Modal: New sprint ────────────────────────────── -->
   <div id="modal-new-sprint" class="modal-overlay hidden">
     <div class="modal modal-form" style="max-width:440px">
@@ -371,13 +607,52 @@
     </div>
   </div>
 
+  <!-- ─── Modal: Asignar semana ───────────────────────── -->
+  <div id="modal-sem-assign" class="modal-overlay hidden">
+    <div class="modal modal-form" style="max-width:440px">
+      <div class="modal-header">
+        <span>Asignar soporte semanal</span>
+        <button class="modal-close" data-close="modal-sem-assign">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-sem-assign">
+          <input type="hidden" id="sem-week-key">
+          <div class="form-group">
+            <label>Semana</label>
+            <div id="sem-week-range-display" class="sem-range-pill">—</div>
+          </div>
+          <div class="form-group">
+            <label>Consultor asignado *</label>
+            <select id="sem-assignee" required>
+              <option value="">Seleccionar...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notas <span style="color:var(--text-muted);font-weight:400">(opcional)</span></label>
+            <textarea id="sem-notes" rows="3" placeholder="Observaciones, intercambios, etc."></textarea>
+          </div>
+          <div class="form-actions" style="justify-content:space-between">
+            <button type="button" class="btn-danger btn-sm" id="btn-sem-clear" style="display:none">Quitar asignación</button>
+            <div style="display:flex;gap:8px;margin-left:auto">
+              <button type="button" class="btn-secondary" data-close="modal-sem-assign">Cancelar</button>
+              <button type="submit" class="btn-primary">Guardar</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script src="js/firebase-config.js"></script>
   <script src="js/helpdesk.js"></script>
+  <script src="js/helpdesk-panel.js"></script>
   <script src="js/data.js"></script>
   <script src="js/board.js"></script>
   <script src="js/burndown.js"></script>
   <script src="js/progreso.js"></script>
   <script src="js/consultas.js"></script>
+  <script src="js/sol-panel.js"></script>
+  <script src="js/semanal.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

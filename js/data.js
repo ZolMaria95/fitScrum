@@ -7,6 +7,7 @@ const AppData = (() => {
   let _progress = null;
   let _queries  = null;
   let _clients  = null;
+  let _weekly   = null; // { weeks: { 'YYYY-MM-DD': { assignee, notes, updatedAt } } }
 
   // ── Firebase helpers ─────────────────────────────────
   function _fbReady() {
@@ -67,11 +68,12 @@ const AppData = (() => {
 
     if (_fbReady()) {
       // Load from Firebase; seed from local JSON if nodes are empty
-      const [fbSp, fbSt, fbPr, fbQu] = await Promise.all([
+      const [fbSp, fbSt, fbPr, fbQu, fbWk] = await Promise.all([
         _fbGet('sprints'),
         _fbGet('stories'),
         _fbGet('progress'),
         _fbGet('queries'),
+        _fbGet('weeklySupport'),
       ]);
 
       async function _seedOrLoad(fbVal, localPath, key) {
@@ -87,6 +89,7 @@ const AppData = (() => {
         _seedOrLoad(fbPr, 'data/progress.json', 'progress'),
         _seedOrLoad(fbQu, 'data/queries.json',  'queries'),
       ]);
+      _weekly = fbWk || { weeks: {} };
     } else {
       // Fallback: localStorage with local JSON seeds
       const saved = _lsGet();
@@ -100,6 +103,7 @@ const AppData = (() => {
       _stories  = st;
       _progress = pr;
       _queries  = qu;
+      _weekly   = saved.weeklySupport || { weeks: {} };
     }
   }
 
@@ -110,6 +114,23 @@ const AppData = (() => {
   function setActiveSprint(id) {
     _sprints.active = id;
     _persist('sprints', _sprints);
+  }
+
+  function updateSprint(id, data) {
+    const s = _sprints.sprints.find(s => s.id === id);
+    if (!s) return;
+    Object.assign(s, data);
+    _persist('sprints', _sprints);
+  }
+
+  function deleteSprint(id) {
+    if (_sprints.sprints.length <= 1) return _sprints.active;
+    _sprints.sprints = _sprints.sprints.filter(s => s.id !== id);
+    if (_sprints.active === id) {
+      _sprints.active = _sprints.sprints[_sprints.sprints.length - 1].id;
+    }
+    _persist('sprints', _sprints);
+    return _sprints.active;
   }
 
   function addSprint(data) {
@@ -200,6 +221,11 @@ const AppData = (() => {
     if (s) { s.progress = progress; _persist('stories', _stories); }
   }
 
+  function updateStoryDueDate(storyId, dueDate) {
+    const s = _stories.stories.find(s => s.id === storyId);
+    if (s) { s.dueDate = dueDate; _persist('stories', _stories); }
+  }
+
   function setWaitingClient(storyId, waiting) {
     const s = _stories.stories.find(s => s.id === storyId);
     if (s) {
@@ -253,6 +279,42 @@ const AppData = (() => {
     return query;
   }
 
+  // ── Helpdesk ticket actions (localStorage only) ──────
+  function getHdActions() {
+    return JSON.parse(localStorage.getItem('fitscrum_hd_actions') || '{}');
+  }
+
+  function setHdAction(ticketId, active) {
+    const actions = getHdActions();
+    if (active) actions[String(ticketId)] = true;
+    else         delete actions[String(ticketId)];
+    localStorage.setItem('fitscrum_hd_actions', JSON.stringify(actions));
+  }
+
+  // ── Helpdesk ticket notes (localStorage only) ────────
+  function getHdNotes() {
+    return JSON.parse(localStorage.getItem('fitscrum_hd_notes') || '{}');
+  }
+
+  function setHdNote(ticketId, note) {
+    const notes = getHdNotes();
+    if (note && note.trim()) notes[String(ticketId)] = note.trim();
+    else delete notes[String(ticketId)];
+    localStorage.setItem('fitscrum_hd_notes', JSON.stringify(notes));
+  }
+
+  // ── Sol notes (localStorage only) ────────────────────
+  function getSolNotes() {
+    return JSON.parse(localStorage.getItem('fitscrum_sol_notes') || '{}');
+  }
+
+  function setSolNote(ticketId, note) {
+    const notes = getSolNotes();
+    if (note && note.trim()) notes[ticketId] = note.trim();
+    else delete notes[ticketId];
+    localStorage.setItem('fitscrum_sol_notes', JSON.stringify(notes));
+  }
+
   function resolveQuery(id, response, respondedBy) {
     const q = _queries.queries.find(q => q.id === id);
     if (q) {
@@ -263,14 +325,38 @@ const AppData = (() => {
     }
   }
 
+  // ── Weekly support (HelpDesk Semanal) ────────────────
+  // weekKey = ISO date 'YYYY-MM-DD' of the Friday that starts the support week
+  function getWeeklySupport()        { return _weekly.weeks || {}; }
+  function getWeekAssignment(key)    { return _weekly.weeks[key] || null; }
+
+  function setWeekAssignment(key, assigneeId, notes = '') {
+    if (!assigneeId) return clearWeekAssignment(key);
+    _weekly.weeks[key] = {
+      assignee:  assigneeId,
+      notes:     notes || '',
+      updatedAt: new Date().toISOString(),
+    };
+    _persist('weeklySupport', _weekly);
+  }
+
+  function clearWeekAssignment(key) {
+    delete _weekly.weeks[key];
+    _persist('weeklySupport', _weekly);
+  }
+
   return {
     init,
-    getSprints, getActiveSprint, setActiveSprint, addSprint,
+    getSprints, getActiveSprint, setActiveSprint, addSprint, updateSprint, deleteSprint,
     getAllStories, getStoriesBySprint, updateStoryStatus, addStory, deleteStory,
     getTeam, getMember,
-    updateStoryProgress, approveStory, unapproveStory, setWaitingClient,
+    updateStoryProgress, updateStoryDueDate, approveStory, unapproveStory, setWaitingClient,
     getClients, getClient,
     getProgress, addProgressEntry,
     getQueries, addQuery, resolveQuery,
+    getHdActions, setHdAction,
+    getHdNotes, setHdNote,
+    getSolNotes, setSolNote,
+    getWeeklySupport, getWeekAssignment, setWeekAssignment, clearWeekAssignment,
   };
 })();

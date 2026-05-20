@@ -1,6 +1,8 @@
 const Helpdesk = (() => {
   // Uses Cloudflare Worker URL when deployed; falls back to local proxy for dev
-  const BASE      = (window.HELPDESK_PROXY_URL || 'http://localhost:3001') + '/api/v1';
+  const _proxyUrl = window.HELPDESK_PROXY_URL && !window.HELPDESK_PROXY_URL.includes('TU-WORKER')
+    ? window.HELPDESK_PROXY_URL : 'http://localhost:3001';
+  const BASE      = _proxyUrl + '/api/v1';
   const TOKEN_KEY = 'fitscrum_hd_token';
 
   // Mapeo nombre API → ID de cliente en fitScrum

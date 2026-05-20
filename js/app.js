@@ -19,6 +19,14 @@ const App = (() => {
     _setupNav();
     _setupModals();
     _setupForms();
+    HelpdeskPanel.setup();
+    SolPanel.setup();
+    Semanal.init();
+
+    // Mostrar tab "Mi Panel" solo para Scrum Master
+    if (_session.role === 'Scrum Master') {
+      document.querySelectorAll('.nav-tab-sol').forEach(t => t.classList.remove('hidden'));
+    }
 
     refreshBoard();
   }
@@ -96,6 +104,9 @@ const App = (() => {
     if (_currentView === 'burndown')  refreshBurndown();
     if (_currentView === 'progreso')  refreshProgreso();
     if (_currentView === 'consultas') refreshConsultas();
+    if (_currentView === 'helpdesk')  refreshHelpdeskPanel();
+    if (_currentView === 'semanal')   refreshSemanal();
+    if (_currentView === 'sol')       refreshSolPanel();
   }
 
   // ── Public refresh methods ───────────────────────────
@@ -118,6 +129,18 @@ const App = (() => {
     Consultas.render(AppData.getQueries(), AppData.getAllStories(), AppData.getTeam());
   }
 
+  function refreshHelpdeskPanel() {
+    HelpdeskPanel.render();
+  }
+
+  function refreshSolPanel() {
+    SolPanel.render();
+  }
+
+  function refreshSemanal() {
+    Semanal.refresh();
+  }
+
   // ── Modals ───────────────────────────────────────────
   function _setupModals() {
     // Close buttons with data-close attribute
@@ -138,6 +161,69 @@ const App = (() => {
   // ── Forms ────────────────────────────────────────────
   function _setupForms() {
     const team = AppData.getTeam();
+
+    // Edit sprint
+    document.getElementById('btn-edit-sprint')?.addEventListener('click', () => {
+      const data = AppData.getSprints();
+      const sprint = data.sprints.find(s => s.id === _currentSprint)
+                  || data.sprints.find(s => s.id === data.active);
+      if (!sprint) { alert('No se encontró el sprint activo.'); return; }
+
+      const badge    = document.getElementById('esp-id-badge');
+      const name     = document.getElementById('esp-name');
+      const goal     = document.getElementById('esp-goal');
+      const start    = document.getElementById('esp-start');
+      const end      = document.getElementById('esp-end');
+      const capacity = document.getElementById('esp-capacity');
+      const status   = document.getElementById('esp-status');
+      const modal    = document.getElementById('modal-edit-sprint');
+
+      if (!modal) { console.error('modal-edit-sprint no encontrado'); return; }
+
+      if (badge)    badge.textContent = sprint.id;
+      if (name)     name.value        = sprint.name     || '';
+      if (goal)     goal.value        = sprint.goal     || '';
+      if (start)    start.value       = sprint.start    || '';
+      if (end)      end.value         = sprint.end      || '';
+      if (capacity) capacity.value    = sprint.capacity ?? 0;
+      if (status)   status.value      = sprint.status   || 'active';
+
+      modal.classList.remove('hidden');
+    });
+
+    document.getElementById('form-edit-sprint')?.addEventListener('submit', e => {
+      e.preventDefault();
+      AppData.updateSprint(_currentSprint, {
+        name:     document.getElementById('esp-name').value.trim(),
+        goal:     document.getElementById('esp-goal').value.trim(),
+        start:    document.getElementById('esp-start').value,
+        end:      document.getElementById('esp-end').value,
+        capacity: parseInt(document.getElementById('esp-capacity').value, 10) || 0,
+        status:   document.getElementById('esp-status').value,
+      });
+      document.getElementById('modal-edit-sprint').classList.add('hidden');
+      _populateSprintSelector();
+      refreshBanner();
+    });
+
+    // Delete sprint
+    document.getElementById('btn-delete-sprint').addEventListener('click', () => {
+      const sprint = AppData.getSprints().sprints.find(s => s.id === _currentSprint);
+      if (!sprint) return;
+      if (AppData.getSprints().sprints.length <= 1) {
+        alert('No se puede eliminar el único sprint existente.');
+        return;
+      }
+      if (!confirm(`¿Eliminar "${sprint.name}"?\n\nLas tareas de este sprint NO se eliminarán.`)) return;
+      const newActive = AppData.deleteSprint(_currentSprint);
+      _currentSprint = newActive;
+      _populateSprintSelector();
+      refreshBanner();
+      refreshBoard();
+    });
+
+    // Sol panel refresh button
+    document.getElementById('btn-refresh-sol')?.addEventListener('click', () => refreshSolPanel());
 
     // New sprint
     document.getElementById('btn-new-sprint').addEventListener('click', () => {
@@ -318,7 +404,7 @@ const App = (() => {
     });
   }
 
-  return { init, refreshBoard, refreshBurndown, refreshProgreso, refreshConsultas, refreshBanner };
+  return { init, refreshBoard, refreshBurndown, refreshProgreso, refreshConsultas, refreshHelpdeskPanel, refreshSolPanel, refreshSemanal, refreshBanner };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);

@@ -42,6 +42,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 headers[h] = self.headers[h]
 
         ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode    = ssl.CERT_NONE
         req = urllib.request.Request(url, data=body, headers=headers, method=self.command)
 
         try:

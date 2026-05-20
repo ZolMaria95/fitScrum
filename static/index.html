@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FitDaily Demo</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>FitDaily Demo</h1>
+      <p>Backend FastAPI + MongoDB Atlas con frontend estático.</p>
+    </header>
+
+    <section class="panel">
+      <h2>Crear tarea</h2>
+      <form id="item-form">
+        <div class="field">
+          <label for="title">Título</label>
+          <input id="title" name="title" type="text" maxlength="200" required />
+        </div>
+        <div class="field">
+          <label for="description">Descripción</label>
+          <textarea id="description" name="description" maxlength="1000"></textarea>
+        </div>
+        <button type="submit">Crear tarea</button>
+      </form>
+      <div id="form-message" class="message"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Lista de tareas</h2>
+      <div id="items-loading">Cargando tareas...</div>
+      <ul id="items-list" class="items-list"></ul>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -94,9 +94,13 @@ const Board = (() => {
       ? `<div class="card-assignee" style="background:${member.color}" title="${member.name}">${member.id}</div>`
       : `<div class="card-unassigned" title="Sin asignar"></div>`;
 
-    const dueStr   = task.dueDate ? _fmtShort(task.dueDate) : '';
-    const isOverdue = task.dueDate && task.status !== 'done'
-      && new Date(task.dueDate + 'T00:00:00') < new Date();
+    const dueStr    = task.dueDate ? _fmtShort(task.dueDate) : '';
+    const dueDate   = task.dueDate ? new Date(task.dueDate + 'T00:00:00') : null;
+    const today     = new Date(); today.setHours(0, 0, 0, 0);
+    const diffDays  = dueDate ? Math.ceil((dueDate - today) / 864e5) : null;
+    const isActive  = task.status !== 'done';
+    const isOverdue = isActive && dueDate && dueDate < today;
+    const isSoon    = isActive && !isOverdue && diffDays !== null && diffDays <= 3;
 
     const clientBadge = client
       ? `<span class="card-client-badge" style="background:${client.color}20;color:${client.color};border:1px solid ${client.color}40">${client.name}</span>`
@@ -110,16 +114,26 @@ const Board = (() => {
           ? _approveCheckHTML(task)
           : '';
 
+    const dueCls   = isOverdue ? 'overdue' : isSoon ? 'soon' : '';
+    const alertBadge = isSoon
+      ? `<div class="card-soon-badge">⚠ Próximo a vencer${diffDays === 0 ? ' — hoy' : diffDays === 1 ? ' — mañana' : ` — ${diffDays}d`}</div>`
+      : '';
+
+    const dueEl = dueStr
+      ? `<span class="card-due ${dueCls}">📅 ${dueStr}</span>`
+      : `<span class="card-due" style="color:var(--text-muted);font-style:italic">📅 —</span>`;
+
     return `
-      <div class="story-card priority-${task.priority}" data-id="${task.id}" draggable="true">
+      <div class="story-card priority-${task.priority}${isSoon ? ' card-soon' : ''}" data-id="${task.id}" draggable="true">
         <div class="card-top">
           <span class="card-ticket">#${task.ticket || '—'}</span>
           ${clientBadge}
         </div>
         <div class="card-title">${task.title}</div>
+        ${alertBadge}
         ${extraEl}
         <div class="card-bottom">
-          ${dueStr ? `<span class="card-due ${isOverdue ? 'overdue' : ''}">📅 ${dueStr}</span>` : '<span></span>'}
+          ${dueEl}
           ${assigneeEl}
         </div>
       </div>`;
@@ -157,13 +171,15 @@ const Board = (() => {
 
     return `
       <div class="card-prog-wrap" onclick="event.stopPropagation()">
-        <input type="range" class="card-prog-range"
-               min="0" max="100" step="25" value="${pct}"
-               data-id="${task.id}"
-               draggable="false">
-        <span class="card-prog-pct" id="pct-${task.id}">${pct}%</span>
+        <div class="card-prog-bar-bg">
+          <div class="card-prog-bar-fill" id="bar-${task.id}"
+               style="width:${pct}%;background:${color}"></div>
+        </div>
+        <input type="number" class="card-prog-num" draggable="false"
+               min="0" max="100" step="5" value="${pct}" data-id="${task.id}">
       </div>
       ${waitingEl}`;
+  }
 
   function _certCheckHTML(task) {
     return `
@@ -200,19 +216,19 @@ const Board = (() => {
     });
 
     // Barra de progreso
-    document.querySelectorAll('.card-prog-range').forEach(range => {
-      _applyRangeStyle(range);
-      range.addEventListener('input', e => {
-        const pct = parseInt(e.target.value, 10);
-        const color = _progColor(pct);
-        e.target.style.setProperty('--prog-color', color);
-        e.target.style.setProperty('--prog-pct', pct + '%');
-        _applyRangeStyle(e.target);
-        const label = document.getElementById(`pct-${e.target.dataset.id}`);
-        if (label) label.textContent = pct + '%';
+    document.querySelectorAll('.card-prog-num').forEach(input => {
+      input.addEventListener('input', e => {
+        let pct = Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0));
+        const bar = document.getElementById(`bar-${e.target.dataset.id}`);
+        if (bar) { bar.style.width = pct + '%'; bar.style.background = _progColor(pct); }
       });
-      range.addEventListener('change', e => {
-        AppData.updateStoryProgress(e.target.dataset.id, parseInt(e.target.value, 10));
+      input.addEventListener('change', e => {
+        let raw = Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0));
+        let pct = raw % 5 === 0 ? raw : Math.min(100, raw + (5 - raw % 5));
+        e.target.value = pct;
+        const bar = document.getElementById(`bar-${e.target.dataset.id}`);
+        if (bar) { bar.style.width = pct + '%'; bar.style.background = _progColor(pct); }
+        AppData.updateStoryProgress(e.target.dataset.id, pct);
       });
     });
 
@@ -257,12 +273,6 @@ const Board = (() => {
         App.refreshBanner();
       });
     });
-  }
-
-  function _applyRangeStyle(input) {
-    const pct   = ((input.value - input.min) / (input.max - input.min)) * 100;
-    const color = _progColor(parseInt(input.value, 10));
-    input.style.background = `linear-gradient(to right, ${color} ${pct}%, var(--border) ${pct}%)`;
   }
 
   function _progColor(pct) {
@@ -314,6 +324,9 @@ const Board = (() => {
       ? new Date(task.dueDate + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
       : '—';
 
+    const initPct   = task.progress ?? 0;
+    const initColor = _progColor(initPct);
+
     document.getElementById('modal-card-id').textContent = task.id;
     document.getElementById('modal-card-body').innerHTML = `
       <div class="detail-title">${task.title}</div>
@@ -323,23 +336,64 @@ const Board = (() => {
         <span class="badge badge-${task.priority}">${pLabel}</span>
         ${member ? `<span style="font-size:12px;color:var(--text-mid)">→ ${member.name}</span>` : ''}
       </div>
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
-        📅 Entrega: <strong style="color:var(--text)">${dueStr}</strong>
-      </div>
       ${task.description ? `
         <div class="detail-section-title">Descripción</div>
         <div class="detail-description">${task.description}</div>` : ''}
-      <div class="detail-status-row">
+
+      <div class="detail-section-title" style="margin-top:14px">Progreso</div>
+      <div class="detail-prog-wrap">
+        <div class="detail-prog-bar-bg">
+          <div class="detail-prog-bar-fill" id="detail-bar"
+               style="width:${initPct}%;background:${initColor}"></div>
+        </div>
+        <input type="number" class="card-prog-num" id="detail-prog"
+               min="0" max="100" step="5" value="${initPct}">
+        <span class="detail-prog-label" id="detail-prog-label">${initPct}%</span>
+      </div>
+
+      <div class="detail-status-row" style="margin-top:12px">
         <label>Estado:</label>
         <select class="status-select" id="detail-status">
           ${STATUSES.map(s => `<option value="${s}" ${task.status === s ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
         </select>
+      </div>
+      <div class="detail-status-row" style="margin-top:10px">
+        <label>📅 Fecha de entrega:</label>
+        <input type="date" id="detail-duedate" value="${task.dueDate || ''}"
+               style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text)">
+      </div>
+      <div class="detail-status-row" style="margin-top:14px">
         <button class="btn-primary" id="detail-save" style="padding:5px 12px;font-size:12px">Guardar</button>
         <button class="btn-secondary" id="detail-delete" style="padding:5px 12px;font-size:12px;color:var(--error);border-color:var(--error)">Eliminar</button>
       </div>`;
 
+    // Barra de progreso en modal: actualización en tiempo real
+    const progInput = document.getElementById('detail-prog');
+    const progBar   = document.getElementById('detail-bar');
+    const progLabel = document.getElementById('detail-prog-label');
+
+    progInput.addEventListener('input', () => {
+      const pct   = Math.min(100, Math.max(0, parseInt(progInput.value, 10) || 0));
+      const color = _progColor(pct);
+      progBar.style.width      = pct + '%';
+      progBar.style.background = color;
+      progLabel.textContent    = pct + '%';
+    });
+    progInput.addEventListener('change', () => {
+      let raw = Math.min(100, Math.max(0, parseInt(progInput.value, 10) || 0));
+      let pct = raw % 5 === 0 ? raw : Math.min(100, raw + (5 - raw % 5));
+      progInput.value          = pct;
+      progBar.style.width      = pct + '%';
+      progBar.style.background = _progColor(pct);
+      progLabel.textContent    = pct + '%';
+    });
+
     document.getElementById('detail-save').addEventListener('click', () => {
+      let raw = Math.min(100, Math.max(0, parseInt(progInput.value, 10) || 0));
+      let pct = raw % 5 === 0 ? raw : Math.min(100, raw + (5 - raw % 5));
+      AppData.updateStoryProgress(task.id, pct);
       AppData.updateStoryStatus(task.id, document.getElementById('detail-status').value);
+      AppData.updateStoryDueDate(task.id, document.getElementById('detail-duedate').value);
       document.getElementById('modal-card').classList.add('hidden');
       App.refreshBoard();
       App.refreshBanner();
