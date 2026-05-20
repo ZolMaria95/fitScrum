@@ -22,9 +22,10 @@ const Semanal = (() => {
     { bg: '#F3E8FF', fg: '#6B21A8' },  // púrpura
   ];
 
-  let _viewMonth = null;
-  let _isInited  = false;
-  let _colorMap  = {};    // { userId: { bg, fg } }
+  let _viewMonth        = null;
+  let _isInited         = false;
+  let _colorMap         = {};    // { userId: { bg, fg } }
+  let _ticketsWeekKey   = null;  // ISO key of the week shown in the tickets panel
 
   // Asigna un color de la paleta a cada miembro del equipo (orden estable por índice)
   function _buildColorMap() {
@@ -119,7 +120,9 @@ const Semanal = (() => {
       openAssignModal(key);
     });
 
+    _ticketsWeekKey = _isoKey(_getWeekFriday(_today()));
     _setupModalForm();
+    _setupTicketsForm();
   }
 
   // ── Modal: form wiring ───────────────────────────────
@@ -155,12 +158,16 @@ const Semanal = (() => {
       const t = _today();
       _viewMonth = new Date(t.getFullYear(), t.getMonth(), 1);
     }
+    if (!_ticketsWeekKey) {
+      _ticketsWeekKey = _isoKey(_getWeekFriday(_today()));
+    }
     _buildColorMap();
     _renderHeader();
     _renderCalendar();
     _renderCurrentWeek();
     _renderNextWeeks();
     _renderStats();
+    _renderTickets();
   }
 
   // ── Render: header / period label ────────────────────
@@ -236,7 +243,11 @@ const Semanal = (() => {
         cell.appendChild(chip);
       }
 
-      cell.addEventListener('click', () => openAssignModal(weekKey));
+      cell.addEventListener('click', () => {
+        _ticketsWeekKey = weekKey;
+        _renderTickets();
+        openAssignModal(weekKey);
+      });
       cal.appendChild(cell);
     }
   }
@@ -302,7 +313,11 @@ const Semanal = (() => {
 
       item.appendChild(rangeEl);
       item.appendChild(nameEl);
-      item.addEventListener('click', () => openAssignModal(wkKey));
+      item.addEventListener('click', () => {
+        _ticketsWeekKey = wkKey;
+        _renderTickets();
+        openAssignModal(wkKey);
+      });
       container.appendChild(item);
     }
 
@@ -336,6 +351,65 @@ const Semanal = (() => {
         <span class="sem-stat-count" style="color:${color.fg}">${count} ${count === 1 ? 'semana' : 'semanas'}</span>
       `;
       container.appendChild(row);
+    });
+  }
+
+  // ── Tickets resueltos: setup form ────────────────────
+  function _setupTicketsForm() {
+    document.getElementById('form-add-ticket').addEventListener('submit', e => {
+      e.preventDefault();
+      const id   = document.getElementById('sem-ticket-id').value;
+      const desc = document.getElementById('sem-ticket-desc').value;
+      if (!id.trim()) return;
+      AppData.addWeekTicket(_ticketsWeekKey, id, desc);
+      document.getElementById('sem-ticket-id').value   = '';
+      document.getElementById('sem-ticket-desc').value = '';
+      _renderTickets();
+    });
+  }
+
+  // ── Tickets resueltos: render ─────────────────────────
+  function _renderTickets() {
+    const key     = _ticketsWeekKey;
+    const tickets = AppData.getWeekTickets(key);
+    const fri     = _parseISO(key);
+    const assign  = AppData.getWeekAssignment(key);
+
+    // Week label
+    const labelEl = document.getElementById('sem-tickets-week-label');
+    let weekLabel  = _formatRange(fri);
+    if (assign) {
+      const name  = _memberShortName(assign.assignee);
+      const color = _getColor(assign.assignee);
+      labelEl.innerHTML =
+        `<span style="margin-right:6px">${weekLabel}</span>` +
+        `<span class="sem-tickets-tech" style="background:${color.bg};color:${color.fg}">${name}</span>`;
+    } else {
+      labelEl.textContent = weekLabel;
+    }
+
+    document.getElementById('sem-tickets-count').textContent = tickets.length;
+
+    const list = document.getElementById('sem-tickets-list');
+    list.innerHTML = '';
+
+    if (!tickets.length) {
+      list.innerHTML = '<div class="sem-empty">Sin tickets registrados</div>';
+      return;
+    }
+
+    tickets.forEach((t, idx) => {
+      const item = document.createElement('div');
+      item.className = 'sem-ticket-item';
+      item.innerHTML =
+        `<span class="sem-ticket-id">#${t.id}</span>` +
+        `<span class="sem-ticket-desc">${t.desc || ''}</span>` +
+        `<button class="sem-ticket-del" title="Quitar" data-idx="${idx}">✕</button>`;
+      item.querySelector('.sem-ticket-del').addEventListener('click', () => {
+        AppData.removeWeekTicket(key, idx);
+        _renderTickets();
+      });
+      list.appendChild(item);
     });
   }
 

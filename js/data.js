@@ -341,7 +341,37 @@ const AppData = (() => {
   }
 
   function clearWeekAssignment(key) {
-    delete _weekly.weeks[key];
+    const existing = _weekly.weeks[key];
+    if (existing && existing.tickets && existing.tickets.length) {
+      // Keep tickets even when clearing the assignee
+      _weekly.weeks[key] = { tickets: existing.tickets };
+    } else {
+      delete _weekly.weeks[key];
+    }
+    _persist('weeklySupport', _weekly);
+  }
+
+  // ── Weekly resolved tickets ───────────────────────────
+  function getWeekTickets(key) {
+    return (_weekly.weeks[key] && _weekly.weeks[key].tickets) || [];
+  }
+
+  function addWeekTicket(key, ticketId, desc) {
+    if (!ticketId || !ticketId.trim()) return;
+    if (!_weekly.weeks[key]) _weekly.weeks[key] = {};
+    if (!_weekly.weeks[key].tickets) _weekly.weeks[key].tickets = [];
+    _weekly.weeks[key].tickets.push({
+      id:      ticketId.trim(),
+      desc:    (desc || '').trim(),
+      addedAt: new Date().toISOString(),
+    });
+    _persist('weeklySupport', _weekly);
+  }
+
+  function removeWeekTicket(key, idx) {
+    const tickets = _weekly.weeks[key] && _weekly.weeks[key].tickets;
+    if (!tickets) return;
+    tickets.splice(idx, 1);
     _persist('weeklySupport', _weekly);
   }
 
@@ -358,5 +388,6 @@ const AppData = (() => {
     getHdNotes, setHdNote,
     getSolNotes, setSolNote,
     getWeeklySupport, getWeekAssignment, setWeekAssignment, clearWeekAssignment,
+    getWeekTickets, addWeekTicket, removeWeekTicket,
   };
 })();

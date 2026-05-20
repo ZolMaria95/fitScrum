@@ -316,6 +316,21 @@
             <button class="btn-primary btn-sm" id="btn-sem-assign-current">Asignar / Editar</button>
           </div>
 
+          <!-- Tickets resueltos de la semana seleccionada -->
+          <div class="sem-summary-block sem-tickets-block">
+            <div class="sem-summary-header">
+              <span class="sem-summary-title">Tickets resueltos</span>
+              <span class="sem-summary-count" id="sem-tickets-count">0</span>
+            </div>
+            <div class="sem-tickets-week-label" id="sem-tickets-week-label">—</div>
+            <div id="sem-tickets-list" class="sem-tickets-list"></div>
+            <form id="form-add-ticket" class="sem-add-ticket-form">
+              <input type="text" id="sem-ticket-id"   placeholder="N° ticket" maxlength="20" autocomplete="off" required>
+              <input type="text" id="sem-ticket-desc" placeholder="Descripción (opcional)" autocomplete="off">
+              <button type="submit" class="btn-primary btn-sm">+ Agregar</button>
+            </form>
+          </div>
+
           <div class="sem-summary-block">
             <div class="sem-summary-header">
               <span class="sem-summary-title">Próximas semanas</span>
