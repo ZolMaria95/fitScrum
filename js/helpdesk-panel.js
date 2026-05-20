@@ -1,8 +1,7 @@
 const HelpdeskPanel = (() => {
   const _proxyUrl = window.HELPDESK_PROXY_URL && !window.HELPDESK_PROXY_URL.includes('TU-WORKER')
     ? window.HELPDESK_PROXY_URL : 'http://localhost:3001';
-  const BASE      = _proxyUrl + '/api/v1';
-  const TOKEN_KEY = 'fitscrum_hd_token';
+  const BASE = _proxyUrl + '/api/v1';
 
   // ── Constantes (igual que el flujo n8n) ───────────────
   const CLIENTES_VALIDOS = new Set([
@@ -78,28 +77,12 @@ const HelpdeskPanel = (() => {
   let _filterAccion  = '';
   let _filterClasif  = '';
 
-  // ── Auth ─────────────────────────────────────────────
-  async function _getToken() {
-    const cached = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-    if (cached && cached.expires > Date.now()) return cached.token;
-
-    const r = await fetch(`${BASE}/auth/login`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ username_or_email: 'HELPDESK1', password: 'MtRuLxgDz6q5', force_logout: 'true' }),
-    });
-    if (!r.ok) throw new Error(`Login fallido: ${r.status}`);
-    const { access_token } = await r.json();
-    sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ token: access_token, expires: Date.now() + 50 * 60 * 1000 }));
-    return access_token;
-  }
-
   // ── Fetch páginas ─────────────────────────────────────
-  async function _fetchPage(token, offset) {
+  // El Worker inyecta el token; el cliente no necesita credenciales.
+  async function _fetchPage(offset) {
     try {
       const r = await fetch(
         `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
-        { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!r.ok) return [];
       return (await r.json()).items || [];
@@ -107,12 +90,9 @@ const HelpdeskPanel = (() => {
   }
 
   // ── Fetch mensajes de un ticket ───────────────────────
-  async function _fetchMessages(token, ticketId) {
+  async function _fetchMessages(ticketId) {
     try {
-      const r = await fetch(
-        `${BASE}/tickets/${ticketId}/messages?limit=50`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const r = await fetch(`${BASE}/tickets/${ticketId}/messages?limit=50`);
       if (!r.ok) return [];
       const data = await r.json();
       return Array.isArray(data) ? data : [];
@@ -258,11 +238,10 @@ const HelpdeskPanel = (() => {
     _setStatus('Conectando a Helpdesk...', 'loading');
 
     try {
-      const token = await _getToken();
       _setStatus('Cargando tickets (6 páginas)...', 'loading');
 
       const offsets = [0, 40, 80, 120, 160, 200];
-      const pages   = await Promise.all(offsets.map(o => _fetchPage(token, o)));
+      const pages   = await Promise.all(offsets.map(o => _fetchPage(o)));
       const raw     = pages.flat();
 
       const filtrados = raw
@@ -282,7 +261,7 @@ const HelpdeskPanel = (() => {
       for (let i = 0; i < _tickets.length; i += BATCH) {
         const lote = _tickets.slice(i, i + BATCH);
         await Promise.all(lote.map(async t => {
-          const msgs = await _fetchMessages(token, t.ticket);
+          const msgs = await _fetchMessages(t.ticket);
           _applyMessages(t, msgs);
           _evaluarFechas(t);
           _clasificar(t);

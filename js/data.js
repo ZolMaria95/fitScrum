@@ -1,13 +1,16 @@
 const AppData = (() => {
   const LS_KEY = 'fitscrum_v1'; // used when Firebase is not yet configured
 
-  let _sprints  = null;
-  let _stories  = null;
-  let _team     = null;
-  let _progress = null;
-  let _queries  = null;
-  let _clients  = null;
-  let _weekly   = null; // { weeks: { 'YYYY-MM-DD': { assignee, notes, updatedAt } } }
+  let _sprints   = null;
+  let _stories   = null;
+  let _team      = null;
+  let _progress  = null;
+  let _queries   = null;
+  let _clients   = null;
+  let _weekly    = null; // { weeks: { 'YYYY-MM-DD': { assignee, notes, updatedAt } } }
+  let _hdActions = null; // { ticketId: true }
+  let _hdNotes   = null; // { ticketId: "texto" }
+  let _solNotes  = null; // { ticketId: "texto" }
 
   // ── Firebase helpers ─────────────────────────────────
   function _fbReady() {
@@ -68,12 +71,15 @@ const AppData = (() => {
 
     if (_fbReady()) {
       // Load from Firebase; seed from local JSON if nodes are empty
-      const [fbSp, fbSt, fbPr, fbQu, fbWk] = await Promise.all([
+      const [fbSp, fbSt, fbPr, fbQu, fbWk, fbHdA, fbHdN, fbSolN] = await Promise.all([
         _fbGet('sprints'),
         _fbGet('stories'),
         _fbGet('progress'),
         _fbGet('queries'),
         _fbGet('weeklySupport'),
+        _fbGet('hdActions'),
+        _fbGet('hdNotes'),
+        _fbGet('solNotes'),
       ]);
 
       async function _seedOrLoad(fbVal, localPath, key) {
@@ -90,6 +96,16 @@ const AppData = (() => {
         _seedOrLoad(fbQu, 'data/queries.json',  'queries'),
       ]);
       _weekly = fbWk || { weeks: {} };
+
+      // Migrate from localStorage on first Firebase load
+      _hdActions = fbHdA  || JSON.parse(localStorage.getItem('fitscrum_hd_actions') || '{}');
+      _hdNotes   = fbHdN  || JSON.parse(localStorage.getItem('fitscrum_hd_notes')   || '{}');
+      _solNotes  = fbSolN || JSON.parse(localStorage.getItem('fitscrum_sol_notes')  || '{}');
+
+      // Seed Firebase if it was empty but localStorage had data
+      if (!fbHdA  && Object.keys(_hdActions).length) _fbPut('hdActions', _hdActions);
+      if (!fbHdN  && Object.keys(_hdNotes).length)   _fbPut('hdNotes',   _hdNotes);
+      if (!fbSolN && Object.keys(_solNotes).length)  _fbPut('solNotes',  _solNotes);
     } else {
       // Fallback: localStorage with local JSON seeds
       const saved = _lsGet();
@@ -99,11 +115,14 @@ const AppData = (() => {
         saved.progress ? Promise.resolve(saved.progress) : _loadLocal('data/progress.json'),
         saved.queries  ? Promise.resolve(saved.queries)  : _loadLocal('data/queries.json'),
       ]);
-      _sprints  = sp;
-      _stories  = st;
-      _progress = pr;
-      _queries  = qu;
-      _weekly   = saved.weeklySupport || { weeks: {} };
+      _sprints   = sp;
+      _stories   = st;
+      _progress  = pr;
+      _queries   = qu;
+      _weekly    = saved.weeklySupport || { weeks: {} };
+      _hdActions = JSON.parse(localStorage.getItem('fitscrum_hd_actions') || '{}');
+      _hdNotes   = JSON.parse(localStorage.getItem('fitscrum_hd_notes')   || '{}');
+      _solNotes  = JSON.parse(localStorage.getItem('fitscrum_sol_notes')  || '{}');
     }
   }
 
@@ -279,40 +298,31 @@ const AppData = (() => {
     return query;
   }
 
-  // ── Helpdesk ticket actions (localStorage only) ──────
-  function getHdActions() {
-    return JSON.parse(localStorage.getItem('fitscrum_hd_actions') || '{}');
-  }
+  // ── Helpdesk ticket actions ───────────────────────────
+  function getHdActions() { return _hdActions; }
 
   function setHdAction(ticketId, active) {
-    const actions = getHdActions();
-    if (active) actions[String(ticketId)] = true;
-    else         delete actions[String(ticketId)];
-    localStorage.setItem('fitscrum_hd_actions', JSON.stringify(actions));
+    if (active) _hdActions[String(ticketId)] = true;
+    else         delete _hdActions[String(ticketId)];
+    _persist('hdActions', _hdActions);
   }
 
-  // ── Helpdesk ticket notes (localStorage only) ────────
-  function getHdNotes() {
-    return JSON.parse(localStorage.getItem('fitscrum_hd_notes') || '{}');
-  }
+  // ── Helpdesk ticket notes ─────────────────────────────
+  function getHdNotes() { return _hdNotes; }
 
   function setHdNote(ticketId, note) {
-    const notes = getHdNotes();
-    if (note && note.trim()) notes[String(ticketId)] = note.trim();
-    else delete notes[String(ticketId)];
-    localStorage.setItem('fitscrum_hd_notes', JSON.stringify(notes));
+    if (note && note.trim()) _hdNotes[String(ticketId)] = note.trim();
+    else delete _hdNotes[String(ticketId)];
+    _persist('hdNotes', _hdNotes);
   }
 
-  // ── Sol notes (localStorage only) ────────────────────
-  function getSolNotes() {
-    return JSON.parse(localStorage.getItem('fitscrum_sol_notes') || '{}');
-  }
+  // ── Sol notes ─────────────────────────────────────────
+  function getSolNotes() { return _solNotes; }
 
   function setSolNote(ticketId, note) {
-    const notes = getSolNotes();
-    if (note && note.trim()) notes[ticketId] = note.trim();
-    else delete notes[ticketId];
-    localStorage.setItem('fitscrum_sol_notes', JSON.stringify(notes));
+    if (note && note.trim()) _solNotes[ticketId] = note.trim();
+    else delete _solNotes[ticketId];
+    _persist('solNotes', _solNotes);
   }
 
   function resolveQuery(id, response, respondedBy) {

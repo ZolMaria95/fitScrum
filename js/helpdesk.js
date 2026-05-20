@@ -2,8 +2,7 @@ const Helpdesk = (() => {
   // Uses Cloudflare Worker URL when deployed; falls back to local proxy for dev
   const _proxyUrl = window.HELPDESK_PROXY_URL && !window.HELPDESK_PROXY_URL.includes('TU-WORKER')
     ? window.HELPDESK_PROXY_URL : 'http://localhost:3001';
-  const BASE      = _proxyUrl + '/api/v1';
-  const TOKEN_KEY = 'fitscrum_hd_token';
+  const BASE = _proxyUrl + '/api/v1';
 
   // Mapeo nombre API → ID de cliente en fitScrum
   const CLIENT_MAP = {
@@ -21,40 +20,12 @@ const Helpdesk = (() => {
     'COAC SEÑOR DE GIRON':                  'giron',
   };
 
-  async function _getToken() {
-    const cached = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-    if (cached && cached.expires > Date.now()) return cached.token;
-
-    const r = await fetch(`${BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username_or_email: 'HELPDESK1',
-        password:          'MtRuLxgDz6q5',
-        force_logout:      'true',
-      }),
-    });
-
-    if (!r.ok) throw new Error(`Login fallido: ${r.status}`);
-    const data  = await r.json();
-    const token = data.access_token;
-
-    // Cachear 50 minutos en sessionStorage
-    sessionStorage.setItem(TOKEN_KEY, JSON.stringify({
-      token,
-      expires: Date.now() + 50 * 60 * 1000,
-    }));
-    return token;
-  }
-
   async function lookupTicket(ticketId) {
-    const token = await _getToken();
-    const headers = { Authorization: `Bearer ${token}` };
     let raw = null;
 
     // Intento 1: endpoint directo por ID
     try {
-      const r = await fetch(`${BASE}/tickets/${ticketId}`, { headers });
+      const r = await fetch(`${BASE}/tickets/${ticketId}`);
       if (r.ok) raw = await r.json();
     } catch (_) {}
 
@@ -64,7 +35,6 @@ const Helpdesk = (() => {
         try {
           const r = await fetch(
             `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
-            { headers }
           );
           if (!r.ok) break;
           const data  = await r.json();
