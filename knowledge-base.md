@@ -329,12 +329,14 @@ KPIs numéricos en la parte superior correspondientes a cada bloque.
 
 | Clave | Contenido |
 |---|---|
-| `fitscrum_v1` | Fallback cuando Firebase no está configurado (sprints, stories, progress, queries) |
-| `fitscrum_session` | Sesión del usuario logueado |
-| `fitscrum_hd_token` | Token JWT del Helpdesk (dura 50 min) |
-| `fitscrum_hd_actions` | Tickets marcados con "Acción pendiente" `{ ticketId: true }` |
-| `fitscrum_hd_notes` | Notas inline de tickets Helpdesk `{ ticketId: "texto" }` |
-| `fitscrum_sol_notes` | Notas del panel Sol para tickets de cliente pendiente |
+| `fit-daily_v1` | Fallback cuando Firebase no está configurado (sprints, stories, progress, queries) |
+| `fit-daily_session` | Sesión del usuario logueado (sessionStorage) |
+| `fit-daily_hd_actions` | Tickets marcados con "Acción pendiente" `{ ticketId: true }` (también en Firebase) |
+| `fit-daily_hd_notes` | Notas inline de tickets Helpdesk `{ ticketId: "texto" }` (también en Firebase) |
+| `fit-daily_sol_notes` | Notas del panel Sol para tickets de cliente pendiente (también en Firebase) |
+
+> El token JWT del Helpdesk ya no se guarda en el cliente — lo gestiona el Cloudflare Worker con secrets.
+> La migración de claves `fitscrum_*` → `fit-daily_*` ocurre automáticamente al cargar la app.
 
 ---
 
@@ -349,7 +351,7 @@ window.HELPDESK_PROXY_URL = 'https://TU-WORKER.workers.dev';
 
 Firebase detecta si está configurado comprobando que la URL no contenga `'TU-PROYECTO'`. Igual para el proxy con `'TU-WORKER'`.
 
-En Firebase los datos se guardan bajo el nodo `/fitscrum/` con subclaves: `sprints`, `stories`, `progress`, `queries`.
+En Firebase los datos se guardan bajo el nodo `/fit-daily/` con subclaves: `sprints`, `stories`, `progress`, `queries`, `weeklySupport`, `hdActions`, `hdNotes`, `solNotes`.
 
 ---
 
@@ -366,6 +368,8 @@ En Firebase los datos se guardan bajo el nodo `/fitscrum/` con subclaves: `sprin
 
 ---
 
-## 15. Título pendiente de actualizar
+## 15. Rename completado
 
-El `<title>` del HTML y la clase `brand-name` todavía dicen **fitScrum**. Cambiar a **Fit-Daily** cuando se confirme el nuevo nombre en producción.
+El proyecto se renombró de **fitScrum** a **Fit-Daily** en mayo 2026.
+El namespace de Firebase pasó de `/fitscrum/` a `/fit-daily/`, y las claves de
+`localStorage`/`sessionStorage` migran automáticamente al cargar la app por primera vez.

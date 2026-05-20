@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker — fitScrum Helpdesk proxy
+ * Cloudflare Worker — Fit-Daily Helpdesk proxy
  *
  * DESPLIEGUE:
  *   1. dash.cloudflare.com → Workers & Pages → Create Worker

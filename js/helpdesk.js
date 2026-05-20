@@ -4,7 +4,7 @@ const Helpdesk = (() => {
     ? window.HELPDESK_PROXY_URL : 'http://localhost:3001';
   const BASE = _proxyUrl + '/api/v1';
 
-  // Mapeo nombre API → ID de cliente en fitScrum
+  // Mapeo nombre API → ID de cliente en Fit-Daily
   const CLIENT_MAP = {
     'COOPERATIVA DE AHORRO Y CREDITO ERCO': 'erco',
     'COAC CAPCPE GUALAQUIZA':               'gualaquiza',

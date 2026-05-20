@@ -1,5 +1,22 @@
 const AppData = (() => {
-  const LS_KEY = 'fitscrum_v1'; // used when Firebase is not yet configured
+  const LS_KEY = 'fit-daily_v1'; // used when Firebase is not yet configured
+
+  // ── One-shot migration: rename old fitscrum_* keys to fit-daily_* ──
+  (function _migrateLegacyKeys() {
+    const pairs = [
+      ['fitscrum_v1',         'fit-daily_v1'],
+      ['fitscrum_hd_actions', 'fit-daily_hd_actions'],
+      ['fitscrum_hd_notes',   'fit-daily_hd_notes'],
+      ['fitscrum_sol_notes',  'fit-daily_sol_notes'],
+    ];
+    for (const [oldKey, newKey] of pairs) {
+      const oldVal = localStorage.getItem(oldKey);
+      if (oldVal !== null && localStorage.getItem(newKey) === null) {
+        localStorage.setItem(newKey, oldVal);
+        localStorage.removeItem(oldKey);
+      }
+    }
+  })();
 
   let _sprints   = null;
   let _stories   = null;
@@ -18,7 +35,7 @@ const AppData = (() => {
   }
 
   function _dbUrl(path) {
-    return `${window.FIREBASE_DB_URL}/fitscrum/${path}.json`;
+    return `${window.FIREBASE_DB_URL}/fit-daily/${path}.json`;
   }
 
   async function _fbGet(path) {
@@ -98,9 +115,9 @@ const AppData = (() => {
       _weekly = fbWk || { weeks: {} };
 
       // Migrate from localStorage on first Firebase load
-      _hdActions = fbHdA  || JSON.parse(localStorage.getItem('fitscrum_hd_actions') || '{}');
-      _hdNotes   = fbHdN  || JSON.parse(localStorage.getItem('fitscrum_hd_notes')   || '{}');
-      _solNotes  = fbSolN || JSON.parse(localStorage.getItem('fitscrum_sol_notes')  || '{}');
+      _hdActions = fbHdA  || JSON.parse(localStorage.getItem('fit-daily_hd_actions') || '{}');
+      _hdNotes   = fbHdN  || JSON.parse(localStorage.getItem('fit-daily_hd_notes')   || '{}');
+      _solNotes  = fbSolN || JSON.parse(localStorage.getItem('fit-daily_sol_notes')  || '{}');
 
       // Seed Firebase if it was empty but localStorage had data
       if (!fbHdA  && Object.keys(_hdActions).length) _fbPut('hdActions', _hdActions);
@@ -120,9 +137,9 @@ const AppData = (() => {
       _progress  = pr;
       _queries   = qu;
       _weekly    = saved.weeklySupport || { weeks: {} };
-      _hdActions = JSON.parse(localStorage.getItem('fitscrum_hd_actions') || '{}');
-      _hdNotes   = JSON.parse(localStorage.getItem('fitscrum_hd_notes')   || '{}');
-      _solNotes  = JSON.parse(localStorage.getItem('fitscrum_sol_notes')  || '{}');
+      _hdActions = JSON.parse(localStorage.getItem('fit-daily_hd_actions') || '{}');
+      _hdNotes   = JSON.parse(localStorage.getItem('fit-daily_hd_notes')   || '{}');
+      _solNotes  = JSON.parse(localStorage.getItem('fit-daily_sol_notes')  || '{}');
     }
   }
 

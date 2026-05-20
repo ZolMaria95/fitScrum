@@ -1,4 +1,13 @@
-const SESSION_KEY = 'fitscrum_session';
+const SESSION_KEY = 'fit-daily_session';
+
+// One-shot migration: rescatar sesión del nombre antiguo
+(function _migrateLegacySession() {
+  const old = sessionStorage.getItem('fitscrum_session');
+  if (old && !sessionStorage.getItem(SESSION_KEY)) {
+    sessionStorage.setItem(SESSION_KEY, old);
+    sessionStorage.removeItem('fitscrum_session');
+  }
+})();
 
 const App = (() => {
   let _currentView    = 'board';

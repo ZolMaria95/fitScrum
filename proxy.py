@@ -1,5 +1,5 @@
 """
-Proxy local para fitScrum → Helpdesk API
+Proxy local para Fit-Daily → Helpdesk API
 Corre en puerto 3001 y reenvía a https://helpdesk-api.fit-bank.com
 """
 from http.server import HTTPServer, BaseHTTPRequestHandler
