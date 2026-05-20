@@ -9,8 +9,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import close_mongo, connect_to_mongo
+from app.database import close_mongo, connect_to_mongo, get_database
 from app.routers.items import router as items_router
+from app.routers.auth import router as auth_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -40,6 +41,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
+    # create important indexes (idempotent)
+    try:
+        db = get_database()
+        await db["users"].create_index("email", unique=True)
+        await db["items"].create_index([("sprintId", 1)])
+    except Exception:
+        pass
     yield
     await close_mongo()
 
@@ -67,6 +75,7 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.include_router(items_router)
+app.include_router(auth_router)
 
 
 @app.get("/", response_class=FileResponse)

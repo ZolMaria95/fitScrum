@@ -3,19 +3,24 @@ services:
     name: fit-daily-backend
     env: python
     plan: starter
+    region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
     healthCheckPath: /health
+
     envVars:
-      - key: ENVIRONMENT
-        value: production
-        sync: false
+      # Set these in the Render dashboard — never hardcode values here
       - key: MONGODB_URI
-        value: ""
         sync: false
       - key: DATABASE_NAME
-        value: ""
         sync: false
+      - key: ENVIRONMENT
+        value: production
       - key: ALLOWED_ORIGINS
-        value: ""
         sync: false
+      - key: JWT_SECRET
+        generateValue: true   # Render generates a random secret automatically
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"

@@ -8,7 +8,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_database
 from app.schemas.item import ItemCreate, ItemResponse, ItemUpdate
 
-router = APIRouter(prefix="/api/items", tags=["items"])
+from app.utils.security import get_current_user
+
+router = APIRouter(prefix="/api/items", tags=["items"], dependencies=[Depends(get_current_user)])
 
 
 def _validate_object_id(item_id: str) -> ObjectId:

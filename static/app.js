@@ -1,46 +1,146 @@
-const API_BASE = "/api/items";
+// Token lives only in memory — never persisted to localStorage for this demo.
+let authToken = null;
 
-const itemForm = document.getElementById("item-form");
-const itemsList = document.getElementById("items-list");
-const itemsLoading = document.getElementById("items-loading");
-const formMessage = document.getElementById("form-message");
+const $ = id => document.getElementById(id);
 
-async function fetchItems() {
-  itemsLoading.textContent = "Cargando tareas...";
+// ── Sections ──────────────────────────────────────────────
+const sectionLogin   = $("section-login");
+const authArea       = $("authenticated-area");
+const userLabel      = $("user-label");
+
+function showLogin() {
+  sectionLogin.hidden  = false;
+  authArea.hidden      = true;
+  authToken            = null;
+}
+
+function showApp(email) {
+  sectionLogin.hidden = true;
+  authArea.hidden     = false;
+  userLabel.textContent = `Conectado como ${email}`;
+  fetchItems();
+}
+
+// ── Auth helpers ──────────────────────────────────────────
+function authHeaders() {
+  return {
+    "Content-Type":  "application/json",
+    "Authorization": `Bearer ${authToken}`,
+  };
+}
+
+// ── Login ─────────────────────────────────────────────────
+$("login-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg      = $("login-message");
+  const email    = $("login-email").value.trim();
+  const password = $("login-password").value;
+
+  msg.textContent = "";
+  msg.className   = "message";
+
   try {
-    const response = await fetch(API_BASE);
-    if (!response.ok) {
-      throw new Error(`Error cargando tareas: ${response.statusText}`);
+    const res = await fetch("/api/auth/login", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ email, password }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Credenciales inválidas.");
     }
-    const items = await response.json();
+
+    const data = await res.json();
+    authToken  = data.access_token;
+    showApp(email);
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className   = "message error";
+  }
+});
+
+// ── Logout ────────────────────────────────────────────────
+$("btn-logout").addEventListener("click", () => {
+  showLogin();
+});
+
+// ── Items: fetch ──────────────────────────────────────────
+async function fetchItems() {
+  const loading = $("items-loading");
+  const list    = $("items-list");
+  loading.textContent = "Cargando tareas…";
+  list.innerHTML      = "";
+
+  try {
+    const res = await fetch("/api/items", { headers: authHeaders() });
+    if (res.status === 401) { showLogin(); return; }
+    if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`);
+
+    const items = await res.json();
+    loading.textContent = "";
     renderItems(items);
-  } catch (error) {
-    itemsLoading.textContent = "No se pudo cargar la lista de tareas.";
-    console.error(error);
+  } catch (err) {
+    loading.textContent = `No se pudo cargar la lista: ${err.message}`;
   }
 }
 
 function renderItems(items) {
-  itemsLoading.textContent = "";
+  const list = $("items-list");
   if (!items.length) {
-    itemsList.innerHTML = "<li>No hay tareas registradas.</li>";
+    list.innerHTML = "<li>No hay tareas registradas.</li>";
+    return;
+  }
+  list.innerHTML = items.map(item => `
+    <li>
+      <strong>${esc(item.title)}</strong>
+      <p>${esc(item.description || "Sin descripción")}</p>
+      <small>Completado: ${item.completed ? "Sí" : "No"}</small>
+    </li>
+  `).join("");
+}
+
+// ── Items: create ─────────────────────────────────────────
+$("item-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const msg   = $("form-message");
+  const title = $("title").value.trim();
+  const desc  = $("description").value.trim();
+
+  msg.textContent = "";
+  msg.className   = "message";
+
+  if (!title) {
+    msg.textContent = "El título es obligatorio.";
+    msg.className   = "message error";
     return;
   }
 
-  itemsList.innerHTML = items
-    .map(
-      (item) => `
-      <li>
-        <strong>${escapeHtml(item.title)}</strong>
-        <p>${escapeHtml(item.description || "Sin descripción")}</p>
-        <small>Completado: ${item.completed ? "Sí" : "No"}</small>
-      </li>
-    `
-    )
-    .join("");
-}
+  try {
+    const res = await fetch("/api/items", {
+      method:  "POST",
+      headers: authHeaders(),
+      body:    JSON.stringify({ title, description: desc, completed: false }),
+    });
 
-function escapeHtml(value) {
+    if (res.status === 401) { showLogin(); return; }
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "No se pudo crear la tarea.");
+    }
+
+    $("item-form").reset();
+    msg.textContent = "Tarea creada con éxito.";
+    msg.className   = "message ok";
+    fetchItems();
+  } catch (err) {
+    msg.textContent = `Error: ${err.message}`;
+    msg.className   = "message error";
+  }
+});
+
+// ── Utilities ─────────────────────────────────────────────
+function esc(value) {
   return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -49,38 +149,5 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-itemForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  formMessage.textContent = "";
-  const title = document.getElementById("title").value.trim();
-  const description = document.getElementById("description").value.trim();
-
-  if (!title) {
-    formMessage.textContent = "El título es obligatorio.";
-    return;
-  }
-
-  try {
-    const response = await fetch(API_BASE, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ title, description, completed: false }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.detail || "No se pudo crear la tarea.");
-    }
-
-    itemForm.reset();
-    formMessage.textContent = "Tarea creada con éxito.";
-    fetchItems();
-  } catch (error) {
-    formMessage.textContent = `Error: ${error.message}`;
-    console.error(error);
-  }
-});
-
-fetchItems();
+// ── Init ──────────────────────────────────────────────────
+showLogin();

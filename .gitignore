@@ -2,13 +2,20 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 
 # Virtual environments
 .venv/
 venv/
+env/
 ENV/
+
+# Environment variables — NEVER commit the real .env
 .env
-.env.*
+.env.local
+.env.*.local
+# Keep the example file tracked
+!.env.example
 
 # IDEs
 .vscode/
@@ -21,14 +28,25 @@ build/
 dist/
 *.egg-info/
 .eggs/
+site/
 
 # Testing
 .pytest_cache/
+.coverage
 coverage.xml
 htmlcov/
 
+# Type checking
+.mypy_cache/
+.pyright/
+
 # Logs
 *.log
+logs/
 
 # OS files
 .DS_Store
+Thumbs.db
+
+# Render / CI
+.render-buildpacks.json

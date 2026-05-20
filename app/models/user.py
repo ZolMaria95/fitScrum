@@ -16,11 +16,13 @@ def _coerce_objectid(value: Any) -> ObjectId:
 PyObjectId = Annotated[ObjectId, BeforeValidator(_coerce_objectid)]
 
 
-class ItemModel(BaseModel):
+class UserModel(BaseModel):
     id: PyObjectId = Field(default_factory=ObjectId, alias="_id")
-    title: str = Field(..., max_length=200)
-    description: str = Field("", max_length=1000)
-    completed: bool = Field(False)
+    email: str
+    first_name: str = Field(..., max_length=100)
+    last_name: str = Field(..., max_length=100)
+    hashed_password: str
+    role: str = Field("consultor", max_length=50)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime | None = None
 

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     database_name: str = Field(..., env="DATABASE_NAME")
     environment: str = Field("development", env="ENVIRONMENT")
     allowed_origins: List[str] = Field(..., env="ALLOWED_ORIGINS")
+    jwt_secret: str = Field(..., env="JWT_SECRET")
+    jwt_algorithm: str = Field("HS256", env="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(60, env="ACCESS_TOKEN_EXPIRE_MINUTES")
 
     model_config = SettingsConfigDict(
         env_file=".env",
