@@ -77,12 +77,11 @@ const HelpdeskPanel = (() => {
   let _filterAccion  = '';
   let _filterClasif  = '';
 
-  // ── Auth token (cacheado 50 min en sessionStorage) ────
-  const TOKEN_KEY = 'fit-daily_hd_token';
+  // ── Auth token (válido solo durante la operación actual) ──
+  // El API bloquea al usuario si se queda con sesiones abiertas → logout siempre al terminar.
+  let _currentToken = null;
   async function _getToken() {
-    const cached = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-    if (cached && Date.now() < cached.exp) return cached.token;
-
+    if (_currentToken) return _currentToken;
     const r = await fetch(`${BASE}/auth/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -94,11 +93,19 @@ const HelpdeskPanel = (() => {
     });
     if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
     const { access_token } = await r.json();
-    sessionStorage.setItem(TOKEN_KEY, JSON.stringify({
-      token: access_token,
-      exp:   Date.now() + 50 * 60 * 1000,
-    }));
-    return access_token;
+    _currentToken = access_token;
+    return _currentToken;
+  }
+  async function _logout() {
+    if (!_currentToken) return;
+    const token = _currentToken;
+    _currentToken = null;
+    try {
+      await fetch(`${BASE}/auth/logout`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (_) {}
   }
 
   // ── Fetch páginas ─────────────────────────────────────
@@ -310,6 +317,7 @@ const HelpdeskPanel = (() => {
         'error'
       );
     } finally {
+      await _logout();
       _loading = false;
     }
   }

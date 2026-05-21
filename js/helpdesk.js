@@ -3,10 +3,8 @@ const Helpdesk = (() => {
     ? window.HELPDESK_PROXY_URL : 'http://localhost:3001';
   const BASE = _proxyUrl + '/api/v1';
 
-  const TOKEN_KEY = 'fit-daily_hd_token';
-  async function _getToken() {
-    const cached = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-    if (cached && Date.now() < cached.exp) return cached.token;
+  // Login + logout por operación para evitar sesiones colgadas que bloquean al usuario.
+  async function _login() {
     const r = await fetch(`${BASE}/auth/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -18,11 +16,16 @@ const Helpdesk = (() => {
     });
     if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
     const { access_token } = await r.json();
-    sessionStorage.setItem(TOKEN_KEY, JSON.stringify({
-      token: access_token,
-      exp:   Date.now() + 50 * 60 * 1000,
-    }));
     return access_token;
+  }
+  async function _logout(token) {
+    if (!token) return;
+    try {
+      await fetch(`${BASE}/auth/logout`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (_) {}
   }
 
   // Mapeo nombre API → ID de cliente en Fit-Daily
@@ -44,29 +47,33 @@ const Helpdesk = (() => {
   async function lookupTicket(ticketId) {
     let raw = null;
     let token;
-    try { token = await _getToken(); } catch (_) { return null; }
+    try { token = await _login(); } catch (_) { return null; }
     const headers = { Authorization: `Bearer ${token}` };
 
-    // Intento 1: endpoint directo por ID
     try {
-      const r = await fetch(`${BASE}/tickets/${ticketId}`, { headers });
-      if (r.ok) raw = await r.json();
-    } catch (_) {}
+      // Intento 1: endpoint directo por ID
+      try {
+        const r = await fetch(`${BASE}/tickets/${ticketId}`, { headers });
+        if (r.ok) raw = await r.json();
+      } catch (_) {}
 
-    // Intento 2: buscar en el listado paginado (primeras 2 páginas)
-    if (!raw) {
-      for (const offset of [0, 40]) {
-        try {
-          const r = await fetch(
-            `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
-            { headers },
-          );
-          if (!r.ok) break;
-          const data  = await r.json();
-          const found = (data.items || []).find(t => String(t.ticket_id) === String(ticketId));
-          if (found) { raw = found; break; }
-        } catch (_) { break; }
+      // Intento 2: buscar en el listado paginado (primeras 2 páginas)
+      if (!raw) {
+        for (const offset of [0, 40]) {
+          try {
+            const r = await fetch(
+              `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
+              { headers },
+            );
+            if (!r.ok) break;
+            const data  = await r.json();
+            const found = (data.items || []).find(t => String(t.ticket_id) === String(ticketId));
+            if (found) { raw = found; break; }
+          } catch (_) { break; }
+        }
       }
+    } finally {
+      await _logout(token);
     }
 
     if (!raw) return null;
