@@ -6,7 +6,7 @@
  *   2. Pega este código y haz Deploy.
  *   3. En Settings → Variables → agregar como Secrets (NO como texto plano):
  *        HD_USERNAME  → HELPDESK1
- *        HD_PASSWORD  → <la contraseña real>
+ *        HD_PASSWORD  → MtRuLxgDz6q5
  *        HD_API_BASE  → https://helpdesk-api.fit-bank.com/api/v1
  *
  * El Worker gestiona el token internamente. El cliente nunca envía credenciales.
@@ -28,15 +28,20 @@ async function _getToken(env) {
 
   const r = await fetch(`${env.HD_API_BASE}/auth/login`, {
     method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent':   'Mozilla/5.0 (compatible; FitDaily/1.0)',
+    },
     body: JSON.stringify({
       username_or_email: env.HD_USERNAME,
       password:          env.HD_PASSWORD,
-      force_logout:      'true',
     }),
   });
 
-  if (!r.ok) throw new Error(`Worker login failed: ${r.status}`);
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(`Worker login failed: ${r.status} — ${body}`);
+  }
   const { access_token } = await r.json();
   _cachedToken = access_token;
   _tokenExpiry = Date.now() + TOKEN_TTL;
