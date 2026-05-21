@@ -1,8 +1,29 @@
 const Helpdesk = (() => {
-  // Uses Cloudflare Worker URL when deployed; falls back to local proxy for dev
   const _proxyUrl = window.HELPDESK_PROXY_URL && !window.HELPDESK_PROXY_URL.includes('TU-WORKER')
     ? window.HELPDESK_PROXY_URL : 'http://localhost:3001';
   const BASE = _proxyUrl + '/api/v1';
+
+  const TOKEN_KEY = 'fit-daily_hd_token';
+  async function _getToken() {
+    const cached = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
+    if (cached && Date.now() < cached.exp) return cached.token;
+    const r = await fetch(`${BASE}/auth/login`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username_or_email: window.HD_USERNAME || 'HELPDESK1',
+        password:          window.HD_PASSWORD || '',
+        force_logout:      'true',
+      }),
+    });
+    if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
+    const { access_token } = await r.json();
+    sessionStorage.setItem(TOKEN_KEY, JSON.stringify({
+      token: access_token,
+      exp:   Date.now() + 50 * 60 * 1000,
+    }));
+    return access_token;
+  }
 
   // Mapeo nombre API → ID de cliente en Fit-Daily
   const CLIENT_MAP = {
@@ -22,10 +43,13 @@ const Helpdesk = (() => {
 
   async function lookupTicket(ticketId) {
     let raw = null;
+    let token;
+    try { token = await _getToken(); } catch (_) { return null; }
+    const headers = { Authorization: `Bearer ${token}` };
 
     // Intento 1: endpoint directo por ID
     try {
-      const r = await fetch(`${BASE}/tickets/${ticketId}`);
+      const r = await fetch(`${BASE}/tickets/${ticketId}`, { headers });
       if (r.ok) raw = await r.json();
     } catch (_) {}
 
@@ -35,6 +59,7 @@ const Helpdesk = (() => {
         try {
           const r = await fetch(
             `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
+            { headers },
           );
           if (!r.ok) break;
           const data  = await r.json();

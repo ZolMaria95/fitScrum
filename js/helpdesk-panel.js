@@ -77,12 +77,37 @@ const HelpdeskPanel = (() => {
   let _filterAccion  = '';
   let _filterClasif  = '';
 
+  // ── Auth token (cacheado 50 min en sessionStorage) ────
+  const TOKEN_KEY = 'fit-daily_hd_token';
+  async function _getToken() {
+    const cached = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
+    if (cached && Date.now() < cached.exp) return cached.token;
+
+    const r = await fetch(`${BASE}/auth/login`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username_or_email: window.HD_USERNAME || 'HELPDESK1',
+        password:          window.HD_PASSWORD || '',
+        force_logout:      'true',
+      }),
+    });
+    if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
+    const { access_token } = await r.json();
+    sessionStorage.setItem(TOKEN_KEY, JSON.stringify({
+      token: access_token,
+      exp:   Date.now() + 50 * 60 * 1000,
+    }));
+    return access_token;
+  }
+
   // ── Fetch páginas ─────────────────────────────────────
-  // El Worker inyecta el token; el cliente no necesita credenciales.
   async function _fetchPage(offset) {
     try {
+      const token = await _getToken();
       const r = await fetch(
         `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
+        { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!r.ok) return [];
       return (await r.json()).items || [];
@@ -92,7 +117,10 @@ const HelpdeskPanel = (() => {
   // ── Fetch mensajes de un ticket ───────────────────────
   async function _fetchMessages(ticketId) {
     try {
-      const r = await fetch(`${BASE}/tickets/${ticketId}/messages?limit=50`);
+      const token = await _getToken();
+      const r = await fetch(`${BASE}/tickets/${ticketId}/messages?limit=50`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
       if (!r.ok) return [];
       const data = await r.json();
       return Array.isArray(data) ? data : [];
