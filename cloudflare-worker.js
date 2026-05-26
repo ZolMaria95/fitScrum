@@ -18,34 +18,33 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-// Token cache en memoria del Worker (persiste entre requests del mismo isolate)
-let _cachedToken  = null;
-let _tokenExpiry  = 0;
-const TOKEN_TTL   = 50 * 60 * 1000; // 50 minutos
-
-async function _getToken(env) {
-  if (_cachedToken && Date.now() < _tokenExpiry) return _cachedToken;
-
+async function _login(env) {
   const r = await fetch(`${env.HD_API_BASE}/auth/login`, {
     method:  'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent':   'Mozilla/5.0 (compatible; FitDaily/1.0)',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       username_or_email: env.HD_USERNAME,
       password:          env.HD_PASSWORD,
+      force_logout:      true,
     }),
   });
-
   if (!r.ok) {
     const body = await r.text();
     throw new Error(`Worker login failed: ${r.status} — ${body}`);
   }
-  const { access_token } = await r.json();
-  _cachedToken = access_token;
-  _tokenExpiry = Date.now() + TOKEN_TTL;
-  return _cachedToken;
+  const data = await r.json();
+  return { token: data.access_token, sessionId: data.session_id };
+}
+
+async function _logout(env, sessionId) {
+  if (!sessionId) return;
+  try {
+    await fetch(`${env.HD_API_BASE}/auth/logout`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ session_id: sessionId }),
+    });
+  } catch (_) {}
 }
 
 export default {
@@ -58,14 +57,15 @@ export default {
     const url       = new URL(request.url);
     const targetUrl = env.HD_API_BASE + url.pathname.replace(/^\/api\/v1/, '') + url.search;
 
+    let session = null;
     try {
-      const token = await _getToken(env);
+      session = await _login(env);
 
       const init = {
         method:  request.method,
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${session.token}`,
         },
       };
 
@@ -81,13 +81,12 @@ export default {
 
       return new Response(body, { status: resp.status, headers });
     } catch (err) {
-      // Si el token expiró forzar renovación en el próximo request
-      _cachedToken = null;
-      _tokenExpiry = 0;
       return new Response(
         JSON.stringify({ error: err.message }),
         { status: 502, headers: { ...CORS, 'Content-Type': 'application/json' } },
       );
+    } finally {
+      if (session) await _logout(env, session.sessionId);
     }
   },
 };

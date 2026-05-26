@@ -11,19 +11,20 @@ const Helpdesk = (() => {
       body: JSON.stringify({
         username_or_email: window.HD_USERNAME || 'HELPDESK1',
         password:          window.HD_PASSWORD || '',
-        force_logout:      'true',
+        force_logout:      true,
       }),
     });
     if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
-    const { access_token } = await r.json();
-    return access_token;
+    const data = await r.json();
+    return { token: data.access_token, sessionId: data.session_id };
   }
-  async function _logout(token) {
-    if (!token) return;
+  async function _logout(sessionId) {
+    if (!sessionId) return;
     try {
       await fetch(`${BASE}/auth/logout`, {
         method:  'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ session_id: sessionId }),
       });
     } catch (_) {}
   }
@@ -46,9 +47,9 @@ const Helpdesk = (() => {
 
   async function lookupTicket(ticketId) {
     let raw = null;
-    let token;
-    try { token = await _login(); } catch (_) { return null; }
-    const headers = { Authorization: `Bearer ${token}` };
+    let session;
+    try { session = await _login(); } catch (_) { return null; }
+    const headers = { Authorization: `Bearer ${session.token}` };
 
     try {
       // Intento 1: endpoint directo por ID
@@ -73,7 +74,7 @@ const Helpdesk = (() => {
         }
       }
     } finally {
-      await _logout(token);
+      await _logout(session.sessionId);
     }
 
     if (!raw) return null;

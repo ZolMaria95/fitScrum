@@ -79,7 +79,8 @@ const HelpdeskPanel = (() => {
 
   // ── Auth token (válido solo durante la operación actual) ──
   // El API bloquea al usuario si se queda con sesiones abiertas → logout siempre al terminar.
-  let _currentToken = null;
+  let _currentToken     = null;
+  let _currentSessionId = null;
   async function _getToken() {
     if (_currentToken) return _currentToken;
     const r = await fetch(`${BASE}/auth/login`, {
@@ -88,22 +89,25 @@ const HelpdeskPanel = (() => {
       body: JSON.stringify({
         username_or_email: window.HD_USERNAME || 'HELPDESK1',
         password:          window.HD_PASSWORD || '',
-        force_logout:      'true',
+        force_logout:      true,
       }),
     });
     if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
-    const { access_token } = await r.json();
-    _currentToken = access_token;
+    const data = await r.json();
+    _currentToken     = data.access_token;
+    _currentSessionId = data.session_id;
     return _currentToken;
   }
   async function _logout() {
-    if (!_currentToken) return;
-    const token = _currentToken;
-    _currentToken = null;
+    if (!_currentSessionId) return;
+    const sessionId = _currentSessionId;
+    _currentToken     = null;
+    _currentSessionId = null;
     try {
       await fetch(`${BASE}/auth/logout`, {
         method:  'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ session_id: sessionId }),
       });
     } catch (_) {}
   }
