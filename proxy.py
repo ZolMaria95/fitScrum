@@ -1,13 +1,13 @@
 """
-Proxy local para Fit-Daily → Helpdesk API
-Corre en puerto 3001 y reenvía a https://helpdesk-api.fit-bank.com
+Proxy local para Fit-Daily → Helpdesk API (ambiente TEST)
+Corre en puerto 3001 y reenvía a https://helpdesk-api-test.fit-bank.com
 """
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import urllib.request
 import urllib.error
 import ssl
 
-TARGET = 'https://helpdesk-api.fit-bank.com'
+TARGET = 'https://helpdesk-api-test.fit-bank.com'
 PORT   = 3001
 
 class ProxyHandler(BaseHTTPRequestHandler):

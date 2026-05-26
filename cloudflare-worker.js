@@ -7,7 +7,7 @@
  *   3. En Settings → Variables → agregar como Secrets (NO como texto plano):
  *        HD_USERNAME  → HELPDESK1
  *        HD_PASSWORD  → MtRuLxgDz6q5
- *        HD_API_BASE  → https://helpdesk-api.fit-bank.com/api/v1
+ *        HD_API_BASE  → https://helpdesk-api-test.fit-bank.com/api/v1
  *
  * El Worker gestiona el token internamente. El cliente nunca envía credenciales.
  */
