@@ -78,11 +78,30 @@ const HelpdeskPanel = (() => {
   let _filterClasif  = '';
 
   // ── Auth token (válido solo durante la operación actual) ──
-  // El API bloquea al usuario si se queda con sesiones abiertas → logout siempre al terminar.
+  // Flujo: logout sesión anterior (si quedó colgada) → login → operaciones → logout.
+  const _SESS_KEY       = 'fit-daily_hd_session';
   let _currentToken     = null;
   let _currentSessionId = null;
+
+  async function _logoutById(sessionId) {
+    if (!sessionId) return;
+    try {
+      await fetch(`${BASE}/auth/logout`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ session_id: sessionId }),
+      });
+    } catch (_) {}
+  }
+
   async function _getToken() {
     if (_currentToken) return _currentToken;
+    // Cerrar sesión anterior que pudo haber quedado abierta
+    const prevSession = sessionStorage.getItem(_SESS_KEY);
+    if (prevSession) {
+      sessionStorage.removeItem(_SESS_KEY);
+      await _logoutById(prevSession);
+    }
     const r = await fetch(`${BASE}/auth/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -96,20 +115,17 @@ const HelpdeskPanel = (() => {
     const data = await r.json();
     _currentToken     = data.access_token;
     _currentSessionId = data.session_id;
+    sessionStorage.setItem(_SESS_KEY, _currentSessionId);
     return _currentToken;
   }
+
   async function _logout() {
     if (!_currentSessionId) return;
     const sessionId = _currentSessionId;
     _currentToken     = null;
     _currentSessionId = null;
-    try {
-      await fetch(`${BASE}/auth/logout`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ session_id: sessionId }),
-      });
-    } catch (_) {}
+    sessionStorage.removeItem(_SESS_KEY);
+    await _logoutById(sessionId);
   }
 
   // ── Fetch páginas ─────────────────────────────────────

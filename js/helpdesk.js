@@ -3,8 +3,27 @@ const Helpdesk = (() => {
     ? window.HELPDESK_PROXY_URL : 'http://localhost:3001';
   const BASE = _proxyUrl + '/api/v1';
 
-  // Login + logout por operación para evitar sesiones colgadas que bloquean al usuario.
+  // Flujo: logout sesión anterior (si quedó colgada) → login → operaciones → logout.
+  const _SESS_KEY = 'fit-daily_hd_session';
+
+  async function _logoutById(sessionId) {
+    if (!sessionId) return;
+    try {
+      await fetch(`${BASE}/auth/logout`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ session_id: sessionId }),
+      });
+    } catch (_) {}
+  }
+
   async function _login() {
+    // Cerrar sesión anterior que pudo haber quedado abierta
+    const prevSession = sessionStorage.getItem(_SESS_KEY);
+    if (prevSession) {
+      sessionStorage.removeItem(_SESS_KEY);
+      await _logoutById(prevSession);
+    }
     const r = await fetch(`${BASE}/auth/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -16,17 +35,13 @@ const Helpdesk = (() => {
     });
     if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
     const data = await r.json();
+    sessionStorage.setItem(_SESS_KEY, data.session_id);
     return { token: data.access_token, sessionId: data.session_id };
   }
+
   async function _logout(sessionId) {
-    if (!sessionId) return;
-    try {
-      await fetch(`${BASE}/auth/logout`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ session_id: sessionId }),
-      });
-    } catch (_) {}
+    sessionStorage.removeItem(_SESS_KEY);
+    await _logoutById(sessionId);
   }
 
   // Mapeo nombre API → ID de cliente en Fit-Daily
