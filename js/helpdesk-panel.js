@@ -76,45 +76,22 @@ const HelpdeskPanel = (() => {
   let _filterCliente = '';
   let _filterAccion  = '';
   let _filterClasif  = '';
+  let _filterTicket  = '';
+  let _sortCol       = 'diasSinMovimiento';
+  let _sortDir       = 'desc';
+  let _remoteResult  = null; // Ticket encontrado por búsqueda remota (no se persiste en _tickets)
 
-  // ── Auth token (válido solo durante la operación actual) ──
-  // El API bloquea al usuario si se queda con sesiones abiertas → logout siempre al terminar.
-  let _currentToken = null;
-  async function _getToken() {
-    if (_currentToken) return _currentToken;
-    const r = await fetch(`${BASE}/auth/login`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username_or_email: window.HD_USERNAME || 'HELPDESK1',
-        password:          window.HD_PASSWORD || '',
-        force_logout:      'true',
-      }),
-    });
-    if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
-    const { access_token } = await r.json();
-    _currentToken = access_token;
-    return _currentToken;
-  }
-  async function _logout() {
-    if (!_currentToken) return;
-    const token = _currentToken;
-    _currentToken = null;
-    try {
-      await fetch(`${BASE}/auth/logout`, {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch (_) {}
+  // Localiza un ticket en la lista sincronizada o en el resultado de búsqueda remota
+  function _findTicket(ticketId) {
+    return _tickets.find(x => x.ticket === ticketId)
+        || (_remoteResult && _remoteResult.ticket === ticketId ? _remoteResult : null);
   }
 
   // ── Fetch páginas ─────────────────────────────────────
   async function _fetchPage(offset) {
     try {
-      const token = await _getToken();
-      const r = await fetch(
+      const r = await HelpdeskAuth.fetchWithAuth(
         `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
-        { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!r.ok) return [];
       return (await r.json()).items || [];
@@ -124,14 +101,203 @@ const HelpdeskPanel = (() => {
   // ── Fetch mensajes de un ticket ───────────────────────
   async function _fetchMessages(ticketId) {
     try {
-      const token = await _getToken();
-      const r = await fetch(`${BASE}/tickets/${ticketId}/messages?limit=50`,
-        { headers: { Authorization: `Bearer ${token}` } },
+      const r = await HelpdeskAuth.fetchWithAuth(
+        `${BASE}/tickets/${ticketId}/messages?limit=50`,
       );
       if (!r.ok) return [];
       const data = await r.json();
       return Array.isArray(data) ? data : [];
     } catch (_) { return []; }
+  }
+
+  // ── Sanitizar HTML del mensaje (quitar scripts/eventos) ─
+  function _safeHtml(html) {
+    return String(html || '')
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+      .replace(/href\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, 'href="#"');
+  }
+
+  // ── Extraer adjuntos desde mensajes (campos + HTML) ───
+  function _extractAttachments(mensajes) {
+    const adj  = [];
+    const seen = new Set();
+
+    // DEBUG: mostrar TODOS los campos disponibles de cada mensaje
+    console.log('[Helpdesk] === Estructura de mensajes ===');
+    console.log('[Helpdesk] Total:', mensajes.length);
+    if (mensajes[0]) {
+      console.log('[Helpdesk] Claves en msg[0]:', Object.keys(mensajes[0]));
+    }
+    mensajes.forEach((m, i) => {
+      // DEBUG: si el texto sugiere adjunto, dumpear el objeto entero
+      const txt = String(m.detail || '').toLowerCase();
+      if (txt.includes('adjunt') || txt.includes('habilit') || txt.includes('.zip') || txt.includes('archivo')) {
+        console.log(`[Helpdesk] msg[${i}] (posible adjunto):`, m);
+      }
+
+      // Método 1: campos del API real → attach_id (string) y attach_ids (array)
+      const ids = [];
+      if (m.attach_id)  ids.push(m.attach_id);
+      if (Array.isArray(m.attach_ids)) ids.push(...m.attach_ids);
+      ids.forEach(id => {
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          adj.push({ id, nombre: `adjunto_${String(id).slice(-6)}`, tamaño: 0 });
+        }
+      });
+
+      // Método 2: links /attachments/{id} en el HTML del mensaje
+      const html = m.detail || '';
+      const RE   = /\/attachments\/(\d+)/g;
+      let match;
+      while ((match = RE.exec(html)) !== null) {
+        const id = match[1];
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const aMatch = new RegExp(`href="[^"]*attachments/${id}"[^>]*>([^<]+)<`, 'i').exec(html);
+        const nombre = aMatch ? aMatch[1].trim() : `adjunto_${id}`;
+        adj.push({ id, nombre, tamaño: 0 });
+      }
+    });
+
+    console.log('[Helpdesk] adjuntos extraídos:', adj);
+    return adj;
+  }
+
+  // ── Interceptar links de adjunto en el DOM renderizado ─
+  function _hydrateAttachLinks(container) {
+    container.querySelectorAll('a[href*="/attachments/"]').forEach(a => {
+      const match = a.href.match(/\/attachments\/(\d+)/);
+      if (!match) return;
+      const id     = match[1];
+      const nombre = a.textContent.trim() || a.download || `adjunto_${id}`;
+      a.href        = '#';
+      a.title       = `Descargar ${nombre}`;
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        _downloadAttachment(id, nombre);
+      });
+    });
+  }
+
+  // ── Descargar adjunto con auth (lee nombre real del header) ──
+  async function _downloadAttachment(id, nombreFallback) {
+    try {
+      const r = await HelpdeskAuth.fetchWithAuth(`${BASE}/attachments/${id}`);
+      if (!r.ok) { alert('No se pudo descargar el archivo.'); return; }
+
+      // Intentar leer nombre real desde Content-Disposition
+      let nombre = nombreFallback || `adjunto_${id}`;
+      const cd = r.headers.get('content-disposition') || '';
+      const mFn = /filename\*?=(?:UTF-8'')?["']?([^";\s]+)/i.exec(cd);
+      if (mFn) nombre = decodeURIComponent(mFn[1]);
+
+      // Si no hay extensión, derivar del content-type
+      if (!/\.[a-z0-9]{1,5}$/i.test(nombre)) {
+        const ct = (r.headers.get('content-type') || '').split(';')[0].trim();
+        const ext = {
+          'application/zip': 'zip', 'application/x-zip-compressed': 'zip',
+          'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png',
+          'image/gif': 'gif', 'image/webp': 'webp',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+          'application/vnd.ms-excel': 'xls',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+          'application/msword': 'doc', 'text/plain': 'txt', 'text/csv': 'csv',
+        }[ct];
+        if (ext) nombre += '.' + ext;
+      }
+
+      const blob = await r.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = nombre; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) { alert('Error al descargar: ' + e.message); }
+  }
+
+  // ── Cargar imágenes con auth (reemplaza src con blob) ──
+  async function _hydrateImages(container) {
+    const imgs = container.querySelectorAll('img[src]');
+    for (const img of imgs) {
+      const src = img.getAttribute('src');
+      if (!src || src.startsWith('blob:') || src.startsWith('data:')) continue;
+      img.style.opacity = '0.4';
+      try {
+        const url = src.startsWith('http') ? src : `${_proxyUrl}${src.startsWith('/') ? '' : '/'}${src}`;
+        const r   = await HelpdeskAuth.fetchWithAuth(url);
+        if (r.ok) {
+          const blob  = await r.blob();
+          img.src     = URL.createObjectURL(blob);
+          img.style.opacity = '1';
+          img.className     = 'hd-conv-img';
+        } else {
+          img.remove();
+        }
+      } catch (_) { img.remove(); }
+    }
+  }
+
+  // ── Auto-cargar adjuntos: detecta tipo y los muestra inline ──
+  async function _hydrateAttachments(container) {
+    const buttons = container.querySelectorAll('button[data-attach-id]');
+    for (const btn of buttons) {
+      const id = btn.dataset.attachId;
+      btn.disabled = true;
+      btn.textContent = '⏳ cargando...';
+      try {
+        const r = await HelpdeskAuth.fetchWithAuth(`${BASE}/attachments/${id}`);
+        if (!r.ok) { btn.textContent = '⚠ no disponible'; continue; }
+
+        // Nombre real del header
+        const cd = r.headers.get('content-disposition') || '';
+        const mFn = /filename\*?=(?:UTF-8'')?["']?([^";\s]+)/i.exec(cd);
+        const ct  = (r.headers.get('content-type') || '').split(';')[0].trim();
+        let nombre = mFn ? decodeURIComponent(mFn[1]) : `adjunto_${String(id).slice(-6)}`;
+        if (!/\.[a-z0-9]{1,5}$/i.test(nombre)) {
+          const ext = {
+            'application/zip':'zip','application/x-zip-compressed':'zip',
+            'application/pdf':'pdf','image/jpeg':'jpg','image/png':'png',
+            'image/gif':'gif','image/webp':'webp',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx',
+            'application/vnd.ms-excel':'xls',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx',
+            'application/msword':'doc','text/plain':'txt','text/csv':'csv',
+          }[ct];
+          if (ext) nombre += '.' + ext;
+        }
+
+        const blob = await r.blob();
+        const url  = URL.createObjectURL(blob);
+
+        // Si es imagen → reemplazar botón con <img>
+        if (ct.startsWith('image/')) {
+          const img = document.createElement('img');
+          img.src = url;
+          img.className = 'hd-conv-img';
+          img.title = nombre;
+          img.style.cursor = 'zoom-in';
+          img.addEventListener('click', () => window.open(url, '_blank'));
+          btn.replaceWith(img);
+        } else {
+          // No-imagen → actualizar botón con nombre real
+          const ext = nombre.split('.').pop().toLowerCase();
+          const ico = ext === 'pdf' ? '📄' :
+                      ['xlsx','xls','csv'].includes(ext) ? '📊' :
+                      ['docx','doc'].includes(ext) ? '📝' :
+                      ['zip','rar','7z','tar','gz'].includes(ext) ? '🗜' : '📎';
+          const kb  = blob.size ? ` · ${(blob.size / 1024).toFixed(0)} KB` : '';
+          btn.disabled = false;
+          btn.textContent = `${ico} ${nombre}${kb}`;
+          btn.dataset.attachNombre = nombre;
+          btn.dataset.blobUrl      = url;
+          btn.title = `Descargar ${nombre}`;
+        }
+      } catch (e) {
+        console.error('[Helpdesk] Error cargando adjunto', id, e);
+        btn.textContent = '⚠ error';
+      }
+    }
   }
 
   function _stripHtml(str) {
@@ -317,7 +483,43 @@ const HelpdeskPanel = (() => {
         'error'
       );
     } finally {
-      await _logout();
+      _loading = false;
+    }
+  }
+
+  // ── Buscar ticket específico en Helpdesk (lookup directo) ──
+  async function _searchTicketRemote(ticketId) {
+    if (_loading) return;
+    _loading = true;
+    try {
+      _setStatus(`Buscando #${ticketId} en Helpdesk...`, 'loading');
+
+      const r = await HelpdeskAuth.fetchWithAuth(`${BASE}/tickets/tickets/${ticketId}`);
+      if (!r.ok) {
+        _setStatus(`✗ Ticket #${ticketId} no existe (HTTP ${r.status}).`, 'error');
+        return;
+      }
+      const raw = await r.json();
+
+      // Algunos APIs envuelven el resultado en {item:...} o array
+      const data = Array.isArray(raw) ? raw[0] : (raw.item || raw.data || raw);
+      if (!data || !data.ticket_id) {
+        _setStatus(`✗ Respuesta inesperada para #${ticketId}.`, 'error');
+        return;
+      }
+
+      const t = _clasificar(_evaluarFechas(_mapTicket(data)));
+      const msgs = await _fetchMessages(t.ticket);
+      _applyMessages(t, msgs);
+      _evaluarFechas(t);
+      _clasificar(t);
+
+      _remoteResult = t;
+      _setStatus(`✓ Ticket #${ticketId} encontrado.`, 'ok');
+      _render();
+    } catch (err) {
+      _setStatus(`Error buscando #${ticketId}: ${err.message || err}`, 'error');
+    } finally {
       _loading = false;
     }
   }
@@ -334,11 +536,54 @@ const HelpdeskPanel = (() => {
   function render() {
     const list = document.getElementById('hd-list');
     if (!list) return;
-    if (!_tickets.length) {
-      list.innerHTML = `<div class="hd-empty">Haz clic en <strong>↻ Sincronizar</strong> para cargar los tickets de Helpdesk.</div>`;
+    if (!_tickets.length && !_remoteResult) {
+      _renderEmpty();
       return;
     }
     _render();
+  }
+
+  // ── Vista vacía pre-sincronización: solo buscador ─────
+  function _renderEmpty() {
+    const list = document.getElementById('hd-list');
+    if (!list) return;
+    const puedeBuscar = _filterTicket && _filterTicket.length >= 4;
+    list.innerHTML = `
+      <div class="hd-empty">
+        <div class="hd-empty-msg">
+          Haz clic en <strong>↻ Sincronizar</strong> para cargar los tickets de Helpdesk
+          <br><span class="hd-empty-or">— o busca uno directamente por número —</span>
+        </div>
+        <div class="hd-empty-search-row">
+          <input type="text"
+                 id="hd-search-ticket-empty"
+                 class="hd-empty-search-input"
+                 placeholder="Número de ticket (ej. 32703)"
+                 value="${_filterTicket}"
+                 autocomplete="off">
+          <button class="hd-search-remote-btn"
+                  id="hd-btn-search-remote"
+                  data-ticket="${_filterTicket}"
+                  ${puedeBuscar ? '' : 'disabled'}>
+            🔍 Buscar en Helpdesk
+          </button>
+        </div>
+        <div class="hd-search-remote-hint">Ingresa al menos 4 dígitos y presiona Enter o el botón.</div>
+      </div>`;
+
+    const inp = document.getElementById('hd-search-ticket-empty');
+    inp.focus();
+    inp.setSelectionRange(_filterTicket.length, _filterTicket.length);
+    inp.addEventListener('input', e => {
+      _filterTicket = e.target.value.replace(/[^0-9]/g, '').trim();
+      _renderEmpty();
+    });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && _filterTicket.length >= 4) _searchTicketRemote(_filterTicket);
+    });
+    document.getElementById('hd-btn-search-remote')?.addEventListener('click', () => {
+      if (_filterTicket.length >= 4) _searchTicketRemote(_filterTicket);
+    });
   }
 
   function _render() {
@@ -358,8 +603,10 @@ const HelpdeskPanel = (() => {
     if (el1) el1.textContent = cntPrio;
     if (el2) el2.textContent = _tickets.length;
 
-    // Filas base según pestaña
-    let base = isPrio ? _tickets.filter(t => PRIORITY_ACTIONS.has(t.accion)) : _tickets;
+    // Filas base según pestaña — o resultado único de búsqueda remota
+    let base = _remoteResult
+      ? [_remoteResult]
+      : (isPrio ? _tickets.filter(t => PRIORITY_ACTIONS.has(t.accion)) : _tickets);
 
     // Valores únicos para los selects (sobre el universo sin filtrar)
     const clientes  = [...new Set(base.map(t => t.clienteRaw))].sort();
@@ -370,58 +617,98 @@ const HelpdeskPanel = (() => {
     if (_filterCliente) base = base.filter(t => t.clienteRaw    === _filterCliente);
     if (_filterAccion)  base = base.filter(t => t.accion        === _filterAccion);
     if (_filterClasif)  base = base.filter(t => t.clasificacion === _filterClasif);
+    if (_filterTicket)  base = base.filter(t => String(t.ticket).includes(_filterTicket));
 
-    const sorted = [...base].sort((a, b) => b.diasSinMovimiento - a.diasSinMovimiento);
+    // Helper: icono de sort para una columna
+    const _si = col => {
+      if (_sortCol !== col) return '<span class="hd-sort-icon">⇅</span>';
+      return `<span class="hd-sort-icon hd-sort-on">${_sortDir === 'asc' ? '↑' : '↓'}</span>`;
+    };
+    const _thS = (col, label, extra = '') => {
+      const active = _sortCol === col ? ' hd-sort-active' : '';
+      return `<th class="hd-th-sort${active}" data-sort="${col}"${extra}>${label} ${_si(col)}</th>`;
+    };
 
-    const optCliente = `<option value="">Todos los clientes (${clientes.length})</option>` +
+    // Sort dinámico
+    const sorted = [...base].sort((a, b) => {
+      let va = a[_sortCol], vb = b[_sortCol];
+      // Fechas ISO
+      if (typeof va === 'string' && va && /^\d{4}-\d{2}-\d{2}/.test(va)) {
+        va = new Date(va).getTime() || 0;
+        vb = new Date(vb || '').getTime() || 0;
+      }
+      if (typeof va === 'number') return _sortDir === 'asc' ? va - vb : vb - va;
+      const cmp = String(va || '').toLowerCase().localeCompare(String(vb || '').toLowerCase());
+      return _sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    const optCliente = `<option value="">Todos (${clientes.length})</option>` +
       clientes.map(c => `<option value="${c}" ${_filterCliente === c ? 'selected' : ''}>${c}</option>`).join('');
 
     const optAccion = `<option value="">Todas las acciones</option>` +
       acciones.map(a => `<option value="${a}" ${_filterAccion === a ? 'selected' : ''}>${a}</option>`).join('');
 
-    const optClasif = `<option value="">Todas las clasificaciones</option>` +
+    const optClasif = `<option value="">Todas las clasif.</option>` +
       clasifs.map(c => `<option value="${c}" ${_filterClasif === c ? 'selected' : ''} style="color:${CLASIF_COLOR[c] || '#757575'}">${c}</option>`).join('');
 
-    const notes   = AppData.getHdNotes();
-    const actions = AppData.getHdActions();
+    const notes      = AppData.getHdNotes();
+    const actions    = AppData.getHdActions();
+    const pendientes = AppData.getHdPendientes();
+
+    const hasFilter  = _filterCliente || _filterAccion || _filterClasif || _filterTicket;
+    const clearBtn   = hasFilter ? `<button class="hd-filter-clear-th" id="hd-btn-clear">✕ Limpiar</button>` : '';
 
     const bodyHTML = sorted.length
-      ? sorted.map(t => _rowHTML(t, notes, actions)).join('')
-      : `<tr><td colspan="15" class="hd-no-results">Sin resultados para los filtros aplicados.</td></tr>`;
+      ? sorted.map(t => _rowHTML(t, notes, actions, pendientes)).join('')
+      : `<tr><td colspan="15" class="hd-no-results">
+          Sin resultados para los filtros aplicados.
+          ${_filterTicket && _filterTicket.length >= 4 ? `
+            <div style="margin-top:12px">
+              <button class="hd-search-remote-btn" id="hd-btn-search-remote" data-ticket="${_filterTicket}">
+                🔍 Buscar #${_filterTicket} en Helpdesk
+              </button>
+              <div class="hd-search-remote-hint">Este ticket no está en los cargados por la última sincronización.</div>
+            </div>
+          ` : ''}
+        </td></tr>`;
 
     list.innerHTML = `
-      <div class="hd-filters">
-        <label class="hd-filter-label">Cliente
-          <select class="hd-filter-select" id="hd-sel-cliente">${optCliente}</select>
-        </label>
-        <label class="hd-filter-label">Acción
-          <select class="hd-filter-select" id="hd-sel-accion">${optAccion}</select>
-        </label>
-        <label class="hd-filter-label">Clasificación
-          <select class="hd-filter-select" id="hd-sel-clasif">${optClasif}</select>
-        </label>
-        <span class="hd-filter-count">${sorted.length} ticket${sorted.length !== 1 ? 's' : ''}</span>
-        ${(_filterCliente || _filterAccion || _filterClasif) ? `<button class="hd-filter-clear" id="hd-btn-clear">✕ Limpiar</button>` : ''}
-      </div>
       <div class="hd-table-wrap">
         <table class="hd-table">
           <thead>
             <tr>
               <th>Ticket</th>
               <th class="hd-th-resumen">Resumen</th>
-              <th>Cliente</th>
+              ${_thS('clienteRaw', 'Cliente')}
               <th>Asunto</th>
-              <th>Fecha Últ. Msg</th>
+              ${_thS('fechaUltimoMensaje', 'Fecha Últ. Msg')}
               <th>Último Mensaje</th>
               <th>Tipo</th>
-              <th>Asignado a</th>
-              <th>Estatus</th>
+              ${_thS('nombreAsignado', 'Asignado a')}
+              ${_thS('estatus', 'Estatus')}
               <th>Módulo</th>
-              <th>F. Ingreso</th>
-              <th title="Días sin movimiento">Días mov.</th>
-              <th title="Días desde ingreso">Días ing.</th>
-              <th>Clasificación</th>
-              <th>Acción</th>
+              ${_thS('fechaIngreso', 'F. Ingreso')}
+              ${_thS('diasSinMovimiento', 'Días mov.', ' title="Días sin movimiento"')}
+              ${_thS('diasDesdeIngreso', 'Días ing.', ' title="Días desde ingreso"')}
+              ${_thS('clasificacion', 'Clasificación')}
+              ${_thS('accion', 'Acción')}
+            </tr>
+            <tr class="hd-filter-row">
+              <td><input type="text" class="hd-filter-input-th" id="hd-search-ticket" placeholder="🔍 #" value="${_filterTicket}"></td>
+              <td><span class="hd-count-badge">${sorted.length}</span>${clearBtn}</td>
+              <td><select class="hd-filter-select-th" id="hd-sel-cliente">${optCliente}</select></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td><select class="hd-filter-select-th" id="hd-sel-clasif">${optClasif}</select></td>
+              <td><select class="hd-filter-select-th" id="hd-sel-accion">${optAccion}</select></td>
             </tr>
           </thead>
           <tbody>${bodyHTML}</tbody>
@@ -445,16 +732,89 @@ const HelpdeskPanel = (() => {
       _filterCliente = '';
       _filterAccion  = '';
       _filterClasif  = '';
+      _filterTicket  = '';
+      _remoteResult  = null;
       _render();
+    });
+
+    // Botón "Buscar #N en Helpdesk" (cuando 0 resultados locales)
+    document.getElementById('hd-btn-search-remote')?.addEventListener('click', e => {
+      _searchTicketRemote(e.currentTarget.dataset.ticket);
+    });
+
+    // Búsqueda por número de ticket (debounce mínimo via 'input')
+    const searchInput = document.getElementById('hd-search-ticket');
+    if (searchInput) {
+      searchInput.addEventListener('input', e => {
+        _filterTicket = e.target.value.replace(/[^0-9]/g, '').trim();
+        _remoteResult = null; // al cambiar la búsqueda se descarta el resultado remoto previo
+        _render();
+        // Restaurar foco y posición del cursor después del re-render
+        const newInput = document.getElementById('hd-search-ticket');
+        if (newInput) { newInput.focus(); newInput.setSelectionRange(_filterTicket.length, _filterTicket.length); }
+      });
+    }
+
+    // Ordenamiento al hacer clic en cabecera
+    list.querySelectorAll('.hd-th-sort').forEach(th => {
+      th.addEventListener('click', () => {
+        const col = th.dataset.sort;
+        if (_sortCol === col) {
+          _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          _sortCol = col;
+          _sortDir = 'desc';
+        }
+        _render();
+      });
     });
 
     list.querySelectorAll('.hd-ticket-btn').forEach(btn => {
       btn.addEventListener('click', () => _abrirModalTarea(btn.dataset.ticket));
     });
 
+    list.querySelectorAll('.hd-copy-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const num = btn.dataset.copy;
+        try {
+          await navigator.clipboard.writeText(num);
+          const orig = btn.textContent;
+          btn.textContent = '✓';
+          btn.classList.add('hd-copy-ok');
+          setTimeout(() => { btn.textContent = orig; btn.classList.remove('hd-copy-ok'); }, 1200);
+        } catch (_) {
+          // Fallback: seleccionar texto
+          const ta = document.createElement('textarea');
+          ta.value = num; document.body.appendChild(ta); ta.select();
+          document.execCommand('copy'); ta.remove();
+          btn.textContent = '✓';
+          setTimeout(() => btn.textContent = '⧉', 1200);
+        }
+      });
+    });
+
+    list.querySelectorAll('.hd-pending-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const ticketId  = btn.dataset.ticket;
+        const isNow     = !AppData.getHdPendientes()[String(ticketId)];
+        if (isNow) {
+          const t = _findTicket(ticketId);
+          AppData.setHdPendiente(ticketId, { ticket: ticketId, asunto: t?.asunto || '', clienteRaw: t?.clienteRaw || '' });
+        } else {
+          AppData.removeHdPendiente(ticketId);
+        }
+        btn.classList.toggle('hd-pending-active', isNow);
+        btn.textContent = isNow ? '⏸' : '+';
+        btn.title       = isNow ? 'Quitar de pendientes' : 'Marcar como pendiente';
+        btn.closest('tr')?.classList.toggle('hd-row-pending', isNow);
+      });
+    });
+
     list.querySelectorAll('.hd-msg-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const t = _tickets.find(x => x.ticket === btn.dataset.ticket);
+        const t = _findTicket(btn.dataset.ticket);
         if (t) _abrirModalMensaje(t);
       });
     });
@@ -538,22 +898,29 @@ const HelpdeskPanel = (() => {
     // El listener original de _render() sigue activo en el nodo — no agregar otro
   }
 
-  function _rowHTML(t, notes, actions) {
-    const isAction = !!(actions || {})[String(t.ticket)];
+  function _rowHTML(t, notes, actions, pendientes) {
+    const isAction  = !!(actions    || {})[String(t.ticket)];
+    const isPending = !!(pendientes || {})[String(t.ticket)];
     const cColor   = CLASIF_COLOR[t.clasificacion] || '#757575';
     const dColor   = t.diasSinMovimiento > 7 ? '#C00000' : t.diasSinMovimiento > 3 ? '#FF8C00' : '#2E7D32';
     const diColor  = t.diasDesdeIngreso  > 7 ? '#C00000' : t.diasDesdeIngreso  > 3 ? '#FF8C00' : '#2E7D32';
     const asunto   = t.asunto.length > 55 ? t.asunto.slice(0, 55) + '…' : t.asunto;
     const msg      = t.ultimoMensaje.length > 60 ? t.ultimoMensaje.slice(0, 60) + '…' : t.ultimoMensaje;
     const fIngreso = t.fechaIngreso  ? t.fechaIngreso.split('T')[0]      : '';
-    const fMsg     = t.fechaUltimoMensaje ? t.fechaUltimoMensaje.split('T')[0] : '';
+    const fMsg     = t.fechaUltimoMensaje
+      ? (() => { const [d, h=''] = t.fechaUltimoMensaje.split('T'); return h ? `${d} ${h.slice(0,5)}` : d; })()
+      : '';
     const msgBg    = t.recienteMensaje ? 'background:#FFF3E0' : '';
     const msgFg    = t.recienteMensaje ? 'color:#E65100;font-weight:600' : '';
     const msgTxt   = t.tieneMensaje    ? 'font-weight:600;color:#1A237E' : 'color:#9E9E9E';
 
     return `
-      <tr class="hd-row${isAction ? ' hd-row-action' : ''}">
-        <td><button class="hd-ticket-btn" data-ticket="${t.ticket}">#${t.ticket}</button></td>
+      <tr class="hd-row${isAction ? ' hd-row-action' : ''}${isPending ? ' hd-row-pending' : ''}">
+        <td>
+          <button class="hd-ticket-btn" data-ticket="${t.ticket}">#${t.ticket}</button>
+          <button class="hd-copy-btn" data-copy="${t.ticket}" title="Copiar número de ticket">⧉</button>
+          <button class="hd-pending-btn${isPending ? ' hd-pending-active' : ''}" data-ticket="${t.ticket}" title="${isPending ? 'Quitar de pendientes' : 'Marcar como pendiente'}">${isPending ? '⏸' : '+'}</button>
+        </td>
         <td class="hd-note-cell" data-ticket="${t.ticket}">${_noteDisplay(t.ticket, notes, actions)}</td>
         <td class="hd-cell-sm">${t.clienteRaw}</td>
         <td class="hd-cell-asunto" title="${t.asunto.replace(/"/g,'&quot;')}">${asunto}</td>
@@ -636,8 +1003,8 @@ const HelpdeskPanel = (() => {
       </div>`;
   }
 
-  // ── Modal: ver mensaje completo ───────────────────────
-  function _abrirModalMensaje(t) {
+  // ── Modal: conversación completa + adjuntos ──────────
+  async function _abrirModalMensaje(t) {
     let overlay = document.getElementById('hd-modal-msg');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -646,36 +1013,136 @@ const HelpdeskPanel = (() => {
       overlay.innerHTML = `
         <div class="modal hd-msg-modal">
           <div class="modal-header">
-            <div>
+            <div class="hd-msg-header-info">
               <span class="modal-id-badge" id="hd-msg-ticket"></span>
-              <span id="hd-msg-meta" style="font-size:11px;color:var(--text-muted);margin-left:10px"></span>
+              <span id="hd-msg-cliente" class="hd-msg-cliente-badge"></span>
+              <span id="hd-msg-estatus" class="hd-msg-estatus-badge"></span>
             </div>
             <button class="modal-close" id="hd-msg-close">✕</button>
           </div>
-          <div class="modal-body">
-            <div id="hd-msg-asunto" class="hd-msg-asunto"></div>
-            <div class="hd-msg-label">Último mensaje</div>
-            <div id="hd-msg-body" class="hd-msg-body"></div>
-          </div>
+          <div id="hd-msg-asunto" class="hd-msg-asunto"></div>
+          <div class="modal-body hd-conv-wrap" id="hd-conv-body"></div>
         </div>`;
       document.body.appendChild(overlay);
-
       document.getElementById('hd-msg-close').addEventListener('click', () => overlay.classList.add('hidden'));
       overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
     }
 
-    const fecha = t.fechaUltimoMensaje ? t.fechaUltimoMensaje.split('T')[0] : '';
-    document.getElementById('hd-msg-ticket').textContent = `#${t.ticket}`;
-    document.getElementById('hd-msg-meta').textContent   = [fecha, t.usuarioUltimoMsg].filter(Boolean).join(' · ');
-    document.getElementById('hd-msg-asunto').textContent = t.asunto;
-    document.getElementById('hd-msg-body').textContent   = t.ultimoMensaje;
-
+    // Llenar encabezado de inmediato y mostrar loading
+    document.getElementById('hd-msg-ticket').textContent  = `#${t.ticket}`;
+    document.getElementById('hd-msg-cliente').textContent = t.clienteRaw;
+    document.getElementById('hd-msg-estatus').textContent = t.estatus;
+    document.getElementById('hd-msg-asunto').textContent  = t.asunto;
+    document.getElementById('hd-conv-body').innerHTML     =
+      `<div class="hd-conv-loading">Cargando mensajes y adjuntos...</div>`;
     overlay.classList.remove('hidden');
+
+    const mensajes = await _fetchMessages(t.ticket);
+    const adjuntos = _extractAttachments(mensajes);
+
+    // Ordenar de más antiguo a más reciente
+    const msgs = [...mensajes].sort((a, b) =>
+      new Date(a.entry_date || 0) - new Date(b.entry_date || 0)
+    );
+
+    const esEmpleado = uid => EMPLEADOS.has(String(uid || '').trim().toUpperCase());
+    const IMG_EXTS   = new Set(['jpg','jpeg','png','gif','webp','bmp','svg']);
+    const _icon = ext =>
+      IMG_EXTS.has(ext) ? '🖼' :
+      ext === 'pdf' ? '📄' :
+      ['xlsx','xls','csv'].includes(ext) ? '📊' :
+      ['docx','doc'].includes(ext) ? '📝' :
+      ['zip','rar','7z','tar','gz'].includes(ext) ? '🗜' : '📎';
+
+    // Adjuntos por mensaje desde attach_id / attach_ids del API
+    function _attachsDeMensaje(m) {
+      const out  = [];
+      const seen = new Set();
+      const ids  = [];
+      if (m.attach_id)  ids.push(m.attach_id);
+      if (Array.isArray(m.attach_ids)) ids.push(...m.attach_ids);
+      ids.forEach(id => {
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          out.push({ id, nombre: `adjunto_${String(id).slice(-6)}`, tamaño: 0 });
+        }
+      });
+      return out;
+    }
+
+    const msgsHTML = msgs.length
+      ? msgs.map(m => {
+          const esSys     = m.system_message === true;
+          const esEmp     = esEmpleado(m.entry_user_id);
+          const fecha     = m.entry_date ? m.entry_date.replace('T', ' ').slice(0, 16) : '';
+          const html      = _safeHtml(m.detail || '');
+          const texto     = _stripHtml(html).trim();
+          const adjMsg    = _attachsDeMensaje(m);
+          if (!texto && !html.includes('<img') && !adjMsg.length) return '';
+          const cls       = esSys ? 'hd-conv-sys' : esEmp ? 'hd-conv-emp' : 'hd-conv-cli';
+          const label     = esSys ? 'Sistema' : (m.entry_user_id || '—');
+
+          const adjHTML = adjMsg.length
+            ? `<div class="hd-conv-attach-row">${adjMsg.map(a => {
+                const ext = a.nombre.split('.').pop().toLowerCase();
+                const kb  = a.tamaño ? ` · ${(a.tamaño / 1024).toFixed(0)} KB` : '';
+                return `<button class="hd-attach-item hd-attach-inline" data-attach-id="${a.id}" data-attach-nombre="${a.nombre.replace(/"/g,'&quot;')}">${_icon(ext)} ${a.nombre}${kb}</button>`;
+              }).join('')}</div>`
+            : '';
+
+          return `
+            <div class="hd-conv-msg ${cls}">
+              <div class="hd-conv-meta">
+                <span class="hd-conv-user">${label}</span>
+                <span class="hd-conv-date">${fecha}</span>
+              </div>
+              ${texto || html.includes('<img') ? `<div class="hd-conv-text">${html}</div>` : ''}
+              ${adjHTML}
+            </div>`;
+        }).join('')
+      : `<div class="hd-conv-empty">Sin mensajes registrados.</div>`;
+
+    const conteo = msgsHTML ? msgs.filter(m => {
+      const html = m.detail || '';
+      return _stripHtml(html).trim() || html.includes('<img') || _attachsDeMensaje(m).length;
+    }).length : 0;
+
+    document.getElementById('hd-conv-body').innerHTML = `
+      <div class="hd-conv-header">
+        <span class="hd-conv-count">${conteo} mensaje${conteo !== 1 ? 's' : ''}</span>
+        ${adjuntos.length ? `<span class="hd-conv-adj-count">${adjuntos.length} adjunto${adjuntos.length !== 1 ? 's' : ''}</span>` : ''}
+      </div>
+      <div class="hd-conv-list">${msgsHTML}</div>`;
+
+    const convBody = document.getElementById('hd-conv-body');
+
+    // Clic en botones de adjunto → descargar (usando blob ya cacheado si existe)
+    convBody.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-attach-id]');
+      if (!btn || btn.disabled) return;
+      if (btn.dataset.blobUrl) {
+        const a = document.createElement('a');
+        a.href = btn.dataset.blobUrl;
+        a.download = btn.dataset.attachNombre || `adjunto_${btn.dataset.attachId}`;
+        a.click();
+      } else {
+        _downloadAttachment(btn.dataset.attachId, btn.dataset.attachNombre);
+      }
+    });
+
+    // Interceptar links <a> que apunten a /attachments/{id} (HTML del mensaje)
+    _hydrateAttachLinks(convBody);
+
+    // Cargar imágenes embebidas con auth
+    _hydrateImages(convBody);
+
+    // Auto-cargar todos los adjuntos del modal: detecta tipo, muestra imgs inline
+    _hydrateAttachments(convBody);
   }
 
   // ── Crear tarea desde ticket ──────────────────────────
   function _abrirModalTarea(ticketNum) {
-    const t = _tickets.find(x => x.ticket === ticketNum);
+    const t = _findTicket(ticketNum);
     if (!t) return;
 
     const existente = AppData.getAllStories().find(s => String(s.ticket) === ticketNum);

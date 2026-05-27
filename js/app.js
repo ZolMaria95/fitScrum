@@ -31,6 +31,7 @@ const App = (() => {
     HelpdeskPanel.setup();
     SolPanel.setup();
     Semanal.init();
+    UsuariosPizza.setup();
 
     // Mostrar tab "Mi Panel" solo para Scrum Master
     if (_session.role === 'Scrum Master') {
@@ -113,9 +114,11 @@ const App = (() => {
     if (_currentView === 'burndown')  refreshBurndown();
     if (_currentView === 'progreso')  refreshProgreso();
     if (_currentView === 'consultas') refreshConsultas();
-    if (_currentView === 'helpdesk')  refreshHelpdeskPanel();
-    if (_currentView === 'semanal')   refreshSemanal();
-    if (_currentView === 'sol')       refreshSolPanel();
+    if (_currentView === 'helpdesk')      refreshHelpdeskPanel();
+    if (_currentView === 'semanal')       refreshSemanal();
+    if (_currentView === 'sol')           refreshSolPanel();
+    if (_currentView === 'pendientes')    refreshPendientes();
+    if (_currentView === 'tusuariospizza') refreshUsuariosPizza();
   }
 
   // ── Public refresh methods ───────────────────────────
@@ -148,6 +151,14 @@ const App = (() => {
 
   function refreshSemanal() {
     Semanal.refresh();
+  }
+
+  function refreshPendientes() {
+    Pendientes.render();
+  }
+
+  function refreshUsuariosPizza() {
+    UsuariosPizza.render();
   }
 
   // ── Modals ───────────────────────────────────────────
@@ -413,7 +424,7 @@ const App = (() => {
     });
   }
 
-  return { init, refreshBoard, refreshBurndown, refreshProgreso, refreshConsultas, refreshHelpdeskPanel, refreshSolPanel, refreshSemanal, refreshBanner };
+  return { init, refreshBoard, refreshBurndown, refreshProgreso, refreshConsultas, refreshHelpdeskPanel, refreshSolPanel, refreshSemanal, refreshPendientes, refreshUsuariosPizza, refreshBanner };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);

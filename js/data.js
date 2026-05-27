@@ -25,9 +25,11 @@ const AppData = (() => {
   let _queries   = null;
   let _clients   = null;
   let _weekly    = null; // { weeks: { 'YYYY-MM-DD': { assignee, notes, updatedAt } } }
-  let _hdActions = null; // { ticketId: true }
-  let _hdNotes   = null; // { ticketId: "texto" }
-  let _solNotes  = null; // { ticketId: "texto" }
+  let _hdActions     = null; // { ticketId: true }
+  let _hdNotes       = null; // { ticketId: "texto" }
+  let _solNotes      = null; // { ticketId: "texto" }
+  let _hdPendientes  = null; // { ticketId: { ticket, asunto, clienteRaw, addedAt } }
+  let _usuariosPizza = null; // [ { id, nombre, motivo, detalle, addedAt } ]
 
   // ── Firebase helpers ─────────────────────────────────
   function _fbReady() {
@@ -78,17 +80,12 @@ const AppData = (() => {
 
   // ── Init ─────────────────────────────────────────────
   async function init() {
-    // Users and clients are static — always from local JSON
-    const [tm, cl] = await Promise.all([
-      _loadLocal('data/users.json'),
-      _loadLocal('data/clients.json'),
-    ]);
-    _team    = tm;
-    _clients = cl;
+    // Clients are static — always from local JSON
+    _clients = await _loadLocal('data/clients.json');
 
     if (_fbReady()) {
       // Load from Firebase; seed from local JSON if nodes are empty
-      const [fbSp, fbSt, fbPr, fbQu, fbWk, fbHdA, fbHdN, fbSolN] = await Promise.all([
+      const [fbSp, fbSt, fbPr, fbQu, fbWk, fbHdA, fbHdN, fbSolN, fbHdP, fbUP, fbUsers] = await Promise.all([
         _fbGet('sprints'),
         _fbGet('stories'),
         _fbGet('progress'),
@@ -97,6 +94,9 @@ const AppData = (() => {
         _fbGet('hdActions'),
         _fbGet('hdNotes'),
         _fbGet('solNotes'),
+        _fbGet('hdPendientes'),
+        _fbGet('usuariosPizza'),
+        _fbGet('users'),
       ]);
 
       async function _seedOrLoad(fbVal, localPath, key) {
@@ -105,6 +105,12 @@ const AppData = (() => {
         _fbPut(key, seed);
         return seed;
       }
+
+      // Users: siempre se leen del JSON local y se sobreescriben en Firebase
+      // Esto garantiza que cambios en users.json se propaguen a todos los navegadores
+      const localUsers = await _loadLocal('data/users.json');
+      _team = localUsers;
+      _fbPut('users', localUsers);
 
       [_sprints, _stories, _progress, _queries] = await Promise.all([
         _seedOrLoad(fbSp, 'data/sprints.json',  'sprints'),
@@ -115,31 +121,39 @@ const AppData = (() => {
       _weekly = fbWk || { weeks: {} };
 
       // Migrate from localStorage on first Firebase load
-      _hdActions = fbHdA  || JSON.parse(localStorage.getItem('fit-daily_hd_actions') || '{}');
-      _hdNotes   = fbHdN  || JSON.parse(localStorage.getItem('fit-daily_hd_notes')   || '{}');
-      _solNotes  = fbSolN || JSON.parse(localStorage.getItem('fit-daily_sol_notes')  || '{}');
+      _hdActions     = fbHdA  || JSON.parse(localStorage.getItem('fit-daily_hd_actions')     || '{}');
+      _hdNotes       = fbHdN  || JSON.parse(localStorage.getItem('fit-daily_hd_notes')       || '{}');
+      _solNotes      = fbSolN || JSON.parse(localStorage.getItem('fit-daily_sol_notes')      || '{}');
+      _hdPendientes  = fbHdP || {};
+      _usuariosPizza = fbUP  || [];
 
       // Seed Firebase if it was empty but localStorage had data
-      if (!fbHdA  && Object.keys(_hdActions).length) _fbPut('hdActions', _hdActions);
-      if (!fbHdN  && Object.keys(_hdNotes).length)   _fbPut('hdNotes',   _hdNotes);
-      if (!fbSolN && Object.keys(_solNotes).length)  _fbPut('solNotes',  _solNotes);
+      if (!fbHdA  && Object.keys(_hdActions).length)    _fbPut('hdActions',     _hdActions);
+      if (!fbHdN  && Object.keys(_hdNotes).length)      _fbPut('hdNotes',       _hdNotes);
+      if (!fbSolN && Object.keys(_solNotes).length)     _fbPut('solNotes',      _solNotes);
+      if (!fbHdP && Object.keys(_hdPendientes).length) _fbPut('hdPendientes',  _hdPendientes);
+      if (!fbUP  && _usuariosPizza.length)             _fbPut('usuariosPizza', _usuariosPizza);
     } else {
       // Fallback: localStorage with local JSON seeds
       const saved = _lsGet();
-      const [sp, st, pr, qu] = await Promise.all([
+      const [sp, st, pr, qu, tm] = await Promise.all([
         saved.sprints  ? Promise.resolve(saved.sprints)  : _loadLocal('data/sprints.json'),
         saved.stories  ? Promise.resolve(saved.stories)  : _loadLocal('data/stories.json'),
         saved.progress ? Promise.resolve(saved.progress) : _loadLocal('data/progress.json'),
         saved.queries  ? Promise.resolve(saved.queries)  : _loadLocal('data/queries.json'),
+        _loadLocal('data/users.json'),
       ]);
       _sprints   = sp;
       _stories   = st;
       _progress  = pr;
       _queries   = qu;
+      _team      = tm;
       _weekly    = saved.weeklySupport || { weeks: {} };
-      _hdActions = JSON.parse(localStorage.getItem('fit-daily_hd_actions') || '{}');
-      _hdNotes   = JSON.parse(localStorage.getItem('fit-daily_hd_notes')   || '{}');
-      _solNotes  = JSON.parse(localStorage.getItem('fit-daily_sol_notes')  || '{}');
+      _hdActions     = JSON.parse(localStorage.getItem('fit-daily_hd_actions')     || '{}');
+      _hdNotes       = JSON.parse(localStorage.getItem('fit-daily_hd_notes')       || '{}');
+      _solNotes      = JSON.parse(localStorage.getItem('fit-daily_sol_notes')      || '{}');
+      _hdPendientes  = saved.hdPendientes  || {};
+      _usuariosPizza = saved.usuariosPizza || [];
     }
   }
 
@@ -333,6 +347,43 @@ const AppData = (() => {
     _persist('hdNotes', _hdNotes);
   }
 
+  // ── Helpdesk pendientes ───────────────────────────────
+  function getHdPendientes() { return _hdPendientes; }
+
+  function setHdPendiente(ticketId, data) {
+    _hdPendientes[String(ticketId)] = { ...data, addedAt: new Date().toISOString() };
+    _persist('hdPendientes', _hdPendientes);
+  }
+
+  function removeHdPendiente(ticketId) {
+    delete _hdPendientes[String(ticketId)];
+    _persist('hdPendientes', _hdPendientes);
+  }
+
+  // ── Usuarios Pizza ────────────────────────────────────
+  function getUsuariosPizza() { return _usuariosPizza; }
+
+  function addUsuarioPizza(data) {
+    const entry = { id: Date.now().toString(), addedAt: new Date().toISOString(), ...data };
+    _usuariosPizza.push(entry);
+    _persist('usuariosPizza', _usuariosPizza);
+    return entry;
+  }
+
+  function removeUsuarioPizza(id) {
+    _usuariosPizza = _usuariosPizza.filter(u => u.id !== id);
+    _persist('usuariosPizza', _usuariosPizza);
+  }
+
+  function markPizzaPaid(id) {
+    const entry = _usuariosPizza.find(u => u.id === id);
+    if (entry) {
+      entry.paid   = true;
+      entry.paidAt = new Date().toISOString();
+      _persist('usuariosPizza', _usuariosPizza);
+    }
+  }
+
   // ── Sol notes ─────────────────────────────────────────
   function getSolNotes() { return _solNotes; }
 
@@ -413,6 +464,8 @@ const AppData = (() => {
     getQueries, addQuery, resolveQuery,
     getHdActions, setHdAction,
     getHdNotes, setHdNote,
+    getHdPendientes, setHdPendiente, removeHdPendiente,
+    getUsuariosPizza, addUsuarioPizza, removeUsuarioPizza, markPizzaPaid,
     getSolNotes, setSolNote,
     getWeeklySupport, getWeekAssignment, setWeekAssignment, clearWeekAssignment,
     getWeekTickets, addWeekTicket, removeWeekTicket,

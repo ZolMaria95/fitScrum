@@ -3,31 +3,6 @@ const Helpdesk = (() => {
     ? window.HELPDESK_PROXY_URL : 'http://localhost:3001';
   const BASE = _proxyUrl + '/api/v1';
 
-  // Login + logout por operación para evitar sesiones colgadas que bloquean al usuario.
-  async function _login() {
-    const r = await fetch(`${BASE}/auth/login`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username_or_email: window.HD_USERNAME || 'HELPDESK1',
-        password:          window.HD_PASSWORD || '',
-        force_logout:      'true',
-      }),
-    });
-    if (!r.ok) throw new Error(`Helpdesk login failed: ${r.status}`);
-    const { access_token } = await r.json();
-    return access_token;
-  }
-  async function _logout(token) {
-    if (!token) return;
-    try {
-      await fetch(`${BASE}/auth/logout`, {
-        method:  'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch (_) {}
-  }
-
   // Mapeo nombre API → ID de cliente en Fit-Daily
   const CLIENT_MAP = {
     'COOPERATIVA DE AHORRO Y CREDITO ERCO': 'erco',
@@ -46,14 +21,11 @@ const Helpdesk = (() => {
 
   async function lookupTicket(ticketId) {
     let raw = null;
-    let token;
-    try { token = await _login(); } catch (_) { return null; }
-    const headers = { Authorization: `Bearer ${token}` };
 
     try {
       // Intento 1: endpoint directo por ID
       try {
-        const r = await fetch(`${BASE}/tickets/${ticketId}`, { headers });
+        const r = await HelpdeskAuth.fetchWithAuth(`${BASE}/tickets/${ticketId}`);
         if (r.ok) raw = await r.json();
       } catch (_) {}
 
@@ -61,9 +33,8 @@ const Helpdesk = (() => {
       if (!raw) {
         for (const offset of [0, 40]) {
           try {
-            const r = await fetch(
+            const r = await HelpdeskAuth.fetchWithAuth(
               `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
-              { headers },
             );
             if (!r.ok) break;
             const data  = await r.json();
@@ -72,9 +43,7 @@ const Helpdesk = (() => {
           } catch (_) { break; }
         }
       }
-    } finally {
-      await _logout(token);
-    }
+    } catch (_) { return null; }
 
     if (!raw) return null;
 

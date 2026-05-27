@@ -1,16 +1,23 @@
 """
-Proxy local para Fit-Daily → Helpdesk API
-Corre en puerto 3001 y reenvía a https://helpdesk-api.fit-bank.com
+Servidor local para Fit-Daily.
+- Sirve los archivos estáticos de la app (HTML, CSS, JS, data/)
+- Reenvía /api/v1/* hacia https://helpdesk-api.fit-bank.com
+Corre en puerto 3001. Abrir: http://localhost:3001
 """
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 import urllib.request
 import urllib.error
 import ssl
+import os
 
 TARGET = 'https://helpdesk-api.fit-bank.com'
 PORT   = 3001
+ROOT   = os.path.dirname(os.path.abspath(__file__))
 
-class ProxyHandler(BaseHTTPRequestHandler):
+class Handler(SimpleHTTPRequestHandler):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=ROOT, **kwargs)
 
     def log_message(self, fmt, *args):
         print(f'  [{self.command}] {self.path} → {args[1]}')
@@ -26,10 +33,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        self._forward()
+        if self.path.startswith('/api/'):
+            self._forward()
+        else:
+            super().do_GET()
 
     def do_POST(self):
-        self._forward()
+        if self.path.startswith('/api/') or self.path.startswith('/auth/'):
+            self._forward()
+        else:
+            self.send_response(405)
+            self.end_headers()
 
     def _forward(self):
         url    = TARGET + self.path
@@ -68,11 +82,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.wfile.write(str(e).encode())
 
 if __name__ == '__main__':
-    server = HTTPServer(('localhost', PORT), ProxyHandler)
-    print(f'✓ Proxy corriendo en http://localhost:{PORT}')
-    print(f'  Reenviando a {TARGET}')
+    server = HTTPServer(('localhost', PORT), Handler)
+    print(f'✓ Servidor corriendo en http://localhost:{PORT}')
+    print(f'  Archivos estáticos: {ROOT}')
+    print(f'  Proxy API hacia:    {TARGET}')
     print('  Ctrl+C para detener\n')
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print('\nProxy detenido.')
+        print('\nServidor detenido.')
