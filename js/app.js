@@ -38,10 +38,11 @@ const App = (() => {
     Semanal.init();
     UsuariosPizza.setup();
 
-    // Permisos basados en el rol del Helpdesk API (apiRole) — autoritativo
+    // Rol "Helpdesk" → propio de Fit-Daily, atado al user_id MSC001
+    // Rol "Supervisor" → viene del API del Helpdesk (role_description)
     const _uid     = String(_session.id || '').trim().toUpperCase();
     const _apiRole = String(_session.apiRole || '').trim().toUpperCase();
-    const isHelpdesk   = _apiRole.includes('HELPDESK');
+    const isHelpdesk   = _uid === 'MSC001';
     const isSupervisor = _apiRole.includes('SUPERVISOR');
 
     // Tab "Mi Panel": Scrum Master + Helpdesk
