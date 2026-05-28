@@ -72,6 +72,14 @@ const HelpdeskPanel = (() => {
     'KIMA001','KDLS001','BMHJ001','DSGS001','JCEO001','CUC001','JFQV001',
   ]);
 
+  // Etiqueta visible del estatus (no toca el valor interno, solo el render)
+  function _estatusLabel(estatus) {
+    const e = String(estatus || '').toUpperCase();
+    if (e.includes('APROBADO')) return 'CLIENTE CONTENTO 😊';
+    if (e.includes('DEVUELTO')) return 'TÉCNICO TRISTE 😢';
+    return estatus || '';
+  }
+
   const TIPO_NOMBRE = { '001': 'INCIDENCIA', '002': 'REQUERIMIENTO', '003': 'CONSULTA' };
   const AUTO_PATTERN = /el usuario .+ (cambi[oó]|ualizó .+ asun)/i;
 
@@ -663,7 +671,7 @@ const HelpdeskPanel = (() => {
       clasifs.map(c => `<option value="${c}" ${_filterClasif === c ? 'selected' : ''} style="color:${CLASIF_COLOR[c] || '#757575'}">${c}</option>`).join('');
 
     const optEstatus = `<option value="">Todos los estatus</option>` +
-      estatuses.map(s => `<option value="${s}" ${_filterEstatus === s ? 'selected' : ''}>${s}</option>`).join('');
+      estatuses.map(s => `<option value="${s}" ${_filterEstatus === s ? 'selected' : ''}>${_estatusLabel(s)}</option>`).join('');
 
     const notes      = AppData.getHdNotes();
     const actions    = AppData.getHdActions();
@@ -951,7 +959,7 @@ const HelpdeskPanel = (() => {
           : '<span style="color:#9E9E9E">—</span>'}</td>
         <td class="hd-cell-xs">${t.tipo}</td>
         <td class="hd-cell-sm">${t.nombreAsignado || '—'}</td>
-        <td class="hd-cell-sm">${t.estatus}</td>
+        <td class="hd-cell-sm">${_estatusLabel(t.estatus)}</td>
         <td class="hd-cell-sm">${t.modulo}</td>
         <td class="hd-cell-xs">${fIngreso}</td>
         <td class="hd-cell-num" style="color:${dColor}">${t.diasSinMovimiento}</td>
@@ -1052,7 +1060,7 @@ const HelpdeskPanel = (() => {
     // Llenar encabezado de inmediato y mostrar loading
     document.getElementById('hd-msg-ticket').textContent  = `#${t.ticket}`;
     document.getElementById('hd-msg-cliente').textContent = t.clienteRaw;
-    document.getElementById('hd-msg-estatus').textContent = t.estatus;
+    document.getElementById('hd-msg-estatus').textContent = _estatusLabel(t.estatus);
     document.getElementById('hd-msg-asunto').textContent  = t.asunto;
     document.getElementById('hd-conv-body').innerHTML     =
       `<div class="hd-conv-loading">Cargando mensajes y adjuntos...</div>`;
