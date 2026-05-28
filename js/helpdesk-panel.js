@@ -17,6 +17,9 @@ const HelpdeskPanel = (() => {
     'VAZCREDIT',
     'COAC SENOR DE GIRON',
     'COAC SEÑOR DE GIRON',
+    'FININVEST OVERSEAS INC. LTD.',
+    'SEGURA COOP',
+    'PUNTOPRESTAMO',
   ]);
 
   const CLIENT_MAP = {
@@ -32,6 +35,9 @@ const HelpdeskPanel = (() => {
     'VAZCREDIT':                            'vazcredit',
     'COAC SENOR DE GIRON':                  'giron',
     'COAC SEÑOR DE GIRON':                  'giron',
+    'FININVEST OVERSEAS INC. LTD.':         'fininvest',
+    'SEGURA COOP':                          'segura',
+    'PUNTOPRESTAMO':                        'puntoprestamo',
   };
 
   const CLASIF_COLOR = {
