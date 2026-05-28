@@ -276,6 +276,11 @@ body {
 .banner-goal {
   font-weight: 600;
   font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .banner-meta {
@@ -3743,35 +3748,76 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
   /* Board: máximo 2 columnas */
   .kanban-board { grid-template-columns: repeat(2, 1fr); }
 
-  /* Toolbar del board en columna */
+  /* Toolbar del board: wrap + quitar margin-left:auto que desborda */
   .board-toolbar {
     flex-wrap: wrap;
     gap: 8px;
   }
 
+  /* margin-left:auto en + Tarea causa overflow en ancho reducido */
+  #btn-new-story  { margin-left: 0 !important; }
+  #btn-clear-board { flex-shrink: 0; }
+
+  /* Filtros pueden enrollarse */
+  .board-filters { flex-wrap: wrap; }
+
+  /* Select de cliente no se sale del viewport */
+  #client-filter-wrap .select-filter { max-width: 200px; }
+
   /* Pizza stats: 2 columnas en lugar de 3+ */
   .pizza-stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* === Mobile / pantallas chicas === */
+/* === Mobile / pantallas chicas (≤640px) === */
 @media (max-width: 640px) {
-  .app-header {
-    padding: 0 8px;
-    gap: 6px;
-  }
+  /* Banner 2 filas: el --banner-h más alto cubre el espacio real */
+  :root { --banner-h: 74px; }
+
+  .app-header { padding: 0 8px; gap: 6px; }
   .brand-name { font-size: 12px; }
   .nav-tab    { padding: 5px 7px; font-size: 11px; }
 
-  /* Mínimo absoluto en el header: brand · nav · Salir.
-     Sprint y user-chip se sacan para garantizar que Salir quepa. */
   .sprint-select,
   .user-chip { display: none; }
 
-  /* Sprint banner se ajusta al ancho */
+  /* ── Sprint banner: 2 filas ───────────────────────────── */
   .sprint-banner {
-    padding: 0 10px;
-    font-size: 11px;
+    flex-wrap: wrap;
+    align-content: center;
+    padding: 5px 12px;
+    gap: 1px 10px;
   }
+
+  /* Nombre del sprint ocupa toda la primera fila */
+  .banner-goal {
+    flex-basis: 100%;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Métricas + progreso en la segunda fila */
+  .banner-meta { font-size: 10px; gap: 8px; flex-wrap: wrap; }
+  .banner-progress { margin-left: auto; font-size: 10px; gap: 5px; }
+  .progress-bar-wrap { width: 60px; }
+
+  /* ── Board toolbar: reorganizado en móvil ─────────────── */
+  .board-toolbar { gap: 8px; }
+
+  /* 1ª fila: chips de prioridad */
+  .board-filters  { order: 1; flex-wrap: wrap; }
+
+  /* 2ª fila: filtro de asignado */
+  .board-assignee-filter { order: 2; flex-wrap: wrap; }
+
+  /* 3ª fila: select de cliente — ancho completo */
+  #client-filter-wrap { order: 3; flex-basis: 100%; }
+  #client-filter-wrap .select-filter { width: 100%; box-sizing: border-box; }
+
+  /* 4ª fila: botones de acción — lado a lado */
+  #btn-new-story  { order: 4; flex: 1; margin-left: 0 !important; }
+  #btn-clear-board { order: 5; flex: 1; }
 
   /* Kanban en 1 columna */
   .kanban-board { grid-template-columns: 1fr; }
@@ -3780,7 +3826,7 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
   .modal { width: 96vw !important; max-width: 96vw !important; }
   .modal-body { padding: 16px !important; }
 
-  /* Tablas con scroll horizontal — ya lo tienen, refuerzo */
+  /* Tablas con scroll horizontal */
   .hd-table-wrap,
   .pendientes-table-wrap,
   .sol-table-wrap { overflow-x: auto; }
