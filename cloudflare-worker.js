@@ -46,23 +46,30 @@ async function _getToken(env) {
     }),
   };
 
-  let r = await fetch(`${env.HD_API_BASE}/auth/login`, opts);
+  // Hasta 4 intentos con backoff creciente — el 409 SESSION_ALREADY_ACTIVE
+  // suele resolverse en milisegundos si esperamos a que el server libere la sesión
+  const DELAYS = [0, 300, 800, 1500]; // ms
+  let lastBody = '', lastStatus = 0;
 
-  // 409: sesión activa pese a force_logout — reintentar una vez
-  if (r.status === 409) {
-    _cachedToken = null;
-    _tokenExpiry = 0;
-    r = await fetch(`${env.HD_API_BASE}/auth/login`, opts);
+  for (let i = 0; i < DELAYS.length; i++) {
+    if (DELAYS[i] > 0) await new Promise(r => setTimeout(r, DELAYS[i]));
+
+    const r = await fetch(`${env.HD_API_BASE}/auth/login`, opts);
+    if (r.ok) {
+      const { access_token } = await r.json();
+      _cachedToken = access_token;
+      _tokenExpiry = Date.now() + TOKEN_TTL;
+      return _cachedToken;
+    }
+
+    lastStatus = r.status;
+    lastBody   = await r.text();
+
+    // Solo reintentar en 409 (sesión activa); otros errores son terminales
+    if (r.status !== 409) break;
   }
 
-  if (!r.ok) {
-    const body = await r.text();
-    throw new Error(`Worker login failed: ${r.status} — ${body}`);
-  }
-  const { access_token } = await r.json();
-  _cachedToken = access_token;
-  _tokenExpiry = Date.now() + TOKEN_TTL;
-  return _cachedToken;
+  throw new Error(`Worker login failed tras ${DELAYS.length} intentos: ${lastStatus} — ${lastBody}`);
 }
 
 // Reenvía una request al API con un token dado
