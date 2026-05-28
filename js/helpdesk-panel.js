@@ -82,6 +82,7 @@ const HelpdeskPanel = (() => {
   let _filterCliente = '';
   let _filterAccion  = '';
   let _filterClasif  = '';
+  let _filterEstatus = '';
   let _filterTicket  = '';
   let _sortCol       = 'fechaUltimoMensaje';
   let _sortDir       = 'desc';
@@ -620,11 +621,13 @@ const HelpdeskPanel = (() => {
     const clientes  = [...new Set(base.map(t => t.clienteRaw))].sort();
     const acciones  = [...new Set(base.map(t => t.accion))].sort();
     const clasifs   = CLASIF_ORDER.filter(c => base.some(t => t.clasificacion === c));
+    const estatuses = [...new Set(base.map(t => t.estatus).filter(Boolean))].sort();
 
     // Aplicar filtros
     if (_filterCliente) base = base.filter(t => t.clienteRaw    === _filterCliente);
     if (_filterAccion)  base = base.filter(t => t.accion        === _filterAccion);
     if (_filterClasif)  base = base.filter(t => t.clasificacion === _filterClasif);
+    if (_filterEstatus) base = base.filter(t => t.estatus       === _filterEstatus);
     if (_filterTicket)  base = base.filter(t => String(t.ticket).includes(_filterTicket));
 
     // Helper: icono de sort para una columna
@@ -659,12 +662,15 @@ const HelpdeskPanel = (() => {
     const optClasif = `<option value="">Todas las clasif.</option>` +
       clasifs.map(c => `<option value="${c}" ${_filterClasif === c ? 'selected' : ''} style="color:${CLASIF_COLOR[c] || '#757575'}">${c}</option>`).join('');
 
+    const optEstatus = `<option value="">Todos los estatus</option>` +
+      estatuses.map(s => `<option value="${s}" ${_filterEstatus === s ? 'selected' : ''}>${s}</option>`).join('');
+
     const notes      = AppData.getHdNotes();
     const actions    = AppData.getHdActions();
     const pendientes = AppData.getHdPendientes();
 
-    const hasFilter  = _filterCliente || _filterAccion || _filterClasif || _filterTicket;
-    const clearBtn   = hasFilter ? `<button class="hd-filter-clear-th" id="hd-btn-clear">✕ Limpiar</button>` : '';
+    const hasFilter  = _filterCliente || _filterAccion || _filterClasif || _filterEstatus || _filterTicket;
+    const clearBtn   = `<button class="hd-filter-clear-th${hasFilter ? ' is-active' : ''}" id="hd-btn-clear" title="Limpiar todos los filtros">✕ Limpiar</button>`;
 
     const bodyHTML = sorted.length
       ? sorted.map(t => _rowHTML(t, notes, actions, pendientes)).join('')
@@ -710,7 +716,7 @@ const HelpdeskPanel = (() => {
               <td></td>
               <td></td>
               <td></td>
-              <td></td>
+              <td><select class="hd-filter-select-th" id="hd-sel-estatus">${optEstatus}</select></td>
               <td></td>
               <td></td>
               <td></td>
@@ -736,10 +742,15 @@ const HelpdeskPanel = (() => {
       _filterClasif = e.target.value;
       _render();
     });
+    document.getElementById('hd-sel-estatus')?.addEventListener('change', e => {
+      _filterEstatus = e.target.value;
+      _render();
+    });
     document.getElementById('hd-btn-clear')?.addEventListener('click', () => {
       _filterCliente = '';
       _filterAccion  = '';
       _filterClasif  = '';
+      _filterEstatus = '';
       _filterTicket  = '';
       _remoteResult  = null;
       _render();

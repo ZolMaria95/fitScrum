@@ -1746,12 +1746,20 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
 .hd-filter-clear-th {
   font-size: 10px;
   padding: 2px 7px;
-  border: 1px solid #3A7ABD;
+  border: 1px solid rgba(189,215,238,0.35);
   border-radius: 3px;
   background: transparent;
-  color: #BDD7EE;
+  color: rgba(189,215,238,0.65);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+/* Resaltado cuando hay filtros activos — guía al usuario al botón */
+.hd-filter-clear-th.is-active {
+  border-color: #FF8C00;
+  color: #FF8C00;
+  font-weight: 600;
 }
 
 .hd-filter-clear-th:hover {
