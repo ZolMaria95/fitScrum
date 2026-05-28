@@ -13,6 +13,5 @@ window.FIREBASE_DB_URL = 'https://fit-daily-ab113-default-rtdb.firebaseio.com';
 //    Ejemplo: https://fit-daily-proxy.tu-usuario.workers.dev
 window.HELPDESK_PROXY_URL = 'https://fit-daily-proxy.contreras-sol-4to5.workers.dev';
 
-// 3. Credenciales Helpdesk (usadas solo a través del proxy local en dev)
-window.HD_USERNAME = 'HELPDESK1';
-window.HD_PASSWORD = 'MtRuLxgDz6q5';
+// Las credenciales del Helpdesk ya NO se hardcodean — cada usuario ingresa
+// las suyas en login.html y se validan contra el API real del Helpdesk.

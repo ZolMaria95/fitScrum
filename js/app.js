@@ -16,7 +16,12 @@ const App = (() => {
 
   async function init() {
     _session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
-    if (!_session) { window.location.href = 'login.html'; return; }
+    // Sesión inválida o legacy sin token → forzar re-login con credenciales reales
+    if (!_session || !_session.token) {
+      sessionStorage.removeItem(SESSION_KEY);
+      window.location.href = 'login.html';
+      return;
+    }
 
     await AppData.init();
 

@@ -172,10 +172,8 @@
 
       <form id="login-form" autocomplete="off">
         <div class="form-group">
-          <label>Usuario</label>
-          <select id="user-select" required>
-            <option value="">Selecciona tu usuario...</option>
-          </select>
+          <label>Usuario Helpdesk</label>
+          <input type="text" id="user-input" placeholder="Ej. JPHP001" required autofocus>
         </div>
 
         <div class="form-group">
@@ -184,81 +182,88 @@
         </div>
 
         <button type="submit" class="btn-login" id="btn-login">Ingresar</button>
-        <div class="error-msg" id="error-msg">Usuario o contraseña incorrectos.</div>
+        <div class="error-msg" id="error-msg"></div>
       </form>
     </div>
 
     <div class="login-footer">Herramienta interna — no compartir credenciales</div>
   </div>
 
+  <script src="js/firebase-config.js"></script>
+  <script src="js/helpdesk-auth.js"></script>
   <script>
     const SESSION_KEY = 'fit-daily_session';
 
-    // One-shot migration: rescatar sesión del nombre antiguo si existe
-    const _legacySession = sessionStorage.getItem('fitscrum_session');
-    if (_legacySession && !sessionStorage.getItem(SESSION_KEY)) {
-      sessionStorage.setItem(SESSION_KEY, _legacySession);
-      sessionStorage.removeItem('fitscrum_session');
+    // Si ya hay sesión válida con token → ir directo a la app
+    const existing = sessionStorage.getItem(SESSION_KEY);
+    if (existing) {
+      try {
+        const s = JSON.parse(existing);
+        if (s?.token) window.location.href = 'index.html';
+      } catch (_) {}
     }
 
-    if (sessionStorage.getItem(SESSION_KEY)) {
-      window.location.href = 'index.html';
+    // Genera un color HSL estable a partir del user_id (para el avatar)
+    function _colorFor(userId) {
+      let hash = 0;
+      for (let i = 0; i < userId.length; i++) {
+        hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const hue = Math.abs(hash) % 360;
+      return `hsl(${hue}, 55%, 45%)`;
     }
 
-    async function sha256(message) {
-      const msgBuffer = new TextEncoder().encode(message);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    // Carga local del equipo para enriquecer perfil (color/rol del proyecto si existe)
+    let teamLocal = [];
+    fetch('data/users.json').then(r => r.json()).then(d => { teamLocal = d.users || []; }).catch(() => {});
+
+    const errEl  = document.getElementById('error-msg');
+    const btnEl  = document.getElementById('btn-login');
+    const userEl = document.getElementById('user-input');
+    const passEl = document.getElementById('password-input');
+
+    function _showError(msg) {
+      errEl.textContent = msg;
+      errEl.classList.add('visible');
     }
+    function _clearError() { errEl.classList.remove('visible'); }
 
-    let users = [];
-
-    fetch('data/users.json')
-      .then(r => r.json())
-      .then(data => {
-        users = data.users;
-        const select = document.getElementById('user-select');
-        users.forEach(u => {
-          const opt = document.createElement('option');
-          opt.value = u.id;
-          opt.textContent = `${u.name} — ${u.role}`;
-          select.appendChild(opt);
-        });
-      });
+    [userEl, passEl].forEach(el => el.addEventListener('input', _clearError));
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const btn = document.getElementById('btn-login');
-      const errEl = document.getElementById('error-msg');
-      btn.disabled = true;
-      btn.textContent = 'Verificando...';
+      _clearError();
+      btnEl.disabled    = true;
+      btnEl.textContent = 'Verificando...';
 
-      const userId = document.getElementById('user-select').value;
-      const password = document.getElementById('password-input').value;
-      const hash = await sha256(password);
+      const usuario = userEl.value.trim();
+      const pass    = passEl.value;
 
-      const user = users.find(u => u.id === userId && u.passwordHash === hash);
+      try {
+        const { token, profile } = await HelpdeskAuth.login(usuario, pass);
 
-      if (user) {
+        // Enriquecer con datos del equipo local si coincide
+        const local = teamLocal.find(u => u.id === profile.user_id);
+
         sessionStorage.setItem(SESSION_KEY, JSON.stringify({
-          id: user.id,
-          name: user.name,
-          role: user.role,
-          color: user.color
+          id:    profile.user_id,
+          name:  local?.name  || profile.person_name || profile.person_alias || profile.user_id,
+          role:  local?.role  || profile.role_description || 'Usuario',
+          color: local?.color || _colorFor(profile.user_id),
+          email: profile.email || '',
+          token,
         }));
         window.location.href = 'index.html';
-      } else {
-        errEl.classList.add('visible');
-        btn.disabled = false;
-        btn.textContent = 'Ingresar';
-        document.getElementById('password-input').value = '';
-        document.getElementById('password-input').focus();
+      } catch (err) {
+        const msg = err.message || String(err);
+        if (/401|credenciales/i.test(msg)) _showError('Usuario o contraseña incorrectos.');
+        else if (/409|active/i.test(msg))   _showError('Ya tienes una sesión activa. Espera unos segundos y vuelve a intentar.');
+        else                                _showError('Error de conexión. Verifica tu red e intenta de nuevo.');
+        btnEl.disabled    = false;
+        btnEl.textContent = 'Ingresar';
+        passEl.value      = '';
+        passEl.focus();
       }
-    });
-
-    document.getElementById('password-input').addEventListener('input', () => {
-      document.getElementById('error-msg').classList.remove('visible');
     });
   </script>
 </body>
