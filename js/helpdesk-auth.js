@@ -4,6 +4,10 @@ const HelpdeskAuth = (() => {
   const BASE    = _proxyUrl + '/api/v1';
   const LS_KEY  = 'fitdaily_hd_token';
 
+  // El Cloudflare Worker gestiona el login internamente con sus propios secrets.
+  // Si vamos por el Worker, el cliente NO debe loguear (causaría 409 SESSION_ALREADY_ACTIVE).
+  const _viaWorker = _proxyUrl.includes('workers.dev');
+
   let _loginPromise = null;
 
   function _read() {
@@ -55,7 +59,14 @@ const HelpdeskAuth = (() => {
   }
 
   // Wrapper sobre fetch: inyecta Bearer y reintenta en 401/403 (token expirado)
+  // Cuando vamos por el Cloudflare Worker, el cliente NO autentica — el Worker lo hace.
   async function fetchWithAuth(url, opts = {}) {
+    if (_viaWorker) {
+      // El Worker añade su propio Bearer; cualquier auth del cliente solo causaría
+      // un 409 SESSION_ALREADY_ACTIVE al competir con la sesión interna del Worker.
+      return fetch(url, opts);
+    }
+
     let token = await getToken();
     let r = await fetch(url, {
       ...opts,
