@@ -1049,7 +1049,13 @@ const HelpdeskPanel = (() => {
       new Date(a.entry_date || 0) - new Date(b.entry_date || 0)
     );
 
-    const esEmpleado = uid => EMPLEADOS.has(String(uid || '').trim().toUpperCase());
+    // Clasifica el autor del mensaje: prioriza entry_user_role del API,
+    // y solo cae en la lista local EMPLEADOS si el rol no viene.
+    const esEmpleadoMsg = m => {
+      const role = String(m.entry_user_role || '').trim().toUpperCase();
+      if (role) return !role.includes('CLIENTE');
+      return EMPLEADOS.has(String(m.entry_user_id || '').trim().toUpperCase());
+    };
     const IMG_EXTS   = new Set(['jpg','jpeg','png','gif','webp','bmp','svg']);
     const _icon = ext =>
       IMG_EXTS.has(ext) ? '🖼' :
@@ -1077,7 +1083,7 @@ const HelpdeskPanel = (() => {
     const msgsHTML = msgs.length
       ? msgs.map(m => {
           const esSys     = m.system_message === true;
-          const esEmp     = esEmpleado(m.entry_user_id);
+          const esEmp     = esEmpleadoMsg(m);
           const fecha     = m.entry_date ? m.entry_date.replace('T', ' ').slice(0, 16) : '';
           const html      = _safeHtml(m.detail || '');
           const texto     = _stripHtml(html).trim();
