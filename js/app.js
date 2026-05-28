@@ -191,6 +191,11 @@ const App = (() => {
       _refreshCurrentView();
 
       _closeAllDropdowns();
+
+      // Sincronizar sidebar
+      document.querySelectorAll('.sidebar-item').forEach(i => {
+        i.classList.toggle('active', i.dataset.view === view);
+      });
     }
 
     // Tabs de primer nivel sueltos (los que no son toggle de un dropdown)
@@ -221,6 +226,43 @@ const App = (() => {
     document.addEventListener('click', e => {
       if (!e.target.closest('.nav-dropdown')) _closeAllDropdowns();
     });
+
+    // ── Sidebar responsive ──────────────────────────────────
+    (function _setupSidebar() {
+      const sidebar   = document.getElementById('nav-sidebar');
+      const overlay   = document.getElementById('sidebar-overlay');
+      const hamburger = document.getElementById('btn-hamburger');
+      const closeBtn  = document.getElementById('btn-sidebar-close');
+      if (!sidebar) return;
+
+      function _open()  {
+        sidebar.classList.add('open');
+        overlay.classList.add('visible');
+        hamburger?.setAttribute('aria-expanded', 'true');
+      }
+      function _close() {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('visible');
+        hamburger?.setAttribute('aria-expanded', 'false');
+      }
+
+      hamburger?.addEventListener('click', _open);
+      closeBtn?.addEventListener('click', _close);
+      overlay?.addEventListener('click', _close);
+
+      // Accordion sections
+      sidebar.querySelectorAll('.sidebar-section-hd').forEach(hd => {
+        hd.addEventListener('click', () => hd.closest('.sidebar-section').classList.toggle('open'));
+      });
+
+      // Items → activar vista y cerrar sidebar
+      sidebar.querySelectorAll('.sidebar-item').forEach(item => {
+        item.addEventListener('click', () => {
+          _activateView(item.dataset.view);
+          _close();
+        });
+      });
+    })();
   }
 
   function _refreshCurrentView() {
