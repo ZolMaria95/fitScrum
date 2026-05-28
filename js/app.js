@@ -147,63 +147,79 @@ const App = (() => {
 
   // ── Navigation ───────────────────────────────────────
   function _setupNav() {
-    const SCRUM_VIEWS    = ['board', 'burndown', 'progreso', 'consultas'];
-    const dropdown       = document.getElementById('nav-scrum');
-    const dropdownToggle = dropdown?.querySelector('.nav-dropdown-toggle');
-    const dropdownLabel  = dropdown?.querySelector('.nav-dropdown-label');
+    const dropdowns = Array.from(document.querySelectorAll('.nav-dropdown'));
+
+    function _closeAllDropdowns() {
+      dropdowns.forEach(dd => {
+        dd.classList.remove('open');
+        dd.querySelector('.nav-dropdown-toggle')?.setAttribute('aria-expanded', 'false');
+      });
+    }
 
     function _activateView(view) {
       _currentView = view;
 
-      // Quitar active de TODO (tabs sueltos + items del dropdown)
+      // Quitar active de TODO (tabs sueltos + items + toggles de dropdown)
       document.querySelectorAll('.nav-tab, .nav-dropdown-item').forEach(t => t.classList.remove('active'));
 
-      // Marcar el correcto
-      const isScrum = SCRUM_VIEWS.includes(view);
-      if (isScrum && dropdown) {
-        dropdownToggle.classList.add('active');
-        const item = dropdown.querySelector(`.nav-dropdown-item[data-view="${view}"]`);
-        if (item) item.classList.add('active');
-        if (dropdownLabel) dropdownLabel.textContent = item?.textContent || 'Scrum';
-      } else {
-        const tab = document.querySelector(`.nav-tab[data-view="${view}"]`);
+      // ¿Está la vista dentro de algún dropdown?
+      let foundInDropdown = false;
+      dropdowns.forEach(dd => {
+        const item    = dd.querySelector(`.nav-dropdown-item[data-view="${view}"]`);
+        const toggle  = dd.querySelector('.nav-dropdown-toggle');
+        const label   = dd.querySelector('.nav-dropdown-label');
+        const defLbl  = dd.dataset.defaultLabel || 'Menú';
+        if (item) {
+          foundInDropdown   = true;
+          toggle.classList.add('active');
+          item.classList.add('active');
+          if (label) label.textContent = item.textContent.trim();
+        } else {
+          if (label) label.textContent = defLbl;
+        }
+      });
+
+      // Si no está en ningún dropdown → es un tab suelto
+      if (!foundInDropdown) {
+        const tab = document.querySelector(`.nav-tab[data-view="${view}"]:not(.nav-dropdown-toggle)`);
         if (tab) tab.classList.add('active');
-        if (dropdownLabel) dropdownLabel.textContent = 'Scrum';
       }
 
-      // Mostrar la vista
+      // Mostrar la vista correspondiente
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.getElementById(`view-${view}`)?.classList.add('active');
       _refreshCurrentView();
 
-      // Cerrar el dropdown si estaba abierto
-      dropdown?.classList.remove('open');
-      dropdownToggle?.setAttribute('aria-expanded', 'false');
+      _closeAllDropdowns();
     }
 
-    // Tabs de primer nivel (helpdesk, semanal, pendientes, etc.)
+    // Tabs de primer nivel sueltos (los que no son toggle de un dropdown)
     document.querySelectorAll('.nav-tab:not(.nav-dropdown-toggle)').forEach(tab => {
       tab.addEventListener('click', () => _activateView(tab.dataset.view));
     });
 
-    // Items dentro del dropdown Scrum
+    // Items dentro de cualquier dropdown
     document.querySelectorAll('.nav-dropdown-item').forEach(item => {
       item.addEventListener('click', () => _activateView(item.dataset.view));
     });
 
-    // Toggle del dropdown
-    dropdownToggle?.addEventListener('click', e => {
-      e.stopPropagation();
-      const isOpen = dropdown.classList.toggle('open');
-      dropdownToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    // Toggle de cada dropdown
+    dropdowns.forEach(dd => {
+      const toggle = dd.querySelector('.nav-dropdown-toggle');
+      toggle?.addEventListener('click', e => {
+        e.stopPropagation();
+        const wasOpen = dd.classList.contains('open');
+        _closeAllDropdowns();
+        if (!wasOpen) {
+          dd.classList.add('open');
+          toggle.setAttribute('aria-expanded', 'true');
+        }
+      });
     });
 
-    // Cerrar dropdown al hacer clic afuera
+    // Cerrar dropdowns al hacer clic afuera
     document.addEventListener('click', e => {
-      if (!dropdown?.contains(e.target)) {
-        dropdown?.classList.remove('open');
-        dropdownToggle?.setAttribute('aria-expanded', 'false');
-      }
+      if (!e.target.closest('.nav-dropdown')) _closeAllDropdowns();
     });
   }
 

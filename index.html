@@ -21,7 +21,7 @@
     </div>
 
     <nav class="app-nav">
-      <div class="nav-dropdown" id="nav-scrum">
+      <div class="nav-dropdown" data-default-label="Scrum">
         <button class="nav-tab nav-dropdown-toggle active" type="button" aria-haspopup="true" aria-expanded="false">
           <span class="nav-dropdown-label">Scrum</span>
           <span class="nav-dropdown-caret">▾</span>
@@ -33,11 +33,19 @@
           <button class="nav-dropdown-item"        data-view="consultas" role="menuitem">Consultas</button>
         </div>
       </div>
-      <button class="nav-tab" data-view="helpdesk">Helpdesk</button>
-      <button class="nav-tab" data-view="semanal">HelpDesk Semanal</button>
-      <button class="nav-tab" data-view="pendientes">Pendientes</button>
+      <div class="nav-dropdown" data-default-label="Helpdesk">
+        <button class="nav-tab nav-dropdown-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="nav-dropdown-label">Helpdesk</span>
+          <span class="nav-dropdown-caret">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" role="menu">
+          <button class="nav-dropdown-item" data-view="helpdesk"   role="menuitem">Tickets</button>
+          <button class="nav-dropdown-item" data-view="semanal"    role="menuitem">HelpDesk Semanal</button>
+          <button class="nav-dropdown-item nav-tab-sol hidden" data-view="sol" role="menuitem">Mi Panel</button>
+          <button class="nav-dropdown-item" data-view="pendientes" role="menuitem">Pendientes</button>
+        </div>
+      </div>
       <button class="nav-tab hidden" data-view="tusuariospizza">TUsuariosPizza</button>
-      <button class="nav-tab nav-tab-sol hidden" data-view="sol">Mi Panel</button>
     </nav>
 
     <div class="header-right">
