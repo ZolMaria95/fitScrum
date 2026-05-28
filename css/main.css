@@ -4085,25 +4085,37 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
 .sidebar-item:hover  { color: white; background: rgba(255,255,255,0.08); }
 .sidebar-item.active { color: var(--brand); background: rgba(4,186,240,0.12); }
 
-/* ─── Activar sidebar en ≤768px + layout grid del header ── */
+/* ─── Activar sidebar en ≤768px + header centrado ────────── */
 @media (max-width: 768px) {
   .app-nav       { display: none; }
   .btn-hamburger { display: flex; }
 
-  /* Header en 3 columnas: hamburger | brand (centro) | acciones */
+  /* Header: hamburger izq + acciones der con flex.
+     El brand se centra absoluto sobre todo (sin importar ancho de los lados). */
   .app-header {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 8px;
+    display: flex;
+    justify-content: space-between;
     align-items: center;
+    gap: 8px;
+    position: fixed; /* ya lo era — refuerzo para que sea contenedor del absolute */
   }
-  .btn-hamburger { grid-column: 1; }
-  .header-brand  { grid-column: 2; justify-self: center; }
-  .header-right  { grid-column: 3; }
 
-  /* Brand compacto en móvil — el nombre de empresa estorba */
+  .btn-hamburger { order: 1; flex-shrink: 0; }
+  .header-right  { order: 3; flex-shrink: 0; }
+
+  .header-brand {
+    order: 2;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    gap: 8px;
+    pointer-events: auto;
+  }
+
+  /* En móvil ocultamos la razón social — más compacto */
   .brand-company { display: none; }
-  .header-brand  { gap: 8px; }
 }
 
 /* Brand clickable */
