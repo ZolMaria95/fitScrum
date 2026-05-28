@@ -3869,31 +3869,24 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
   .hd-table tbody td:nth-child(14) { display: none; }
 }
 
-/* === <1024px: además, ocultar Estatus y F. Ingreso === */
+/* === <1024px: además, ocultar Estatus (F.Ingreso siempre visible) === */
 @media (max-width: 1024px) {
-  .hd-table { min-width: 900px; }
+  .hd-table { min-width: 950px; }
   .hd-table thead tr:first-child th:nth-child(9),
-  .hd-table thead tr:first-child th:nth-child(11),
   .hd-filter-row td:nth-child(9),
-  .hd-filter-row td:nth-child(11),
-  .hd-table tbody td:nth-child(9),
-  .hd-table tbody td:nth-child(11) { display: none; }
+  .hd-table tbody td:nth-child(9) { display: none; }
 }
 
-/* === <768px: vista compacta — solo Ticket, Cliente, Asunto,
-       Último Mensaje, Clasificación, Acción ===*/
+/* === <768px: vista compacta — fechas siempre visibles ===*/
 @media (max-width: 768px) {
-  .hd-table { min-width: 700px; font-size: 11px; }
+  .hd-table { min-width: 750px; font-size: 11px; }
   .hd-table thead tr:first-child th:nth-child(2),  /* Resumen */
-  .hd-table thead tr:first-child th:nth-child(5),  /* F.ÚltMsg */
   .hd-table thead tr:first-child th:nth-child(8),  /* Asignado */
   .hd-table thead tr:first-child th:nth-child(12), /* Días mov */
   .hd-filter-row td:nth-child(2),
-  .hd-filter-row td:nth-child(5),
   .hd-filter-row td:nth-child(8),
   .hd-filter-row td:nth-child(12),
   .hd-table tbody td:nth-child(2),
-  .hd-table tbody td:nth-child(5),
   .hd-table tbody td:nth-child(8),
   .hd-table tbody td:nth-child(12) { display: none; }
 

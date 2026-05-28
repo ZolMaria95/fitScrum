@@ -283,7 +283,7 @@ const Semanal = (() => {
     container.innerHTML = '';
 
     let assignedCount = 0;
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 0; i < 8; i++) {
       const wkFri    = _addDays(fri, i * 7);
       const wkKey    = _isoKey(wkFri);
       const assign   = AppData.getWeekAssignment(wkKey);

@@ -77,7 +77,7 @@ const HelpdeskPanel = (() => {
   let _filterAccion  = '';
   let _filterClasif  = '';
   let _filterTicket  = '';
-  let _sortCol       = 'diasSinMovimiento';
+  let _sortCol       = 'fechaUltimoMensaje';
   let _sortDir       = 'desc';
   let _remoteResult  = null; // Ticket encontrado por búsqueda remota (no se persiste en _tickets)
 
@@ -908,7 +908,9 @@ const HelpdeskPanel = (() => {
     const diColor  = t.diasDesdeIngreso  > 7 ? '#C00000' : t.diasDesdeIngreso  > 3 ? '#FF8C00' : '#2E7D32';
     const asunto   = t.asunto.length > 55 ? t.asunto.slice(0, 55) + '…' : t.asunto;
     const msg      = t.ultimoMensaje.length > 60 ? t.ultimoMensaje.slice(0, 60) + '…' : t.ultimoMensaje;
-    const fIngreso = t.fechaIngreso  ? t.fechaIngreso.split('T')[0]      : '';
+    const fIngreso = t.fechaIngreso
+      ? (() => { const [d, h=''] = t.fechaIngreso.split('T'); return h ? `${d} ${h.slice(0,5)}` : d; })()
+      : '';
     const fMsg     = t.fechaUltimoMensaje
       ? (() => { const [d, h=''] = t.fechaUltimoMensaje.split('T'); return h ? `${d} ${h.slice(0,5)}` : d; })()
       : '';
