@@ -1156,7 +1156,7 @@ const HelpdeskPanel = (() => {
     const prioMap  = t.orden <= 1 ? 'alta' : t.orden <= 2 ? 'alta' : t.orden <= 3 ? 'media' : 'baja';
     const clientId = CLIENT_MAP[t.clienteRaw] || null;
     const team     = AppData.getTeam();
-    const clients  = AppData.getClients();
+    const clients  = getValidClients();
 
     document.getElementById('ns-client').innerHTML =
       `<option value="">Seleccionar cliente...</option>` +
@@ -1203,5 +1203,17 @@ const HelpdeskPanel = (() => {
     return _tickets.filter(t => !!actions[String(t.ticket)]);
   }
 
-  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets };
+  // Lista de clientes válidos del Helpdesk: [{ id, name }] ordenada por nombre
+  function getValidClients() {
+    const seen = new Set();
+    const list = [];
+    Object.entries(CLIENT_MAP).forEach(([name, id]) => {
+      if (seen.has(id)) return; // evita duplicados (ej. GIRON con/sin tilde)
+      seen.add(id);
+      list.push({ id, name });
+    });
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients };
 })();

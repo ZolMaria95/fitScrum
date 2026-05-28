@@ -406,7 +406,8 @@ const App = (() => {
     }
 
     function _populateTaskForm() {
-      const clients = AppData.getClients();
+      // Listado de clientes válidos del Helpdesk (los mismos que filtran la tabla del panel)
+      const clients = HelpdeskPanel.getValidClients();
       document.getElementById('ns-client').innerHTML =
         `<option value="">Seleccionar cliente...</option>` +
         clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
