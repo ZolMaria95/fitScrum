@@ -21,10 +21,18 @@
     </div>
 
     <nav class="app-nav">
-      <button class="nav-tab active" data-view="board">Board</button>
-      <button class="nav-tab" data-view="burndown">Burndown</button>
-      <button class="nav-tab" data-view="progreso">Progreso</button>
-      <button class="nav-tab" data-view="consultas">Consultas</button>
+      <div class="nav-dropdown" id="nav-scrum">
+        <button class="nav-tab nav-dropdown-toggle active" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="nav-dropdown-label">Scrum</span>
+          <span class="nav-dropdown-caret">▾</span>
+        </button>
+        <div class="nav-dropdown-menu" role="menu">
+          <button class="nav-dropdown-item active" data-view="board"     role="menuitem">Board</button>
+          <button class="nav-dropdown-item"        data-view="burndown"  role="menuitem">Burndown</button>
+          <button class="nav-dropdown-item"        data-view="progreso"  role="menuitem">Progreso</button>
+          <button class="nav-dropdown-item"        data-view="consultas" role="menuitem">Consultas</button>
+        </div>
+      </div>
       <button class="nav-tab" data-view="helpdesk">Helpdesk</button>
       <button class="nav-tab" data-view="semanal">HelpDesk Semanal</button>
       <button class="nav-tab" data-view="pendientes">Pendientes</button>

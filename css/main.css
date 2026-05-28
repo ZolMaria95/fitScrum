@@ -109,6 +109,68 @@ body {
 .nav-tab:hover { color: white; background: rgba(255,255,255,0.08); }
 .nav-tab.active { color: var(--brand); background: rgba(4,186,240,0.12); }
 
+/* Dropdown del nav (Scrum: Board, Burndown, Progreso, Consultas) */
+.nav-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.nav-dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-dropdown-caret {
+  font-size: 9px;
+  opacity: 0.7;
+  transition: transform 0.15s;
+}
+
+.nav-dropdown.open .nav-dropdown-caret { transform: rotate(180deg); }
+
+.nav-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 160px;
+  background: var(--text);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  padding: 4px;
+  z-index: 200;
+}
+
+.nav-dropdown.open .nav-dropdown-menu { display: block; }
+
+.nav-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.75);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+}
+
+.nav-dropdown-item:hover {
+  color: white;
+  background: rgba(255,255,255,0.08);
+}
+
+.nav-dropdown-item.active {
+  color: var(--brand);
+  background: rgba(4,186,240,0.12);
+}
+
 /* ─── Header right ──────────────────────────────────── */
 .header-right {
   display: flex;
