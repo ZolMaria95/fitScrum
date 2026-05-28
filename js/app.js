@@ -39,9 +39,11 @@ const App = (() => {
     UsuariosPizza.setup();
 
     // Mostrar tab "Mi Panel" para Scrum Master + usuario MSC001 (rol Helpdesk)
-    if (_session.role === 'Scrum Master' || _session.id === 'MSC001') {
+    const _uid = String(_session.id || '').trim().toUpperCase();
+    if (_session.role === 'Scrum Master' || _uid === 'MSC001') {
       document.querySelectorAll('.nav-tab-sol').forEach(t => t.classList.remove('hidden'));
     }
+    console.log('[App] Sesión activa:', { id: _session.id, role: _session.role, panelMi: _session.role === 'Scrum Master' || _uid === 'MSC001' });
 
     refreshBoard();
   }
