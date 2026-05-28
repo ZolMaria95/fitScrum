@@ -4085,8 +4085,27 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
 .sidebar-item:hover  { color: white; background: rgba(255,255,255,0.08); }
 .sidebar-item.active { color: var(--brand); background: rgba(4,186,240,0.12); }
 
-/* ─── Activar sidebar en ≤768px ─────────────────────────── */
+/* ─── Activar sidebar en ≤768px + layout grid del header ── */
 @media (max-width: 768px) {
   .app-nav       { display: none; }
   .btn-hamburger { display: flex; }
+
+  /* Header en 3 columnas: hamburger | brand (centro) | acciones */
+  .app-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .btn-hamburger { grid-column: 1; }
+  .header-brand  { grid-column: 2; justify-self: center; }
+  .header-right  { grid-column: 3; }
+
+  /* Brand compacto en móvil — el nombre de empresa estorba */
+  .brand-company { display: none; }
+  .header-brand  { gap: 8px; }
 }
+
+/* Brand clickable */
+#brand-link { cursor: pointer; user-select: none; }
+#brand-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: var(--radius); }

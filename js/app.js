@@ -31,6 +31,7 @@ const App = (() => {
     _populateSprintSelector();
     refreshBanner();
     _setupNav();
+    _setupBrandLink();
     _setupModals();
     _setupForms();
     HelpdeskPanel.setup();
@@ -146,6 +147,19 @@ const App = (() => {
   }
 
   // ── Navigation ───────────────────────────────────────
+  // Click en el logo/brand → ir al Board (dispara el item del dropdown Scrum)
+  function _setupBrandLink() {
+    const brand = document.getElementById('brand-link');
+    if (!brand) return;
+    const goBoard = () => {
+      document.querySelector('.nav-dropdown-item[data-view="board"]')?.click();
+    };
+    brand.addEventListener('click', goBoard);
+    brand.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goBoard(); }
+    });
+  }
+
   function _setupNav() {
     const dropdowns = Array.from(document.querySelectorAll('.nav-dropdown'));
 
