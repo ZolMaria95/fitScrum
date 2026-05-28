@@ -14,10 +14,13 @@
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Expose-Headers': 'Content-Disposition, Content-Type, Content-Length',
 };
+
+// Solo se permite consultar y crear — nunca modificar/eliminar datos del Helpdesk
+const ALLOWED_METHODS = new Set(['GET', 'POST', 'OPTIONS', 'HEAD']);
 
 // Headers de la respuesta upstream que debemos propagar al cliente
 const PASSTHROUGH_HEADERS = ['content-type', 'content-disposition', 'content-length'];
@@ -91,6 +94,14 @@ export default {
     // Preflight CORS
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 200, headers: CORS });
+    }
+
+    // Bloquear cualquier método que pueda modificar/eliminar (PUT, DELETE, PATCH...)
+    if (!ALLOWED_METHODS.has(request.method)) {
+      return new Response(
+        JSON.stringify({ error: `Método ${request.method} no permitido. Solo GET y POST.` }),
+        { status: 405, headers: { ...CORS, 'Content-Type': 'application/json', 'Allow': 'GET, POST' } },
+      );
     }
 
     const url       = new URL(request.url);
