@@ -128,6 +128,7 @@ const Board = (() => {
         <div class="card-top">
           <span class="card-ticket">#${task.ticket || '—'}</span>
           ${clientBadge}
+          <button class="card-delete-btn" data-delete-id="${task.id}" data-delete-title="${(task.title||'').replace(/"/g,'&quot;')}" title="Eliminar tarea">✕</button>
         </div>
         <div class="card-title">${task.title}</div>
         ${alertBadge}
@@ -209,9 +210,23 @@ const Board = (() => {
     // Click en card → modal detalle
     document.querySelectorAll('.story-card').forEach(card => {
       card.addEventListener('click', e => {
-        if (e.target.closest('.card-prog-wrap') || e.target.closest('.card-cert-wrap')) return;
+        if (e.target.closest('.card-prog-wrap') || e.target.closest('.card-cert-wrap') || e.target.closest('.card-delete-btn')) return;
         const task = stories.find(s => s.id === card.dataset.id);
         if (task) _openDetail(task, team, clients);
+      });
+    });
+
+    // Botón ✕ de eliminar tarea individual
+    document.querySelectorAll('.card-delete-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id    = btn.dataset.deleteId;
+        const title = btn.dataset.deleteTitle || 'esta tarea';
+        if (confirm(`¿Eliminar "${title}"?`)) {
+          AppData.deleteStory(id);
+          App.refreshBoard();
+          App.refreshBanner();
+        }
       });
     });
 

@@ -43,9 +43,42 @@ const App = (() => {
     if (_session.role === 'Scrum Master' || _uid === 'MSC001') {
       document.querySelectorAll('.nav-tab-sol').forEach(t => t.classList.remove('hidden'));
     }
+
+    // Botón "Borrar Board" solo para MSC001 (rol Helpdesk)
+    if (_uid === 'MSC001') {
+      const btnClear = document.getElementById('btn-clear-board');
+      if (btnClear) {
+        btnClear.classList.remove('hidden');
+        btnClear.addEventListener('click', _clearBoardWithConfirm);
+      }
+    }
+
     console.log('[App] Sesión activa:', { id: _session.id, role: _session.role, panelMi: _session.role === 'Scrum Master' || _uid === 'MSC001' });
 
     refreshBoard();
+  }
+
+  // ── Borrar TODAS las tareas del sprint actual (solo MSC001) ──
+  function _clearBoardWithConfirm() {
+    const stories = AppData.getStoriesBySprint(_currentSprint);
+    if (!stories.length) {
+      alert('El board ya está vacío.');
+      return;
+    }
+    const input = prompt(
+      `⚠️ Vas a eliminar ${stories.length} tarea${stories.length !== 1 ? 's' : ''} del sprint actual.\n\n` +
+      `Esta acción NO se puede deshacer.\n\n` +
+      `Para confirmar, escribe la palabra BORRAR (en mayúsculas):`
+    );
+    if (input === null) return; // cancelado
+    if (String(input).trim() !== 'BORRAR') {
+      alert('Confirmación incorrecta. No se eliminó nada.');
+      return;
+    }
+    stories.forEach(s => AppData.deleteStory(s.id));
+    refreshBoard();
+    refreshBanner();
+    alert(`✓ Se eliminaron ${stories.length} tarea${stories.length !== 1 ? 's' : ''} del board.`);
   }
 
   // ── User chip ────────────────────────────────────────

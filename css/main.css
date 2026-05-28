@@ -440,7 +440,36 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
   margin-bottom: 6px;
+}
+
+/* Botón ✕ para eliminar la card individualmente */
+.card-delete-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.story-card:hover .card-delete-btn { opacity: 1; }
+
+.card-delete-btn:hover {
+  background: var(--error-light);
+  color: var(--error);
+  border-color: var(--error);
 }
 
 .card-id {
