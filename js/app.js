@@ -336,10 +336,24 @@ const App = (() => {
       document.getElementById('modal-new-story').classList.remove('hidden');
     });
 
-    // Buscar ticket en Helpdesk API
+    // Buscar ticket en Helpdesk API — manual + auto-búsqueda debounced
     document.getElementById('btn-buscar-ticket').addEventListener('click', () => _buscarTicket());
     document.getElementById('ns-ticket').addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); _buscarTicket(); }
+    });
+
+    let _autoSearchTimer = null;
+    let _lastSearched    = '';
+    document.getElementById('ns-ticket').addEventListener('input', e => {
+      const val = e.target.value.replace(/[^0-9]/g, '').trim();
+      e.target.value = val; // forzar solo dígitos
+      clearTimeout(_autoSearchTimer);
+      if (val.length >= 4 && val !== _lastSearched) {
+        _autoSearchTimer = setTimeout(() => {
+          _lastSearched = val;
+          _buscarTicket();
+        }, 600);
+      }
     });
 
     async function _buscarTicket() {
@@ -400,6 +414,8 @@ const App = (() => {
         team.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
       document.getElementById('ticket-search-status').textContent = '';
       document.getElementById('ticket-search-status').className = 'ticket-search-status';
+      _lastSearched = '';
+      clearTimeout(_autoSearchTimer);
     }
 
     document.getElementById('form-new-story').addEventListener('submit', e => {
