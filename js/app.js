@@ -38,8 +38,8 @@ const App = (() => {
     Semanal.init();
     UsuariosPizza.setup();
 
-    // Mostrar tab "Mi Panel" solo para Scrum Master
-    if (_session.role === 'Scrum Master') {
+    // Mostrar tab "Mi Panel" para Scrum Master + usuario MSC001 (rol Helpdesk)
+    if (_session.role === 'Scrum Master' || _session.id === 'MSC001') {
       document.querySelectorAll('.nav-tab-sol').forEach(t => t.classList.remove('hidden'));
     }
 
