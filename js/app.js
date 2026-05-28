@@ -51,6 +51,11 @@ const App = (() => {
       document.querySelectorAll('.nav-tab-sol').forEach(t => t.classList.remove('hidden'));
     }
 
+    // Tab "TUsuariosPizza": solo MSC001
+    if (isHelpdesk) {
+      document.querySelectorAll('.nav-tab-pizza').forEach(t => t.classList.remove('hidden'));
+    }
+
     // Borrar tareas individuales: Helpdesk o Supervisor
     if (isHelpdesk || isSupervisor) {
       document.body.classList.add('can-delete-cards');

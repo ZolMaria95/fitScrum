@@ -4,6 +4,7 @@ const HelpdeskPanel = (() => {
   const BASE = _proxyUrl + '/api/v1';
 
   // ── Constantes (igual que el flujo n8n) ───────────────
+  // Solo los clientes con tickets en Helpdesk — controla el sync y la tabla
   const CLIENTES_VALIDOS = new Set([
     'COOPERATIVA DE AHORRO Y CREDITO ERCO',
     'COAC CAPCPE GUALAQUIZA',
@@ -17,9 +18,6 @@ const HelpdeskPanel = (() => {
     'VAZCREDIT',
     'COAC SENOR DE GIRON',
     'COAC SEÑOR DE GIRON',
-    'FININVEST OVERSEAS INC. LTD.',
-    'SEGURA COOP',
-    'PUNTOPRESTAMO',
   ]);
 
   const CLIENT_MAP = {
@@ -94,7 +92,8 @@ const HelpdeskPanel = (() => {
   let _filterTicket  = '';
   let _sortCol       = 'fechaUltimoMensaje';
   let _sortDir       = 'desc';
-  let _remoteResult  = null; // Ticket encontrado por búsqueda remota (no se persiste en _tickets)
+  let _remoteResult      = null; // Ticket encontrado por búsqueda remota (no se persiste en _tickets)
+  let _ticketSearchTimer = null;
 
   // Localiza un ticket en la lista sincronizada o en el resultado de búsqueda remota
   function _findTicket(ticketId) {
@@ -564,6 +563,7 @@ const HelpdeskPanel = (() => {
   function _renderEmpty() {
     const list = document.getElementById('hd-list');
     if (!list) return;
+    document.getElementById('hd-results-bar')?.classList.add('hidden');
     const puedeBuscar = _filterTicket && _filterTicket.length >= 4;
     list.innerHTML = `
       <div class="hd-empty">
@@ -620,10 +620,15 @@ const HelpdeskPanel = (() => {
     if (el1) el1.textContent = cntPrio;
     if (el2) el2.textContent = _tickets.length;
 
-    // Filas base según pestaña — o resultado único de búsqueda remota
-    let base = _remoteResult
-      ? [_remoteResult]
-      : (isPrio ? _tickets.filter(t => PRIORITY_ACTIONS.has(t.accion)) : _tickets);
+    // Filas base: resultado remoto > búsqueda por número (todos) > tab actual
+    let base;
+    if (_remoteResult) {
+      base = [_remoteResult];
+    } else if (_filterTicket) {
+      base = _tickets; // búsqueda por nro: ignorar tab, buscar en todos los cargados
+    } else {
+      base = isPrio ? _tickets.filter(t => PRIORITY_ACTIONS.has(t.accion)) : _tickets;
+    }
 
     // Valores únicos para los selects (sobre el universo sin filtrar)
     const clientes  = [...new Set(base.map(t => t.clienteRaw))].sort();
@@ -631,12 +636,14 @@ const HelpdeskPanel = (() => {
     const clasifs   = CLASIF_ORDER.filter(c => base.some(t => t.clasificacion === c));
     const estatuses = [...new Set(base.map(t => t.estatus).filter(Boolean))].sort();
 
-    // Aplicar filtros
-    if (_filterCliente) base = base.filter(t => t.clienteRaw    === _filterCliente);
-    if (_filterAccion)  base = base.filter(t => t.accion        === _filterAccion);
-    if (_filterClasif)  base = base.filter(t => t.clasificacion === _filterClasif);
-    if (_filterEstatus) base = base.filter(t => t.estatus       === _filterEstatus);
-    if (_filterTicket)  base = base.filter(t => String(t.ticket).includes(_filterTicket));
+    // Aplicar filtros (cuando hay resultado remoto ya es el ticket exacto, no filtrar)
+    if (!_remoteResult) {
+      if (_filterCliente) base = base.filter(t => t.clienteRaw    === _filterCliente);
+      if (_filterAccion)  base = base.filter(t => t.accion        === _filterAccion);
+      if (_filterClasif)  base = base.filter(t => t.clasificacion === _filterClasif);
+      if (_filterEstatus) base = base.filter(t => t.estatus       === _filterEstatus);
+      if (_filterTicket)  base = base.filter(t => String(t.ticket).includes(_filterTicket));
+    }
 
     // Helper: icono de sort para una columna
     const _si = col => {
@@ -678,7 +685,14 @@ const HelpdeskPanel = (() => {
     const pendientes = AppData.getHdPendientes();
 
     const hasFilter  = _filterCliente || _filterAccion || _filterClasif || _filterEstatus || _filterTicket;
-    const clearBtn   = `<button class="hd-filter-clear-th${hasFilter ? ' is-active' : ''}" id="hd-btn-clear" title="Limpiar todos los filtros">✕ Limpiar</button>`;
+
+    // Actualizar barra estática (fuera del innerHTML)
+    const _bar = document.getElementById('hd-results-bar');
+    const _cnt = document.getElementById('hd-results-count');
+    const _clr = document.getElementById('hd-btn-clear');
+    if (_bar) _bar.classList.remove('hidden');
+    if (_cnt) _cnt.textContent = `${sorted.length} ${sorted.length === 1 ? 'resultado' : 'resultados'}`;
+    if (_clr) _clr.className  = `hd-filter-clear-th${hasFilter ? ' is-active' : ''}`;
 
     const bodyHTML = sorted.length
       ? sorted.map(t => _rowHTML(t, notes, actions, pendientes)).join('')
@@ -717,7 +731,7 @@ const HelpdeskPanel = (() => {
             </tr>
             <tr class="hd-filter-row">
               <td><input type="text" class="hd-filter-input-th" id="hd-search-ticket" placeholder="🔍 #" value="${_filterTicket}"></td>
-              <td><span class="hd-count-badge">${sorted.length}</span>${clearBtn}</td>
+              <td></td>
               <td><select class="hd-filter-select-th" id="hd-sel-cliente">${optCliente}</select></td>
               <td></td>
               <td></td>
@@ -754,31 +768,36 @@ const HelpdeskPanel = (() => {
       _filterEstatus = e.target.value;
       _render();
     });
-    document.getElementById('hd-btn-clear')?.addEventListener('click', () => {
-      _filterCliente = '';
-      _filterAccion  = '';
-      _filterClasif  = '';
-      _filterEstatus = '';
-      _filterTicket  = '';
-      _remoteResult  = null;
-      _render();
-    });
-
     // Botón "Buscar #N en Helpdesk" (cuando 0 resultados locales)
     document.getElementById('hd-btn-search-remote')?.addEventListener('click', e => {
       _searchTicketRemote(e.currentTarget.dataset.ticket);
     });
 
-    // Búsqueda por número de ticket (debounce mínimo via 'input')
+    // Búsqueda por número de ticket
     const searchInput = document.getElementById('hd-search-ticket');
     if (searchInput) {
       searchInput.addEventListener('input', e => {
         _filterTicket = e.target.value.replace(/[^0-9]/g, '').trim();
-        _remoteResult = null; // al cambiar la búsqueda se descarta el resultado remoto previo
+        _remoteResult = null;
+        clearTimeout(_ticketSearchTimer);
         _render();
-        // Restaurar foco y posición del cursor después del re-render
+        // Si >= 4 dígitos y no hay coincidencia exacta local → buscar remotamente
+        if (_filterTicket.length >= 4) {
+          const localExact = _tickets.some(t => String(t.ticket) === _filterTicket);
+          if (!localExact) {
+            _ticketSearchTimer = setTimeout(() => _searchTicketRemote(_filterTicket), 700);
+          }
+        }
         const newInput = document.getElementById('hd-search-ticket');
         if (newInput) { newInput.focus(); newInput.setSelectionRange(_filterTicket.length, _filterTicket.length); }
+      });
+      // Enter → búsqueda remota inmediata si no hay coincidencia local exacta
+      searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && _filterTicket.length >= 4) {
+          clearTimeout(_ticketSearchTimer);
+          const localExact = _tickets.some(t => String(t.ticket) === _filterTicket);
+          if (!localExact) _searchTicketRemote(_filterTicket);
+        }
       });
     }
 
@@ -1225,6 +1244,18 @@ const HelpdeskPanel = (() => {
       });
     });
     document.getElementById('btn-sync-helpdesk')?.addEventListener('click', sync);
+
+    // Limpiar filtros — wired once here, not inside _render()
+    document.getElementById('hd-btn-clear')?.addEventListener('click', () => {
+      _filterCliente = '';
+      _filterAccion  = '';
+      _filterClasif  = '';
+      _filterEstatus = '';
+      _filterTicket  = '';
+      _remoteResult  = null;
+      clearTimeout(_ticketSearchTimer);
+      render();
+    });
   }
 
   function getClientPendingTickets() {

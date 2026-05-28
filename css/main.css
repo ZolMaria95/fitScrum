@@ -1606,11 +1606,28 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
   box-shadow: 0 0 0 2px rgba(31,56,100,0.15);
 }
 
+/* Barra de resultados — encima de la tabla */
+.hd-results-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px;
+  background: #EBF3FB;
+  border: 1px solid #BDD7EE;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.hd-results-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1F3864;
+}
+
 /* Table wrapper — scroll horizontal */
 .hd-table-wrap {
   overflow-x: auto;
   border: 1px solid #BDD7EE;
-  border-radius: var(--radius);
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 
 /* Excel-style table */

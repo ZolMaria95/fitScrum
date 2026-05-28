@@ -47,7 +47,7 @@
           <button class="nav-dropdown-item" data-view="pendientes" role="menuitem">Pendientes</button>
         </div>
       </div>
-      <button class="nav-tab" data-view="tusuariospizza">TUsuariosPizza</button>
+      <button class="nav-tab nav-tab-pizza hidden" data-view="tusuariospizza">TUsuariosPizza</button>
     </nav>
 
     <div class="header-right">
@@ -296,6 +296,10 @@
       </div>
 
       <div id="hd-status" class="hd-status"></div>
+      <div id="hd-results-bar" class="hd-results-bar hidden">
+        <span id="hd-results-count" class="hd-results-count"></span>
+        <button id="hd-btn-clear" class="hd-filter-clear-th" title="Limpiar todos los filtros">✕ Limpiar</button>
+      </div>
       <div id="hd-list"></div>
     </section>
 
@@ -738,7 +742,7 @@
   <script src="js/helpdesk.js"></script>
   <script src="js/pendientes.js"></script>
   <script src="js/usuarios-pizza.js"></script>
-  <script src="js/helpdesk-panel.js"></script>
+  <script src="js/helpdesk-panel.js?v=3"></script>
   <script src="js/data.js"></script>
   <script src="js/board.js"></script>
   <script src="js/burndown.js"></script>
@@ -790,7 +794,7 @@
         <span>Otros</span><span class="sidebar-caret">▾</span>
       </button>
       <div class="sidebar-section-body">
-        <button class="sidebar-item" data-view="tusuariospizza">TUsuariosPizza</button>
+        <button class="sidebar-item nav-tab-pizza hidden" data-view="tusuariospizza">TUsuariosPizza</button>
       </div>
     </div>
   </nav>
