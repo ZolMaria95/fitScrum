@@ -3622,3 +3622,107 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
   white-space: nowrap;
 }
 .btn-pizza-pago:hover { background: #FFF3E0; }
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE — adapta header y vistas a pantallas más chicas
+   sin tocar la altura fija del header (--header-h)
+   ════════════════════════════════════════════════════════════ */
+
+/* === Tablet horizontal y laptops chicas === */
+@media (max-width: 1280px) {
+  .app-header { gap: 10px; padding: 0 14px; }
+  .nav-tab    { padding: 6px 10px; font-size: 12px; }
+  .header-right { gap: 8px; }
+  .brand-company { display: none; }
+}
+
+/* === Laptops pequeñas / ventanas a medio tamaño === */
+@media (max-width: 1100px) {
+  /* Nav scrolleable horizontalmente para que no empuje a los demás */
+  .app-nav {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.2) transparent;
+  }
+  .app-nav::-webkit-scrollbar { height: 4px; }
+  .app-nav::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.25); border-radius: 2px;
+  }
+  .nav-tab { flex-shrink: 0; }
+
+  /* Avatar sin nombre */
+  .user-name { display: none; }
+  .user-chip {
+    padding: 4px;
+    background: transparent;
+    border-color: transparent;
+  }
+
+  /* Sprint compacto */
+  .sprint-select { max-width: 140px; }
+}
+
+/* === Tablets verticales === */
+@media (max-width: 900px) {
+  .app-header { padding: 0 10px; gap: 8px; }
+  .brand-logo { width: 30px; height: 30px; font-size: 12px; }
+  .brand-name { font-size: 13px; }
+  .nav-tab    { padding: 5px 8px; font-size: 11.5px; }
+  .btn-edit-sprint, .btn-new-sprint, .btn-delete-sprint {
+    width: 24px; height: 24px;
+  }
+  .btn-logout {
+    padding: 4px 6px;
+    font-size: 0;          /* oculta el texto */
+  }
+  .btn-logout::before {
+    content: '⎋';
+    font-size: 16px;
+  }
+
+  /* Board: máximo 2 columnas */
+  .kanban-board { grid-template-columns: repeat(2, 1fr); }
+
+  /* Toolbar del board en columna */
+  .board-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Pizza stats: 2 columnas en lugar de 3+ */
+  .pizza-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* === Mobile / pantallas chicas === */
+@media (max-width: 640px) {
+  .app-header {
+    padding: 0 8px;
+    gap: 6px;
+  }
+  .brand-name    { font-size: 12px; }
+  .nav-tab       { padding: 5px 7px; font-size: 11px; }
+  .sprint-select { max-width: 90px; font-size: 11px; padding: 5px 6px; }
+
+  /* Sprint banner se ajusta al ancho */
+  .sprint-banner {
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  /* Kanban en 1 columna */
+  .kanban-board { grid-template-columns: 1fr; }
+
+  /* Modal ocupa casi todo el ancho */
+  .modal { width: 96vw !important; max-width: 96vw !important; }
+  .modal-body { padding: 16px !important; }
+
+  /* Tablas con scroll horizontal — ya lo tienen, refuerzo */
+  .hd-table-wrap,
+  .pendientes-table-wrap,
+  .sol-table-wrap { overflow-x: auto; }
+
+  /* Pizza stats en 1 columna */
+  .pizza-stats-grid { grid-template-columns: 1fr; }
+}
