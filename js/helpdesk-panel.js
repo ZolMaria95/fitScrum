@@ -1192,6 +1192,16 @@ const HelpdeskPanel = (() => {
       });
     });
     document.getElementById('btn-sync-helpdesk')?.addEventListener('click', sync);
+
+    document.getElementById('btn-logout-helpdesk')?.addEventListener('click', async () => {
+      _setStatus('Cerrando sesión Helpdesk...', 'loading');
+      await HelpdeskAuth.logout();
+      _tickets = [];
+      _remoteResult = null;
+      _filterTicket = '';
+      _setStatus('Sesión Helpdesk cerrada.', 'ok');
+      render();
+    });
   }
 
   function getClientPendingTickets() {

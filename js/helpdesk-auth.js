@@ -85,5 +85,25 @@ const HelpdeskAuth = (() => {
     return r;
   }
 
-  return { getToken, login, clearToken, fetchWithAuth };
+  // Cerrar sesión en el Helpdesk (vía proxy/Worker). Limpia también el cache local.
+  async function logout() {
+    try {
+      // Vía Worker: fetch directo (el Worker añade su propio Bearer y al ver 200
+      // descarta su cache interno). Vía proxy.py: añadir Bearer manualmente.
+      if (_viaWorker) {
+        await fetch(`${BASE}/auth/logout`, { method: 'POST' });
+      } else {
+        const cached = _read();
+        if (cached?.token) {
+          await fetch(`${BASE}/auth/logout`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cached.token}` },
+          });
+        }
+      }
+    } catch (_) { /* aunque falle el server, limpiamos el cache local */ }
+    clearToken();
+  }
+
+  return { getToken, login, logout, clearToken, fetchWithAuth };
 })();

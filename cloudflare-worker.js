@@ -113,6 +113,7 @@ export default {
 
     const url       = new URL(request.url);
     const targetUrl = env.HD_API_BASE + url.pathname.replace(/^\/api\/v1/, '') + url.search;
+    const isLogout  = url.pathname.endsWith('/auth/logout');
 
     // Leer body una sola vez (para poder reintentar)
     let bodyBuffer;
@@ -133,6 +134,13 @@ export default {
       }
 
       const body = await resp.arrayBuffer();
+
+      // Si fue un logout exitoso, descartar el token cacheado del Worker
+      if (isLogout && resp.ok) {
+        _cachedToken = null;
+        _tokenExpiry = 0;
+      }
+
       return _buildResponse(body, resp);
     } catch (err) {
       _cachedToken = null;

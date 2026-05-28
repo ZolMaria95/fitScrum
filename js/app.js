@@ -47,7 +47,8 @@ const App = (() => {
     document.getElementById('user-avatar').textContent      = _session.id;
     document.getElementById('user-name-display').textContent = _session.name;
 
-    document.getElementById('btn-logout').addEventListener('click', () => {
+    document.getElementById('btn-logout').addEventListener('click', async () => {
+      try { await HelpdeskAuth.logout(); } catch (_) {}
       sessionStorage.removeItem(SESSION_KEY);
       window.location.href = 'login.html';
     });
