@@ -3697,20 +3697,12 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
   .header-right { gap: 8px; }
   .brand-company { display: none; }
 
-  /* Crítico: el nav nunca debe empujar al header-right.
-     min-width:0 permite que el container flex se comprima;
-     overflow-x:auto le da scroll horizontal si los tabs no caben. */
+  /* El nav nunca debe empujar al header-right.
+     min-width:0 permite que el container flex se comprima.
+     NOTA: NO usar overflow:hidden aquí porque recortaría los
+     dropdowns que se posicionan absolute por debajo. */
   .app-nav {
     min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,0.2) transparent;
-  }
-  .app-nav::-webkit-scrollbar { height: 4px; }
-  .app-nav::-webkit-scrollbar-thumb {
-    background: rgba(255,255,255,0.25); border-radius: 2px;
   }
   .nav-tab { flex-shrink: 0; }
 
