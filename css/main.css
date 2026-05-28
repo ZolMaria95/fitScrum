@@ -391,7 +391,30 @@ body {
   color: var(--text-muted);
 }
 
-.assignee-chips { display: flex; gap: 6px; }
+.assignee-chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.assignee-clear-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-mid);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 4px;
+}
+.assignee-clear-btn:hover {
+  border-color: var(--brand-mid);
+  color: var(--brand-mid);
+}
+.assignee-clear-btn.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: white;
+}
 
 .assignee-chip {
   width: 28px;

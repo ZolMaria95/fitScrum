@@ -14,7 +14,6 @@ const Board = (() => {
 
   function render(stories, team, clients) {
     const assigneeIds = [...new Set(stories.map(s => s.assignee).filter(Boolean))];
-    if (_activeAssignees.size === 0) assigneeIds.forEach(id => _activeAssignees.add(id));
 
     _renderAssigneeChips(team, assigneeIds);
     _renderClientFilter(clients);
@@ -34,7 +33,10 @@ const Board = (() => {
 
       if (_priorityFilter !== 'all') cards = cards.filter(s => s.priority === _priorityFilter);
       if (_clientFilter   !== 'all') cards = cards.filter(s => s.client   === _clientFilter);
-      cards = cards.filter(s => !s.assignee || _activeAssignees.has(s.assignee));
+      // Sin selección de asignado → mostrar todos
+      if (_activeAssignees.size > 0) {
+        cards = cards.filter(s => !s.assignee || _activeAssignees.has(s.assignee));
+      }
 
       document.getElementById(`count-${status}`).textContent = cards.length;
       document.getElementById(`pts-${status}`).textContent   = '';
@@ -52,21 +54,32 @@ const Board = (() => {
   // ── Chips de asignado ────────────────────────────────
   function _renderAssigneeChips(team, assigneeIds) {
     const wrap = document.getElementById('assignee-filters');
-    wrap.innerHTML = team.filter(m => assigneeIds.includes(m.id)).map(m => `
+    const allActive = _activeAssignees.size === 0;
+    const chipsHTML = team.filter(m => assigneeIds.includes(m.id)).map(m => `
       <div class="assignee-chip ${_activeAssignees.has(m.id) ? '' : 'inactive'}"
            data-id="${m.id}" style="background:${m.color}" title="${m.name}">${m.id}</div>
     `).join('');
+    const clearBtnHTML = `
+      <button class="assignee-clear-btn ${allActive ? 'active' : ''}"
+              id="assignee-clear" title="Mostrar todos (sin filtro de asignado)">Todos</button>
+    `;
+    wrap.innerHTML = chipsHTML + clearBtnHTML;
 
     wrap.querySelectorAll('.assignee-chip').forEach(chip => {
       chip.addEventListener('click', () => {
         const id = chip.dataset.id;
         if (_activeAssignees.has(id)) {
-          if (_activeAssignees.size > 1) _activeAssignees.delete(id);
+          _activeAssignees.delete(id);
         } else {
           _activeAssignees.add(id);
         }
         App.refreshBoard();
       });
+    });
+
+    document.getElementById('assignee-clear')?.addEventListener('click', () => {
+      _activeAssignees.clear();
+      App.refreshBoard();
     });
   }
 
