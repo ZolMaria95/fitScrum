@@ -373,7 +373,7 @@ const App = (() => {
 
         if (!result) {
           status.className   = 'ticket-search-status error';
-          status.textContent = `Ticket #${ticketNum} no encontrado o no pertenece a los clientes registrados.`;
+          status.textContent = `Ticket #${ticketNum} no existe en el Helpdesk.`;
         } else {
           // Llenar campos
           document.getElementById('ns-title').value = result.title;

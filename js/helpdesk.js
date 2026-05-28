@@ -23,29 +23,16 @@ const Helpdesk = (() => {
     let raw = null;
 
     try {
-      // Intento 1: endpoint directo por ID
-      try {
-        const r = await HelpdeskAuth.fetchWithAuth(`${BASE}/tickets/${ticketId}`);
-        if (r.ok) raw = await r.json();
-      } catch (_) {}
-
-      // Intento 2: buscar en el listado paginado (primeras 2 páginas)
-      if (!raw) {
-        for (const offset of [0, 40]) {
-          try {
-            const r = await HelpdeskAuth.fetchWithAuth(
-              `${BASE}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`,
-            );
-            if (!r.ok) break;
-            const data  = await r.json();
-            const found = (data.items || []).find(t => String(t.ticket_id) === String(ticketId));
-            if (found) { raw = found; break; }
-          } catch (_) { break; }
-        }
+      // Lookup directo por ID — endpoint real del API: /tickets/tickets/{ticket_id}
+      const r = await HelpdeskAuth.fetchWithAuth(`${BASE}/tickets/tickets/${ticketId}`);
+      if (r.ok) {
+        const data = await r.json();
+        // Algunos APIs envuelven en {item} o array
+        raw = Array.isArray(data) ? data[0] : (data.item || data.data || data);
       }
     } catch (_) { return null; }
 
-    if (!raw) return null;
+    if (!raw || !raw.ticket_id) return null;
 
     const clientRaw = String(raw.cliente || '').trim().toUpperCase();
     const clientId  = CLIENT_MAP[clientRaw] || null;
