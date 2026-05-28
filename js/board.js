@@ -216,13 +216,13 @@ const Board = (() => {
       });
     });
 
-    // Botón ✕ de eliminar tarea individual
+    // Botón ✕ de eliminar tarea individual (con confirmación BORRAR)
     document.querySelectorAll('.card-delete-btn').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const id    = btn.dataset.deleteId;
         const title = btn.dataset.deleteTitle || 'esta tarea';
-        if (confirm(`¿Eliminar "${title}"?`)) {
+        if (_confirmDelete(title)) {
           AppData.deleteStory(id);
           App.refreshBoard();
           App.refreshBanner();
@@ -421,7 +421,7 @@ const Board = (() => {
     });
 
     document.getElementById('detail-delete').addEventListener('click', () => {
-      if (confirm(`¿Eliminar "${task.title}"?`)) {
+      if (_confirmDelete(task.title)) {
         AppData.deleteStory(task.id);
         document.getElementById('modal-card').classList.add('hidden');
         App.refreshBoard();
@@ -430,6 +430,21 @@ const Board = (() => {
     });
 
     document.getElementById('modal-card').classList.remove('hidden');
+  }
+
+  // Confirmación de borrado: exige escribir la palabra BORRAR
+  function _confirmDelete(title) {
+    const input = prompt(
+      `⚠️ Vas a eliminar la tarea:\n\n"${title}"\n\n` +
+      `Esta acción NO se puede deshacer.\n\n` +
+      `Para confirmar, escribe la palabra BORRAR (en mayúsculas):`
+    );
+    if (input === null) return false;
+    if (String(input).trim() !== 'BORRAR') {
+      alert('Confirmación incorrecta. No se eliminó nada.');
+      return false;
+    }
+    return true;
   }
 
   function setPriorityFilter(f) {
