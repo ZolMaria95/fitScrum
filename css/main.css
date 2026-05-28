@@ -4088,30 +4088,39 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
 /* ─── Activar sidebar en ≤768px + header centrado ────────── */
 @media (max-width: 768px) {
   .app-nav       { display: none; }
-  .btn-hamburger { display: flex; }
+  .btn-hamburger { display: inline-flex; }
 
-  /* Header: hamburger izq + acciones der con flex.
-     El brand se centra absoluto sobre todo (sin importar ancho de los lados). */
+  /* Header: 3 columnas explícitas — los laterales son iguales
+     (1fr) lo que mantiene el brand del medio perfectamente centrado.
+     Forzamos altura y nowrap para evitar que algo se salte de fila. */
   .app-header {
-    display: flex;
-    justify-content: space-between;
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr;
+    grid-template-rows: var(--header-h);
     align-items: center;
+    height: var(--header-h);
     gap: 8px;
-    position: fixed; /* ya lo era — refuerzo para que sea contenedor del absolute */
+    flex-wrap: nowrap;
   }
 
-  .btn-hamburger { order: 1; flex-shrink: 0; }
-  .header-right  { order: 3; flex-shrink: 0; }
-
+  .btn-hamburger {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    align-self: center;
+  }
   .header-brand {
-    order: 2;
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    margin: 0;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
+    align-self: center;
     gap: 8px;
-    pointer-events: auto;
+  }
+  .header-right {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    align-self: center;
   }
 
   /* En móvil ocultamos la razón social — más compacto */
