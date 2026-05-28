@@ -436,6 +436,8 @@ const HelpdeskPanel = (() => {
   async function sync() {
     if (_loading) return;
     _loading = true;
+    _remoteResult = null;        // descartar resultado de búsqueda remota
+    _filterTicket = '';          // limpiar buscador
     _setStatus('Conectando a Helpdesk...', 'loading');
 
     try {
@@ -1184,7 +1186,9 @@ const HelpdeskPanel = (() => {
         document.querySelectorAll('.hd-tab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         _tab = btn.dataset.hdtab;
-        _render();
+        _remoteResult = null;    // cambiar de pestaña descarta el resultado de búsqueda
+        _filterTicket = '';      // y limpia el buscador
+        render();                // usa render() (no _render) para manejar el caso sin tickets
       });
     });
     document.getElementById('btn-sync-helpdesk')?.addEventListener('click', sync);
