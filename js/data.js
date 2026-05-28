@@ -276,6 +276,16 @@ const AppData = (() => {
     if (s) { s.dueDate = dueDate; _persist('stories', _stories); }
   }
 
+  function updateStoryTitle(storyId, title) {
+    const s = _stories.stories.find(s => s.id === storyId);
+    if (s) { s.title = title; _persist('stories', _stories); }
+  }
+
+  function updateStoryDescription(storyId, description) {
+    const s = _stories.stories.find(s => s.id === storyId);
+    if (s) { s.description = description; _persist('stories', _stories); }
+  }
+
   function setWaitingClient(storyId, waiting) {
     const s = _stories.stories.find(s => s.id === storyId);
     if (s) {
@@ -458,7 +468,7 @@ const AppData = (() => {
     getSprints, getActiveSprint, setActiveSprint, addSprint, updateSprint, deleteSprint,
     getAllStories, getStoriesBySprint, updateStoryStatus, addStory, deleteStory,
     getTeam, getMember,
-    updateStoryProgress, updateStoryDueDate, approveStory, unapproveStory, setWaitingClient,
+    updateStoryProgress, updateStoryDueDate, updateStoryTitle, updateStoryDescription, approveStory, unapproveStory, setWaitingClient,
     getClients, getClient,
     getProgress, addProgressEntry,
     getQueries, addQuery, resolveQuery,

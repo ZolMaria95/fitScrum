@@ -1248,6 +1248,51 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
   border-radius: var(--radius);
 }
 
+.detail-title-input {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  padding: 6px 8px;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+  font-family: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.detail-title-input:hover  { border-color: var(--border); }
+.detail-title-input:focus  {
+  outline: none;
+  border-color: var(--brand, #04BAF0);
+  background: var(--surface);
+}
+
+.detail-description-input {
+  font-size: 13px;
+  color: var(--text-mid);
+  line-height: 1.6;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 10px 11px;
+  margin-bottom: 14px;
+  margin-top: 6px;
+  border-radius: var(--radius);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.detail-description-input:focus {
+  outline: none;
+  border-color: var(--brand, #04BAF0);
+  background: var(--surface);
+}
+
 .detail-section-title {
   font-size: 10px;
   font-weight: 600;

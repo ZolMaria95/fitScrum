@@ -343,17 +343,18 @@ const Board = (() => {
     const initColor = _progColor(initPct);
 
     document.getElementById('modal-card-id').textContent = task.id;
+    const safeTitle = (task.title || '').replace(/"/g, '&quot;');
+    const safeDesc  = task.description || '';
     document.getElementById('modal-card-body').innerHTML = `
-      <div class="detail-title">${task.title}</div>
+      <input type="text" id="detail-title" class="detail-title-input" value="${safeTitle}" placeholder="Título de la tarea">
       <div class="detail-meta">
         ${task.ticket ? `<span class="card-ticket" style="font-size:13px">#${task.ticket}</span>` : ''}
         ${client ? `<span class="card-client-badge" style="background:${client.color}20;color:${client.color};border:1px solid ${client.color}40;font-size:12px;padding:3px 10px;border-radius:10px">${client.name}</span>` : ''}
         <span class="badge badge-${task.priority}">${pLabel}</span>
         ${member ? `<span style="font-size:12px;color:var(--text-mid)">→ ${member.name}</span>` : ''}
       </div>
-      ${task.description ? `
-        <div class="detail-section-title">Descripción</div>
-        <div class="detail-description">${task.description}</div>` : ''}
+      <div class="detail-section-title">Descripción</div>
+      <textarea id="detail-description" class="detail-description-input" rows="3" placeholder="Detalle adicional, contexto, pasos...">${safeDesc}</textarea>
 
       <div class="detail-section-title" style="margin-top:14px">Progreso</div>
       <div class="detail-prog-wrap">
@@ -406,6 +407,11 @@ const Board = (() => {
     document.getElementById('detail-save').addEventListener('click', () => {
       let raw = Math.min(100, Math.max(0, parseInt(progInput.value, 10) || 0));
       let pct = raw % 5 === 0 ? raw : Math.min(100, raw + (5 - raw % 5));
+      const newTitle = document.getElementById('detail-title').value.trim();
+      const newDesc  = document.getElementById('detail-description').value.trim();
+      if (!newTitle) { alert('El título no puede quedar vacío.'); return; }
+      AppData.updateStoryTitle(task.id, newTitle);
+      AppData.updateStoryDescription(task.id, newDesc);
       AppData.updateStoryProgress(task.id, pct);
       AppData.updateStoryStatus(task.id, document.getElementById('detail-status').value);
       AppData.updateStoryDueDate(task.id, document.getElementById('detail-duedate').value);
