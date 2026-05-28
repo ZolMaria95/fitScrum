@@ -97,6 +97,10 @@ const App = (() => {
     document.getElementById('user-avatar').textContent      = _session.id;
     document.getElementById('user-name-display').textContent = _session.name;
 
+    // Nombre completo como tooltip al pasar el mouse sobre el avatar
+    const chip = document.getElementById('user-chip');
+    if (chip) chip.title = `${_session.name} (${_session.id})`;
+
     document.getElementById('btn-logout').addEventListener('click', async () => {
       try { await HelpdeskAuth.logout(); } catch (_) {}
       sessionStorage.removeItem(SESSION_KEY);

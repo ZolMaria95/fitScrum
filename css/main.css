@@ -219,16 +219,12 @@ body {
 .user-chip {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 4px 10px 4px 4px;
-  border-radius: 20px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  cursor: default;
 }
 
 .user-avatar {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -236,12 +232,16 @@ body {
   font-size: 10px;
   font-weight: 700;
   color: white;
+  border: 1px solid rgba(255,255,255,0.15);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.user-chip:hover .user-avatar {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 2px rgba(4,186,240,0.35);
 }
 
-.user-name {
-  font-size: 12px;
-  color: rgba(255,255,255,0.75);
-}
+/* Nombre completo del usuario — oculto, se muestra como tooltip */
+.user-name { display: none; }
 
 .btn-logout {
   background: none;
@@ -3735,14 +3735,6 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
     min-width: 0;
   }
   .nav-tab { flex-shrink: 0; }
-
-  /* User-chip solo el avatar — el nombre completo desborda */
-  .user-name { display: none; }
-  .user-chip {
-    padding: 4px;
-    background: transparent;
-    border-color: transparent;
-  }
 
   /* Sprint selector limitado */
   .sprint-select { max-width: 140px; }
