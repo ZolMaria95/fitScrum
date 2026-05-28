@@ -38,22 +38,30 @@ const App = (() => {
     Semanal.init();
     UsuariosPizza.setup();
 
-    // Mostrar tab "Mi Panel" para Scrum Master + usuario MSC001 (rol Helpdesk)
-    const _uid = String(_session.id || '').trim().toUpperCase();
-    if (_session.role === 'Scrum Master' || _uid === 'MSC001') {
+    // Permisos basados en el rol del Helpdesk API (apiRole) — autoritativo
+    const _uid     = String(_session.id || '').trim().toUpperCase();
+    const _apiRole = String(_session.apiRole || '').trim().toUpperCase();
+    const isHelpdesk   = _apiRole.includes('HELPDESK');
+    const isSupervisor = _apiRole.includes('SUPERVISOR');
+
+    // Tab "Mi Panel": Scrum Master + Helpdesk
+    if (_session.role === 'Scrum Master' || isHelpdesk) {
       document.querySelectorAll('.nav-tab-sol').forEach(t => t.classList.remove('hidden'));
     }
 
-    // Botón "Borrar Board" solo para MSC001 (rol Helpdesk)
-    if (_uid === 'MSC001') {
-      const btnClear = document.getElementById('btn-clear-board');
-      if (btnClear) {
-        btnClear.classList.remove('hidden');
-        btnClear.addEventListener('click', _clearBoardWithConfirm);
-      }
+    // Borrar tareas individuales: Helpdesk o Supervisor
+    if (isHelpdesk || isSupervisor) {
+      document.body.classList.add('can-delete-cards');
     }
 
-    console.log('[App] Sesión activa:', { id: _session.id, role: _session.role, panelMi: _session.role === 'Scrum Master' || _uid === 'MSC001' });
+    // Borrar board completo: solo Helpdesk
+    if (isHelpdesk) {
+      document.body.classList.add('can-delete-board');
+      const btnClear = document.getElementById('btn-clear-board');
+      if (btnClear) btnClear.addEventListener('click', _clearBoardWithConfirm);
+    }
+
+    console.log('[App] Sesión activa:', { id: _session.id, role: _session.role, apiRole: _session.apiRole, isHelpdesk, isSupervisor });
 
     refreshBoard();
   }

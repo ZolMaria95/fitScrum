@@ -445,7 +445,11 @@ body {
 }
 
 /* Botón ✕ para eliminar la card individualmente */
-.card-delete-btn {
+/* Oculto por defecto; visible solo si el body tiene .can-delete-cards (rol Helpdesk o Supervisor) */
+.card-delete-btn { display: none; }
+
+body.can-delete-cards .card-delete-btn {
+  display: flex;
   background: none;
   border: 1px solid transparent;
   color: var(--text-muted);
@@ -456,7 +460,6 @@ body {
   border-radius: 4px;
   cursor: pointer;
   padding: 0;
-  display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
@@ -464,13 +467,17 @@ body {
   flex-shrink: 0;
 }
 
-.story-card:hover .card-delete-btn { opacity: 1; }
+body.can-delete-cards .story-card:hover .card-delete-btn { opacity: 1; }
 
-.card-delete-btn:hover {
+body.can-delete-cards .card-delete-btn:hover {
   background: var(--error-light);
   color: var(--error);
   border-color: var(--error);
 }
+
+/* Botón "Borrar Board" — oculto por defecto; visible solo si rol Helpdesk */
+#btn-clear-board { display: none; }
+body.can-delete-board #btn-clear-board { display: inline-flex; }
 
 .card-id {
   font-family: var(--font-mono);

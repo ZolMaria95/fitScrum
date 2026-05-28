@@ -246,11 +246,12 @@
         const local = teamLocal.find(u => u.id === profile.user_id);
 
         sessionStorage.setItem(SESSION_KEY, JSON.stringify({
-          id:    profile.user_id,
-          name:  local?.name  || profile.person_name || profile.person_alias || profile.user_id,
-          role:  local?.role  || profile.role_description || 'Usuario',
-          color: local?.color || _colorFor(profile.user_id),
-          email: profile.email || '',
+          id:      profile.user_id,
+          name:    local?.name  || profile.person_name || profile.person_alias || profile.user_id,
+          role:    local?.role  || profile.role_description || 'Usuario',
+          apiRole: profile.role_description || '',  // rol autoritativo del Helpdesk para permisos
+          color:   local?.color || _colorFor(profile.user_id),
+          email:   profile.email || '',
           token,
         }));
         window.location.href = 'index.html';
