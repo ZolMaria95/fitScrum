@@ -765,14 +765,19 @@ const Board = (() => {
       const newTitle = document.getElementById('detail-title').value.trim();
       const newDesc  = document.getElementById('detail-description').value.trim();
       if (!newTitle) { alert('El título no puede quedar vacío.'); return; }
+      const newAssignee = document.getElementById('detail-assignee').value || null;
       AppData.updateStoryTitle(task.id, newTitle);
       AppData.updateStoryDescription(task.id, newDesc);
       AppData.updateStoryProgress(task.id, pct);
       AppData.updateStoryStatus(task.id, newStatus);
       AppData.updateStoryDueDate(task.id, document.getElementById('detail-duedate').value);
-      AppData.updateStoryAssignee(task.id, document.getElementById('detail-assignee').value || null);
+      AppData.updateStoryAssignee(task.id, newAssignee);
       const prioSel = document.getElementById('detail-priority');
       if (prioSel) AppData.updateStoryPriority(task.id, prioSel.value);
+      // Si cambió el asignado y la tarea tiene ticket → reflejarlo en el Helpdesk (PUT)
+      if (task.ticket && newAssignee && newAssignee !== task.assignee) {
+        App.assignHdTicket(task.ticket, newAssignee);
+      }
       // Sincronizar estado del ticket Helpdesk según el nuevo estado de la card
       if (newStatus === 'in_progress')  _pushHdEstado({ ...task, status: newStatus }, 'EN PROCESO');
       else if (newStatus === 'review')  _pushHdEstado({ ...task, status: newStatus }, 'INSTALADO PARA CERTIFICACIÓN');
