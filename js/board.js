@@ -25,23 +25,23 @@ const Board = (() => {
 
   function render(stories, team, clients) {
     _currentStories = stories;
-    const assigneeIds = [...new Set(stories.map(s => s.assignee).filter(Boolean))];
+
+    // Base visible del board: oculta DONE aprobadas pasado el cutoff (1 día).
+    // Los chips de asignado se arman de esta base — así no aparecen filtros
+    // "huérfanos" de tareas que ya no se muestran (ej. un id viejo sin tareas).
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 1);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    const visibleBase = stories.filter(s =>
+      !(s.status === 'done' && s.approved && s.approvedDate < cutoffStr));
+
+    const assigneeIds = [...new Set(visibleBase.map(s => s.assignee).filter(Boolean))];
 
     _renderAssigneeChips(team, assigneeIds);
     _renderClientFilter(clients);
 
-    const today = new Date().toISOString().split('T')[0];
-
     STATUSES.forEach(status => {
-      let cards = stories.filter(s => s.status === status);
-
-      // Ocultar DONE aprobadas después de 2 días (visible hoy + mañana)
-      if (status === 'done') {
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - 1);
-        const cutoffStr = cutoff.toISOString().split('T')[0];
-        cards = cards.filter(s => !(s.approved && s.approvedDate < cutoffStr));
-      }
+      let cards = visibleBase.filter(s => s.status === status);
 
       if (_priorityFilter !== 'all') cards = cards.filter(s => s.priority === _priorityFilter);
       if (_clientFilter   !== 'all') cards = cards.filter(s => s.client   === _clientFilter);
