@@ -1,0 +1,403 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2709
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 \{\
+  "nodes": [\
+    \{\
+      "parameters": \{\},\
+      "id": "21f828c4-8dc2-4d58-8591-9f0f2392ba4a",\
+      "name": "Disparador Manual",\
+      "type": "n8n-nodes-base.manualTrigger",\
+      "typeVersion": 1,\
+      "position": [\
+        -128,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "const ahora = new Date(new Date().toLocaleString('en-US', \{ timeZone: 'America/Guayaquil' \}));\\nconst pad = n => String(n).padStart(2, '0');\\nconst fechaTo = `$\{ahora.getFullYear()\}-$\{pad(ahora.getMonth()+1)\}-$\{pad(ahora.getDate())\}`;\\nconst unMesAtras = new Date(ahora);\\nunMesAtras.setMonth(unMesAtras.getMonth() - 1);\\nconst fechaFrom = `$\{unMesAtras.getFullYear()\}-$\{pad(unMesAtras.getMonth()+1)\}-$\{pad(unMesAtras.getDate())\}`;\\nreturn [\{ json: \{ fecha_from: fechaFrom, fecha_to: fechaTo \} \}];"\
+      \},\
+      "id": "f1830a27-ce24-4096-ad0b-4b8b0ad3500b",\
+      "name": "Set Fechas",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        80,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "method": "POST",\
+        "url": "https://helpdesk-api.fit-bank.com/api/v1/auth/login",\
+        "sendBody": true,\
+        "bodyParameters": \{\
+          "parameters": [\
+            \{\
+              "name": "username_or_email",\
+              "value": "HELPDESK1"\
+            \},\
+            \{\
+              "name": "password",\
+              "value": "MtRuLxgDz6q5"\
+            \},\
+            \{\
+              "name": "force_logout",\
+              "value": "true"\
+            \}\
+          ]\
+        \},\
+        "options": \{\}\
+      \},\
+      "id": "39deaffc-371e-4d55-b11e-4d4c51931d61",\
+      "name": "Login API",\
+      "type": "n8n-nodes-base.httpRequest",\
+      "typeVersion": 4.2,\
+      "position": [\
+        272,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "url": "https://helpdesk-api.fit-bank.com/api/v1/tickets/tickets",\
+        "sendQuery": true,\
+        "queryParameters": \{\
+          "parameters": [\
+            \{\
+              "name": "limit",\
+              "value": "40"\
+            \},\
+            \{\
+              "name": "offset",\
+              "value": "=\{\{ $json.offset \}\}"\
+            \},\
+            \{\
+              "name": "modified_date_order",\
+              "value": "desc"\
+            \}\
+          ]\
+        \},\
+        "sendHeaders": true,\
+        "headerParameters": \{\
+          "parameters": [\
+            \{\
+              "name": "Authorization",\
+              "value": "=\{\{ 'Bearer ' + $('Login API').item.json.access_token \}\}"\
+            \}\
+          ]\
+        \},\
+        "options": \{\}\
+      \},\
+      "id": "8e1a2025-8bec-4a24-aff6-7b87a44a8344",\
+      "name": "Obtener Reporte",\
+      "type": "n8n-nodes-base.httpRequest",\
+      "typeVersion": 4.2,\
+      "position": [\
+        672,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "return items.flatMap(item => (item.json.items || []).map(ticket => (\{ json: ticket \})));"\
+      \},\
+      "id": "5434d839-93c5-40cd-bb88-fb2b9a188fa4",\
+      "name": "Dividir Tickets",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        880,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "const TIPO_NOMBRE = \{ '001': 'INCIDENCIA', '002': 'REQUERIMIENTO', '003': 'CONSULTA' \};\\n\\nreturn items.map(item => \{\\n  const t = item.json;\\n  return \{\\n    json: \{\\n      'Numero ticket':           t.ticket_id,\\n      'Tipo':                    t.ticket_type_id || '',\\n      'Tipo nombre':             TIPO_NOMBRE[t.ticket_type_id] || t.ticket_type_id || '',\\n      'Cliente':                 t.cliente || '',\\n      'Usuario ingreso':         t.entry_user_id || '',\\n      'Nombre usuario ingreso':  t.entry_person || '',\\n      'Usuario asignado':        t.assigned_user_id || '',\\n      'Nombre usuario asignado': t.assigned_person || '',\\n      'Orden':                   t.priority || 999,\\n      'Estatus':                 t.estado || '',\\n      'Asunto':                  t.subject || '',\\n      'Modulo':                  t.modulo || '',\\n      'Fecha asignacion':        t.assigned_date || '',\\n      'Fecha ingreso':           t.entry_date || '',\\n      'Fecha modificacion':      t.modified_date || '',\\n      'Usuario ultima modificacion': t.assigned_user_id || '',\\n      'Ultimo mensaje':          '',\\n      'Fecha ultimo mensaje':    '',\\n      'Usuario ultimo mensaje':  ''\\n    \}\\n  \};\\n\});"\
+      \},\
+      "id": "a01b3b06-ecde-47c0-a1ac-7aefe27beb7f",\
+      "name": "Reasignar Columnas",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        1072,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "const clientes = [\\n  'COOPERATIVA DE AHORRO Y CREDITO ERCO',\\n  'COAC CAPCPE GUALAQUIZA',\\n  'COAC LA DOLOROSA DURAN',\\n  'PADRE JULIAN LORENTE',\\n  'COAC CACEL',\\n  'COAC 4 RIOS',\\n  'LITARGMODE CIA LTDA',\\n  'COAC COPAC AUSTRO LTDA',\\n  'BANCO DEL AUSTRO',\\n  'VAZCREDIT',\\n  'COAC SE\'d1OR DE GIRON'\\n];\\nreturn items.filter(i => \{\\n  const cliente = String(i.json['Cliente'] || '').trim().toUpperCase();\\n  return clientes.includes(cliente);\\n\});"\
+      \},\
+      "id": "dcc83c6e-7d41-4bec-a7db-0a78d29eeaad",\
+      "name": "Filtrar Clientes",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        1280,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "return items.filter(item => \{\\n  const estado = (item.json['Estatus'] || '').toUpperCase();\\n  return !estado.includes('APROBADO') && !estado.includes('CERRADO POR EL CLIENTE');\\n\});"\
+      \},\
+      "id": "dd4ad9b6-7163-46b3-add0-283933ce1789",\
+      "name": "Filtrar Estados",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        1472,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "const ahora = new Date(new Date().toLocaleString('en-US', \{ timeZone: 'America/Guayaquil' \}));\\nreturn items.map(item => \{\\n  const fechaMod     = new Date(item.json['Fecha modificacion']);\\n  const fechaIng     = new Date(item.json['Fecha ingreso']);\\n  const fechaMensaje = new Date(item.json['Fecha ultimo mensaje']);\\n  const diffMod     = (ahora - fechaMod)     / (1000 * 60 * 60 * 24);\\n  const diffIng     = (ahora - fechaIng)     / (1000 * 60 * 60 * 24);\\n  const diffMensaje = (ahora - fechaMensaje) / (1000 * 60 * 60 * 24);\\n  item.json.reciente            = !isNaN(fechaMod.getTime()) && diffMod <= 2;\\n  item.json.dias_sin_movimiento = isNaN(diffMod) ? 0 : Math.floor(diffMod);\\n  item.json.dias_desde_ingreso  = isNaN(diffIng) ? Math.floor(diffMod) : Math.floor(diffIng);\\n  item.json.sin_asignar         = !String(item.json['Usuario asignado'] || '').trim() || String(item.json['Usuario asignado'] || '').trim().toUpperCase() === 'SIN ASIGNAR';\\n  item.json.reciente_mensaje    = !isNaN(fechaMensaje.getTime()) && diffMensaje <= 2;\\n  item.json.tiene_mensaje       = !!String(item.json['Ultimo mensaje'] || '').trim();\\n  return item;\\n\});"\
+      \},\
+      "id": "d7f3571c-6472-4630-8fd5-4de3c932d5be",\
+      "name": "Evaluar Fecha",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        2480,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "return items.map(item => \{\\n  const orden           = parseInt(item.json['Orden'] || 999);\\n  const reciente        = item.json.reciente;\\n  const estado          = (item.json['Estatus'] || '').toUpperCase();\\n  const sinAsignar      = item.json.sin_asignar;\\n  const diasIngreso     = item.json.dias_desde_ingreso || 0;\\n  const recienteMensaje = item.json.reciente_mensaje;\\n  const tieneMensaje    = item.json.tiene_mensaje;\\n\\n  // Auto-mensajes del sistema \'97 evaluar una sola vez y reusar\\n  const ultimoMensaje       = String(item.json['Ultimo mensaje'] || '');\\n  const esCambioPrioridad   = /el usuario .+ cambi[o\'f3] la prioridad/i.test(ultimoMensaje);\\n  const esCambioEstatusAuto = /el usuario .+ cambi[o\'f3] (el |la asignaci[o\'f3]n)/i.test(ultimoMensaje);\\n  const esAutoMensaje       = esCambioPrioridad || esCambioEstatusAuto;\\n\\n  // Mensaje autom\'e1tico de cambio de prioridad\\n  if (esCambioPrioridad) \{\\n    item.json.clasificacion = 'SIN ACCION';\\n    item.json.accion = 'CAMBIO DE PRIORIDAD';\\n\\n  // Mensaje autom\'e1tico de cambio de estatus o asignaci\'f3n\\n  \} else if (esCambioEstatusAuto) \{\\n    item.json.clasificacion = 'SIN ACCION';\\n    item.json.accion = 'CAMBIO DE ESTATUS';\\n\\n  // Tickets donde el cliente debe responder\\n  \} else if (estado.includes('ENTREGADO')) \{\\n    item.json.clasificacion = 'CLIENTE PENDIENTE';\\n    item.json.accion = 'NO REQUIERE ATENCION';\\n  \} else if (estado.includes('INFO PENDIENTE CLIENTE')) \{\\n    item.json.clasificacion = 'CLIENTE PENDIENTE';\\n    item.json.accion = 'Esperando respuesta del cliente';\\n\\n  // Tickets sin asignar \'97 posible problema operativo\\n  \} else if (sinAsignar && diasIngreso > 3) \{\\n    item.json.clasificacion = 'VERIFICAR MOTIVO DE NO ASIGNACION';\\n    item.json.accion = 'Sin asignar hace muchos dias - revisar causa';\\n  \} else if (sinAsignar && diasIngreso > 1) \{\\n    item.json.clasificacion = 'SIN ASIGNAR';\\n    item.json.accion = 'Requiere Revision';\\n  \} else if (sinAsignar) \{\\n    item.json.clasificacion = 'SIN ASIGNAR';\\n    item.json.accion = 'Asignar tecnico';\\n\\n  // Tickets activos por urgencia/movimiento\\n  \} else if (orden === 1 && reciente) \{\\n    item.json.clasificacion = 'URGENTE';\\n    item.json.accion = 'Atender inmediatamente';\\n  \} else if (orden <= 2 && reciente) \{\\n    item.json.clasificacion = 'ALTA PRIORIDAD';\\n    item.json.accion = 'Revisar hoy';\\n  \} else if (reciente) \{\\n    item.json.clasificacion = 'RECIENTE';\\n    item.json.accion = 'Validar cambios';\\n  // Mensaje reciente sin atender (tiene prioridad sobre CRITICO SIN MOVIMIENTO)\\n  \} else if (recienteMensaje && tieneMensaje) \{\\n    item.json.clasificacion = 'REQUIERE REVISION';\\n    item.json.accion = 'Mensaje reciente pendiente de revision';\\n\\n  \} else if (orden === 1 && !reciente) \{\\n    item.json.clasificacion = 'CRITICO SIN MOVIMIENTO';\\n    item.json.accion = 'Escalar inmediatamente';\\n\\n  // Otros estados de espera al cliente\\n  \} else if (estado.includes('INFO PENDIENTE')) \{\\n    item.json.clasificacion = 'CLIENTE PENDIENTE';\\n    item.json.accion = 'Esperar respuesta cliente';\\n  \} else \{\\n    item.json.clasificacion = 'SIN ACCION';\\n    item.json.accion = 'No requiere atencion';\\n  \}\\n\\n  // Si el ultimo en modificar fue un empleado FitBank, sobreescribir solo la accion\\n  // (excepto si el \'faltimo mensaje es un auto-mensaje de cambio de prioridad/estatus)\\n  const EMPLEADOS = ['JPHP001','VINC001','MSC001','FSGC001','ORLR001','KIMA001','KDLS001','BMHJ001','DSGS001','JCEO001','CUC001','JFQV001'];\\n  if (!esAutoMensaje && EMPLEADOS.includes(String(item.json['Usuario ultimo mensaje'] || item.json['Usuario ultima modificacion'] || '').trim().toUpperCase()) && !estado.includes('EN PROCESO')) \{\\n    item.json.accion = 'COMENTARIO ENVIADO POR FITBANK';\\n  \}\\n\\n  // Si FitBank coment\'f3 pero el ticket sigue sin asignar, la prioridad es asignar tecnico\\n  if (item.json.accion === 'COMENTARIO ENVIADO POR FITBANK' && item.json.clasificacion === 'SIN ASIGNAR') \{\\n    item.json.accion = 'ASIGNAR TECNICO';\\n  \}\\n\\n  item.json.clasificacion = String(item.json.clasificacion || '').toUpperCase();\\n  item.json.accion        = String(item.json.accion        || '').toUpperCase();\\n\\n  return item;\\n\});"\
+      \},\
+      "id": "bbb29a35-96f9-4b29-8a05-3fb63c38bbb9",\
+      "name": "Clasificar",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        2672,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "const XLSX_PATH = '/usr/local/lib/node_modules/n8n/node_modules/.pnpm/xlsx@https+++cdn.sheetjs.com+xlsx-0.20.2+xlsx-0.20.2.tgz/node_modules/xlsx/xlsx.js';\\nconst XLSX = require(XLSX_PATH);\\n\\nconst CLASIF_COLOR = \{\\n  'URGENTE':                           'FFFF4444',\\n  'CRITICO SIN MOVIMIENTO':            'FFC00000',\\n  'ALTA PRIORIDAD':                    'FFFF8C00',\\n  'RECIENTE':                          'FF2196F3',\\n  'REQUIERE REVISION':                 'FFFF5722',\\n  'CLIENTE PENDIENTE':                 'FF9C27B0',\\n  'VERIFICAR MOTIVO DE NO ASIGNACION': 'FFFF6D00',\\n  'SIN ASIGNAR':                       'FFFFC107',\\n  'SIN ACCION':                        'FF9E9E9E',\\n  'COMENTARIO ENVIADO POR FITBANK':    'FF00897B'\\n\};\\n\\nconst COL_ORDER = [\\n  'Numero ticket','Cliente','Asunto','Fecha ultimo mensaje','Ultimo mensaje',\\n  'Tipo nombre','Tipo','Usuario ingreso','Nombre usuario ingreso',\\n  'Usuario asignado','Nombre usuario asignado','Orden','Estatus',\\n  'Modulo','Fecha asignacion','Fecha ingreso',\\n  'dias_sin_movimiento','dias_desde_ingreso',\\n  'Fecha modificacion','Usuario ultima modificacion','clasificacion','Cliente','accion'\\n];\\n\\nfunction mkStyle(bgArgb, fgArgb, bold, halign) \{\\n  return \{\\n    fill: \{ patternType: 'solid', fgColor: \{ argb: bgArgb \} \},\\n    font: \{ name: 'Arial', sz: bold ? 10 : 9, bold: !!bold, color: \{ argb: fgArgb || 'FF000000' \} \},\\n    alignment: \{ horizontal: halign || 'left', vertical: 'center', wrapText: true \},\\n    border: \{\\n      top:    \{ style: 'thin', color: \{ argb: 'FFBDD7EE' \} \},\\n      bottom: \{ style: 'thin', color: \{ argb: 'FFBDD7EE' \} \},\\n      left:   \{ style: 'thin', color: \{ argb: 'FFBDD7EE' \} \},\\n      right:  \{ style: 'thin', color: \{ argb: 'FFBDD7EE' \} \}\\n    \}\\n  \};\\n\}\\n\\nconst PRIORITY_ACTIONS = new Set([\\n  'ASIGNAR TECNICO',\\n  'REQUIERE REVISION',\\n  'ESCALAR INMEDIATAMENTE',\\n  'ATENDER INMEDIATAMENTE',\\n  'REVISAR HOY'\\n]);\\n\\nfunction buildSheet(rows) \{\\n  const ws = \{\};\\n  const iClasif    = COL_ORDER.indexOf('clasificacion');\\n  const iDias      = COL_ORDER.indexOf('dias_sin_movimiento');\\n  const iDiasIng   = COL_ORDER.indexOf('dias_desde_ingreso');\\n  const iFechaMsg  = COL_ORDER.indexOf('Fecha ultimo mensaje');\\n  const iUltimoMsg = COL_ORDER.indexOf('Ultimo mensaje');\\n\\n  COL_ORDER.forEach((h, c) => \{\\n    const addr = XLSX.utils.encode_cell(\{ r: 0, c \});\\n    ws[addr] = \{ v: h, t: 's' \};\\n    ws[addr].s = mkStyle('FF1F3864', 'FFFFFFFF', true, 'center');\\n  \});\\n\\n  rows.forEach((row, ri) => \{\\n    const bg     = ri % 2 === 0 ? 'FFEBF3FB' : 'FFFFFFFF';\\n    const clasif = String(row['clasificacion'] || '').trim().toUpperCase();\\n    const dias   = parseInt(row['dias_sin_movimiento']) || 0;\\n\\n    COL_ORDER.forEach((col, c) => \{\\n      const addr = XLSX.utils.encode_cell(\{ r: ri + 1, c \});\\n      const val  = row[col] !== undefined && row[col] !== null ? row[col] : '';\\n      const t    = typeof val === 'number' ? 'n' : 's';\\n      ws[addr] = \{ v: val, t \};\\n      ws[addr].s = mkStyle(bg, 'FF000000', false, 'left');\\n\\n      if (c === iClasif && CLASIF_COLOR[clasif]) \{\\n        ws[addr].s.font = \{ name: 'Arial', sz: 9, bold: true, color: \{ argb: CLASIF_COLOR[clasif] \} \};\\n      \}\\n      if (c === iDias) \{\\n        const dc = dias > 7 ? 'FFC00000' : dias > 3 ? 'FFFF8C00' : 'FF2E7D32';\\n        ws[addr].s.font = \{ name: 'Arial', sz: 9, bold: true, color: \{ argb: dc \} \};\\n        ws[addr].s.alignment = \{ horizontal: 'center', vertical: 'center' \};\\n      \}\\n      if (c === iDiasIng) \{\\n        const diasIng = parseInt(row['dias_desde_ingreso']) || 0;\\n        const di = diasIng > 7 ? 'FFC00000' : diasIng > 3 ? 'FFFF8C00' : 'FF2E7D32';\\n        ws[addr].s.font = \{ name: 'Arial', sz: 9, bold: true, color: \{ argb: di \} \};\\n        ws[addr].s.alignment = \{ horizontal: 'center', vertical: 'center' \};\\n      \}\\n      if (c === iFechaMsg && row['reciente_mensaje']) \{\\n        ws[addr].s.fill = \{ patternType: 'solid', fgColor: \{ argb: 'FFFFE0B2' \} \};\\n        ws[addr].s.font = \{ name: 'Arial', sz: 9, bold: true, color: \{ argb: 'FFE65100' \} \};\\n      \}\\n      if (c === iUltimoMsg && row['tiene_mensaje']) \{\\n        ws[addr].s.font = \{ name: 'Arial', sz: 9, bold: true, color: \{ argb: 'FF1A237E' \} \};\\n      \}\\n    \});\\n  \});\\n\\n  ws['!ref']       = XLSX.utils.encode_range(\{ s: \{ r: 0, c: 0 \}, e: \{ r: rows.length, c: COL_ORDER.length - 1 \} \});\\n  ws['!cols']      = COL_ORDER.map(h => \{\\n    let max = h.length;\\n    rows.forEach(row => \{ const l = String(row[h] || '').length; if (l > max) max = l; \});\\n    return \{ wch: Math.min(max + 4, 50) \};\\n  \});\\n  ws['!freeze']    = \{ xSplit: 0, ySplit: 1 \};\\n  ws['!autofilter'] = \{ ref: ws['!ref'] \};\\n  return ws;\\n\}\\n\\n// \uc0\u9472 \u9472  Construir hojas \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \\nconst dataRows = items.map(i => i.json);\\nconst wb = XLSX.utils.book_new();\\n\\nconst prioRows = dataRows.filter(row => PRIORITY_ACTIONS.has(String(row['accion'] || '').trim().toUpperCase()));\\nXLSX.utils.book_append_sheet(wb, buildSheet(prioRows), 'Prioritarios');\\nXLSX.utils.book_append_sheet(wb, buildSheet(dataRows), 'Tickets');\\n\\n// \u9472 \u9472  Estad\'edsticas \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \\nconst stats = \{ total: 0, porClasif: \{\}, porCliente: \{\}, porEstatus: \{\} \};\\ndataRows.forEach(row => \{\\n  const cli = String(row['Cliente']       || '').trim();\\n  const est = String(row['Estatus']       || '').trim();\\n  const cla = String(row['clasificacion'] || '').trim();\\n  if (!cli) return;\\n  stats.total++;\\n  stats.porClasif[cla]  = (stats.porClasif[cla]  || 0) + 1;\\n  stats.porCliente[cli] = (stats.porCliente[cli] || 0) + 1;\\n  stats.porEstatus[est] = (stats.porEstatus[est] || 0) + 1;\\n\});\\n\\nconst wsS = \{\};\\nlet sr = 0;\\n\\nfunction sc(r, c, val, bg, fg, bold, align) \{\\n  const addr = XLSX.utils.encode_cell(\{ r, c \});\\n  wsS[addr] = \{ v: val, t: typeof val === 'number' ? 'n' : 's' \};\\n  wsS[addr].s = mkStyle(bg || 'FFFFFFFF', fg || 'FF000000', bold, align || 'left');\\n\}\\n\\nsc(sr, 1, 'RESUMEN EJECUTIVO - Total tickets activos: ' + stats.total, 'FF1F3864', 'FFFFFFFF', true, 'center');\\nsr += 2;\\n\\nsc(sr, 1, 'POR CLASIFICACION', 'FF2C5F8A', 'FFFFFFFF', true, 'center'); sr++;\\nsc(sr, 1, 'Clasificacion', 'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsc(sr, 2, 'Tickets',       'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsc(sr, 3, '% del Total',   'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsr++;\\n['URGENTE','CRITICO SIN MOVIMIENTO','ALTA PRIORIDAD','RECIENTE','REQUIERE REVISION','CLIENTE PENDIENTE','VERIFICAR MOTIVO DE NO ASIGNACION','SIN ASIGNAR','COMENTARIO ENVIADO POR FITBANK','SIN ACCION'].forEach((cla, i) => \{\\n  const cnt = stats.porClasif[cla] || 0;\\n  const pct = stats.total ? (cnt / stats.total * 100).toFixed(1) + '%' : '0%';\\n  const bg  = i % 2 === 0 ? 'FFEBF3FB' : 'FFFFFFFF';\\n  sc(sr, 1, cla, bg, CLASIF_COLOR[cla] || 'FF000000', true,  'left');\\n  sc(sr, 2, cnt, bg, 'FF000000',                      false, 'center');\\n  sc(sr, 3, pct, bg, 'FF000000',                      false, 'center');\\n  sr++;\\n\});\\nsc(sr, 1, 'TOTAL',     'FF1F3864', 'FFFFFFFF', true, 'center');\\nsc(sr, 2, stats.total, 'FF1F3864', 'FFFFFFFF', true, 'center');\\nsc(sr, 3, '100%',      'FF1F3864', 'FFFFFFFF', true, 'center');\\nsr += 2;\\n\\nsc(sr, 1, 'POR CLIENTE', 'FF2C5F8A', 'FFFFFFFF', true, 'center'); sr++;\\nsc(sr, 1, 'Cliente',     'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsc(sr, 2, 'Tickets',     'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsc(sr, 3, '% del Total', 'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsr++;\\nObject.entries(stats.porCliente).sort((a,b) => b[1]-a[1]).forEach(([cli, cnt], i) => \{\\n  const pct = stats.total ? (cnt / stats.total * 100).toFixed(1) + '%' : '0%';\\n  const bg  = i % 2 === 0 ? 'FFEBF3FB' : 'FFFFFFFF';\\n  sc(sr, 1, cli, bg, 'FF000000', false, 'left');\\n  sc(sr, 2, cnt, bg, 'FF000000', false, 'center');\\n  sc(sr, 3, pct, bg, 'FF000000', false, 'center');\\n  sr++;\\n\});\\nsr++;\\n\\nsc(sr, 1, 'POR ESTATUS', 'FF2C5F8A', 'FFFFFFFF', true, 'center'); sr++;\\nsc(sr, 1, 'Estatus',     'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsc(sr, 2, 'Tickets',     'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsc(sr, 3, '% del Total', 'FF2C5F8A', 'FFFFFFFF', true, 'center');\\nsr++;\\nObject.entries(stats.porEstatus).sort((a,b) => b[1]-a[1]).forEach(([est, cnt], i) => \{\\n  const pct = stats.total ? (cnt / stats.total * 100).toFixed(1) + '%' : '0%';\\n  const bg  = i % 2 === 0 ? 'FFEBF3FB' : 'FFFFFFFF';\\n  sc(sr, 1, est, bg, 'FF000000', false, 'left');\\n  sc(sr, 2, cnt, bg, 'FF000000', false, 'center');\\n  sc(sr, 3, pct, bg, 'FF000000', false, 'center');\\n  sr++;\\n\});\\n\\nwsS['!ref']  = XLSX.utils.encode_range(\{ s: \{ r: 0, c: 0 \}, e: \{ r: sr, c: 4 \} \});\\nwsS['!cols'] = [\{ wch: 3 \}, \{ wch: 34 \}, \{ wch: 12 \}, \{ wch: 14 \}];\\nXLSX.utils.book_append_sheet(wb, wsS, 'Estadisticas');\\n\\n// \u9472 \u9472  Escribir y devolver \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \u9472 \\nconst outBuffer = XLSX.write(wb, \{ type: 'buffer', bookType: 'xlsx', cellStyles: true \});\\nconst base64 = outBuffer.toString('base64');\\n\\nreturn [\{\\n  json: \{ success: true, totalTickets: stats.total \},\\n  binary: \{\\n    data: \{\\n      data: base64,\\n      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',\\n      fileName: 'reporte_helpdesk.xlsx',\\n      fileExtension: 'xlsx'\\n    \}\\n  \}\\n\}];"\
+      \},\
+      "id": "eaafbb26-e29e-49f7-b7ef-275611aa1d01",\
+      "name": "Formatear Excel",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        2880,\
+        80\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "url": "=\{\{ 'https://helpdesk-api.fit-bank.com/api/v1/tickets/' + $json['Numero ticket'] + '/messages?limit=50' \}\}",\
+        "sendHeaders": true,\
+        "headerParameters": \{\
+          "parameters": [\
+            \{\
+              "name": "Authorization",\
+              "value": "=\{\{ 'Bearer ' + $('Login API').first().json.access_token \}\}"\
+            \}\
+          ]\
+        \},\
+        "options": \{\
+          "response": \{\
+            "response": \{\
+              "responseFormat": "text",\
+              "outputPropertyName": "messages_raw"\
+            \}\
+          \}\
+        \}\
+      \},\
+      "id": "0463b185-69bf-4962-875f-f4890bfa96f6",\
+      "name": "Obtener Mensajes",\
+      "type": "n8n-nodes-base.httpRequest",\
+      "typeVersion": 4.2,\
+      "position": [\
+        1872,\
+        208\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "const AUTO_PATTERN = /el usuario .+ (cambi[o\'f3]|ualiz\'f3 .+ asun)/i;\\n\\nfunction stripHtml(str) \{\\n  return String(str || '')\\n    .replace(/<[^>]*>/g, '')\\n    .replace(/&nbsp;/gi, ' ')\\n    .replace(/&amp;/gi, '&')\\n    .replace(/&lt;/gi, '<')\\n    .replace(/&gt;/gi, '>')\\n    .replace(/&quot;/gi, '\\"')\\n    .replace(/\\\\s+/g, ' ')\\n    .trim();\\n\}\\n\\nconst ticketsOriginales = $items('Filtrar Estados');\\n\\nreturn items.map((item, i) => \{\\n  const original = ticketsOriginales[i] ? \{ ...ticketsOriginales[i].json \} : \{\};\\n\\n  let mensajes = [];\\n  try \{\\n    const raw = item.json.messages_raw || '[]';\\n    mensajes = JSON.parse(raw);\\n    if (!Array.isArray(mensajes)) mensajes = [];\\n  \} catch(e) \{\}\\n\\n  let encontrado = false;\\n  for (let j = mensajes.length - 1; j >= 0; j--) \{\\n    const m = mensajes[j];\\n    if (\\n      m.system_message === false &&\\n      m.detail && String(m.detail).trim() &&\\n      !AUTO_PATTERN.test(m.detail)\\n    ) \{\\n      original['Ultimo mensaje']         = stripHtml(m.detail);\\n      original['Fecha ultimo mensaje']   = m.entry_date;\\n      original['Usuario ultimo mensaje'] = m.entry_user_id;\\n      encontrado = true;\\n      break;\\n    \}\\n  \}\\n\\n  if (!encontrado) \{\\n    original['Usuario ultimo mensaje'] = original['Usuario ultima modificacion'] || '';\\n  \}\\n\\n  return \{ json: original \};\\n\});\\n"\
+      \},\
+      "id": "72d8a67b-7c4b-4b64-93e7-71353bece7bf",\
+      "name": "Aplicar Mensajes",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        2080,\
+        208\
+      ]\
+    \},\
+    \{\
+      "parameters": \{\
+        "functionCode": "return [\{json:\{offset:0\}\},\{json:\{offset:40\}\},\{json:\{offset:80\}\},\{json:\{offset:120\}\},\{json:\{offset:160\}\},\{json:\{offset:200\}\}];"\
+      \},\
+      "id": "96620c77-d3de-48d5-a31d-7d862eeea9a7",\
+      "name": "Set P\'e1ginas",\
+      "type": "n8n-nodes-base.function",\
+      "typeVersion": 1,\
+      "position": [\
+        480,\
+        80\
+      ]\
+    \}\
+  ],\
+  "connections": \{\
+    "Disparador Manual": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Set Fechas",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Set Fechas": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Login API",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Login API": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Set P\'e1ginas",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Obtener Reporte": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Dividir Tickets",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Dividir Tickets": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Reasignar Columnas",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Reasignar Columnas": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Filtrar Clientes",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Filtrar Clientes": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Filtrar Estados",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Filtrar Estados": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Obtener Mensajes",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Evaluar Fecha": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Clasificar",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Clasificar": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Formatear Excel",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Obtener Mensajes": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Aplicar Mensajes",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Aplicar Mensajes": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Evaluar Fecha",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \},\
+    "Set P\'e1ginas": \{\
+      "main": [\
+        [\
+          \{\
+            "node": "Obtener Reporte",\
+            "type": "main",\
+            "index": 0\
+          \}\
+        ]\
+      ]\
+    \}\
+  \},\
+  "pinData": \{\},\
+  "meta": \{\
+    "instanceId": "3f1f6203e601ef16f8c5f42d5310ccb88ae9538e27c5796bc9816066840d25c6"\
+  \}\
+\}}

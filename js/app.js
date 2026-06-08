@@ -1,24 +1,93 @@
 const SESSION_KEY = 'fit-daily_session';
 
-// One-shot migration: rescatar sesión del nombre antiguo
+// One-shot migration:
+// (1) nombre legado fitscrum_session → fit-daily_session
+// (2) sessionStorage (por pestaña) → localStorage (compartido entre pestañas)
 (function _migrateLegacySession() {
-  const old = sessionStorage.getItem('fitscrum_session');
-  if (old && !sessionStorage.getItem(SESSION_KEY)) {
-    sessionStorage.setItem(SESSION_KEY, old);
-    sessionStorage.removeItem('fitscrum_session');
+  // (1) renombrar legado si existe
+  const legacy = sessionStorage.getItem('fitscrum_session')
+              || localStorage.getItem('fitscrum_session');
+  if (legacy && !localStorage.getItem(SESSION_KEY)) {
+    localStorage.setItem(SESSION_KEY, legacy);
   }
+  sessionStorage.removeItem('fitscrum_session');
+  localStorage.removeItem('fitscrum_session');
+
+  // (2) si quedó sesión en sessionStorage de una versión vieja, moverla a localStorage
+  const fromSession = sessionStorage.getItem(SESSION_KEY);
+  if (fromSession && !localStorage.getItem(SESSION_KEY)) {
+    localStorage.setItem(SESSION_KEY, fromSession);
+  }
+  sessionStorage.removeItem(SESSION_KEY);
 })();
 
 const App = (() => {
   let _currentView    = 'board';
   let _currentSprint  = null;
   let _session        = null;
+  let _hdUsersCache   = null; // [{ id, name }] — usuarios del Helpdesk
+
+  // Base URL del proxy Helpdesk (mismo patrón que usan los otros módulos)
+  function _hdBase() {
+    return (window.HELPDESK_PROXY_URL && !window.HELPDESK_PROXY_URL.includes('TU-WORKER'))
+      ? window.HELPDESK_PROXY_URL + '/api/v1'
+      : 'http://localhost:3001/api/v1';
+  }
+
+  // fetch con auth que NO redirige en 401/403 (a diferencia de HelpdeskAuth.fetchWithAuth)
+  // Se usa para operaciones de escritura "best-effort" donde fallar es aceptable.
+  async function _hdFetchSafe(url, opts = {}) {
+    try {
+      const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      const token = s && s.token;
+      const headers = { ...(opts.headers || {}) };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const r = await fetch(url, { ...opts, headers });
+      return r;
+    } catch (e) {
+      console.warn('[HD fetch-safe]', url, e);
+      return { ok: false, status: 0 };
+    }
+  }
+
+  // Lista de usuarios asignables — empleados del Helpdesk descubiertos desde
+  // los tickets sincronizados. Sin cache propio: HelpdeskPanel ya cachea en
+  // localStorage. Si está vacía (primer arranque sin sync) cae al users.json local.
+  async function _fetchHdUsers() {
+    let users = (typeof HelpdeskPanel !== 'undefined' && HelpdeskPanel.getHdUsers)
+      ? HelpdeskPanel.getHdUsers()
+      : [];
+    if (!users.length) {
+      // Fallback: usuarios locales (IDs cortos — sincronización HD no funcionará
+      // hasta que se haga un ↻ Sincronizar para llenar la lista real)
+      users = AppData.getTeam().map(u => ({ id: u.id, name: u.name }));
+    }
+    _hdUsersCache = users.slice().sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    return _hdUsersCache;
+  }
+
+  // Invalidar el cache para que el próximo open del modal recarga la lista
+  // (llamado después de ↻ Sincronizar para que aparezcan usuarios recién descubiertos)
+  function _invalidateHdUsersCache() { _hdUsersCache = null; }
+
+  // PATCH asignación del ticket en el Helpdesk (solo si la tarea tiene ticket)
+  // Usa _hdFetchSafe para que un 401/403/404 no cierre sesión.
+  async function _assignHdTicket(ticketId, userId) {
+    if (!ticketId || !userId) return;
+    const r = await _hdFetchSafe(
+      `${_hdBase()}/tickets/tickets/${ticketId}`,
+      { method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigned_user_id: userId }) }
+    );
+    if (!r.ok) console.warn('[HD assign] no se pudo asignar ticket', ticketId, r.status);
+  }
 
   async function init() {
-    _session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+    _session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
     // Sesión inválida o legacy sin token → forzar re-login con credenciales reales
     if (!_session || !_session.token) {
-      sessionStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SESSION_KEY);
       window.location.href = 'login.html';
       return;
     }
@@ -61,6 +130,12 @@ const App = (() => {
       document.body.classList.add('can-delete-cards');
     }
 
+    // Mover cards ajenas: solo Helpdesk admin o Supervisor.
+    // Otros roles (SOPORTE, etc.) solo mueven sus propias tareas.
+    if (isHelpdesk || isSupervisor) {
+      document.body.classList.add('can-move-all-cards');
+    }
+
     // Borrar board completo: solo Helpdesk
     if (isHelpdesk) {
       document.body.classList.add('can-delete-board');
@@ -71,6 +146,12 @@ const App = (() => {
     console.log('[App] Sesión activa:', { id: _session.id, role: _session.role, apiRole: _session.apiRole, isHelpdesk, isSupervisor });
 
     refreshBoard();
+
+    // Sync en tiempo real: detectar cambios de otros usuarios cada 30s
+    AppData.startPolling(() => {
+      refreshBoard();
+      refreshBanner();
+    }, 30000);
   }
 
   // ── Borrar TODAS las tareas del sprint actual (solo MSC001) ──
@@ -108,7 +189,7 @@ const App = (() => {
 
     document.getElementById('btn-logout').addEventListener('click', async () => {
       try { await HelpdeskAuth.logout(); } catch (_) {}
-      sessionStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SESSION_KEY);
       window.location.href = 'login.html';
     });
   }
@@ -510,18 +591,22 @@ const App = (() => {
           const clientSelect = document.getElementById('ns-client');
           if (result.client) {
             clientSelect.value = result.client;
-          } else {
-            status.className   = 'ticket-search-status warn';
-            status.textContent = `Cliente "${result.clientRaw}" no mapeado — selecciónalo manualmente.`;
+          } else if (result.clientRaw) {
+            // Cliente no mapeado → agregar opción dinámica con el nombre crudo
+            _ensureUnmappedClientOption(clientSelect, result.clientRaw);
+            clientSelect.value = result.clientRaw;
           }
 
           // Prioridad
           document.getElementById('ns-priority').value = result.priority;
 
-          if (result.client) {
-            status.className   = 'ticket-search-status ok';
-            status.textContent = `✓ Ticket encontrado — datos cargados automáticamente.`;
-          }
+          // Estatus del Helpdesk → define columna del board al crear (review/proceso/esperando)
+          document.getElementById('ns-hd-estatus').value = result.estatus || '';
+
+          status.className   = 'ticket-search-status ok';
+          status.textContent = result.client
+            ? `✓ Ticket encontrado — datos cargados automáticamente.`
+            : `✓ Ticket encontrado — cliente "${result.clientRaw}" cargado (no mapeado).`;
         }
       } catch (err) {
         status.className   = 'ticket-search-status error';
@@ -534,31 +619,154 @@ const App = (() => {
       }
     }
 
+    // Inserta una opción en el select de cliente cuando llega un cliente del Helpdesk
+    // que no está en CLIENT_MAP. Evita duplicados.
+    function _ensureUnmappedClientOption(sel, rawName) {
+      if (!sel || !rawName) return;
+      if ([...sel.options].some(o => o.value === rawName)) return;
+      const opt = document.createElement('option');
+      opt.value = rawName;
+      opt.textContent = `${rawName} (no mapeado)`;
+      opt.dataset.unmapped = '1';
+      sel.appendChild(opt);
+    }
+
     function _populateTaskForm() {
       // Listado de clientes válidos del Helpdesk (los mismos que filtran la tabla del panel)
       const clients = HelpdeskPanel.getValidClients();
       document.getElementById('ns-client').innerHTML =
         `<option value="">Seleccionar cliente...</option>` +
         clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-      document.getElementById('ns-assignee').innerHTML =
-        team.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+      // Asignados: dropdown buscable con usuarios del Helpdesk
+      const search = document.getElementById('ns-assignee-search');
+      const hidden = document.getElementById('ns-assignee');
+      const list   = document.getElementById('ns-assignee-list');
+      if (search) search.value = '';
+      if (hidden) hidden.value = '';
+      if (list)   list.innerHTML = '<div class="searchable-loading">Cargando...</div>';
+      _fetchHdUsers().then(users => {
+        if (list) _renderAssigneeList(users, '');
+      });
+
       document.getElementById('ticket-search-status').textContent = '';
       document.getElementById('ticket-search-status').className = 'ticket-search-status';
       _lastSearched = '';
       clearTimeout(_autoSearchTimer);
     }
 
+    // Dropdown buscable: render del listado filtrado
+    function _renderAssigneeList(users, filter) {
+      const list = document.getElementById('ns-assignee-list');
+      if (!list) return;
+      const norm = (s) => String(s || '').toLowerCase();
+      const f = norm(filter);
+      const filtered = f
+        ? users.filter(u => norm(u.name).includes(f) || norm(u.id).includes(f))
+        : users;
+      if (!filtered.length) {
+        list.innerHTML = '<div class="searchable-empty">Sin coincidencias</div>';
+        return;
+      }
+      list.innerHTML = filtered.map(u =>
+        `<div class="searchable-item" data-id="${u.id}" data-name="${u.name.replace(/"/g,'&quot;')}">
+           <span class="searchable-item-name">${u.name}</span>
+           <span class="searchable-item-id">${u.id}</span>
+         </div>`
+      ).join('');
+    }
+
+    // Wire-up del dropdown buscable (una sola vez)
+    (function _setupAssigneeDropdown() {
+      const wrap   = document.getElementById('ns-assignee-wrap');
+      const search = document.getElementById('ns-assignee-search');
+      const hidden = document.getElementById('ns-assignee');
+      const list   = document.getElementById('ns-assignee-list');
+      if (!wrap || !search || !hidden || !list) {
+        console.warn('[Assignee dropdown] elementos no encontrados', { wrap, search, hidden, list });
+        return;
+      }
+      console.log('[Assignee dropdown] wire-up OK');
+
+      // Render usando el cache (si existe) o disparando la carga
+      const showList = () => {
+        wrap.classList.add('open');
+        if (_hdUsersCache) {
+          _renderAssigneeList(_hdUsersCache, search.value);
+        } else {
+          list.innerHTML = '<div class="searchable-loading">Cargando empleados...</div>';
+          _fetchHdUsers().then(users => {
+            if (wrap.classList.contains('open')) _renderAssigneeList(users, search.value);
+          });
+        }
+      };
+      search.addEventListener('focus', showList);
+      search.addEventListener('click', showList);
+
+      // Filtrar al escribir + limpiar selección previa si ya no coincide
+      search.addEventListener('input', () => {
+        wrap.classList.add('open');
+        if (_hdUsersCache) {
+          _renderAssigneeList(_hdUsersCache, search.value);
+          const exact = _hdUsersCache.find(u => u.name === search.value);
+          hidden.value = exact ? exact.id : '';
+        }
+      });
+
+      // Seleccionar al hacer clic en una fila
+      list.addEventListener('mousedown', e => {
+        const item = e.target.closest('.searchable-item');
+        if (!item) return;
+        e.preventDefault(); // evita que el input pierda el foco antes de leer el dataset
+        search.value = item.dataset.name;
+        hidden.value = item.dataset.id;
+        wrap.classList.remove('open');
+      });
+
+      // Cerrar al hacer clic fuera
+      document.addEventListener('click', e => {
+        if (!wrap.contains(e.target)) wrap.classList.remove('open');
+      });
+
+      // Cerrar con Escape
+      search.addEventListener('keydown', e => {
+        if (e.key === 'Escape') wrap.classList.remove('open');
+      });
+    })();
+
     document.getElementById('form-new-story').addEventListener('submit', e => {
       e.preventDefault();
+      const ticketNum  = document.getElementById('ns-ticket').value.trim();
+      const assigneeId = document.getElementById('ns-assignee').value || null;
+      const hdEstatus  = String(document.getElementById('ns-hd-estatus').value || '').toUpperCase().trim();
+
+      let boardStatus    = 'todo';
+      let waitingClient  = false;
+      let waitingDate    = null;
+      if (hdEstatus.includes('INSTALADO PARA CERTIFICACIÓN') || hdEstatus.includes('INSTALADO PARA CERTIFICACION')) {
+        boardStatus = 'review';
+      } else if (hdEstatus.includes('INFO PENDIENTE CLIENTE')) {
+        boardStatus   = 'in_progress';
+        waitingClient = true;
+        waitingDate   = new Date().toISOString().slice(0, 10);
+      } else if (hdEstatus.includes('EN PROCESO')) {
+        boardStatus = 'in_progress';
+      }
+
       AppData.addStory({
-        ticket:      document.getElementById('ns-ticket').value.trim(),
-        client:      document.getElementById('ns-client').value || null,
-        title:       document.getElementById('ns-title').value.trim(),
-        description: document.getElementById('ns-description').value.trim(),
-        assignee:    document.getElementById('ns-assignee').value || null,
-        dueDate:     document.getElementById('ns-duedate').value,
-        priority:    document.getElementById('ns-priority').value,
+        ticket:        ticketNum,
+        client:        document.getElementById('ns-client').value || null,
+        title:         document.getElementById('ns-title').value.trim(),
+        description:   document.getElementById('ns-description').value.trim(),
+        assignee:      assigneeId,
+        dueDate:       document.getElementById('ns-duedate').value,
+        priority:      document.getElementById('ns-priority').value,
+        status:        boardStatus,
+        waitingClient: waitingClient,
+        waitingDate:   waitingDate,
       });
+      // Si la tarea tiene ticket asociado → notificar asignación al Helpdesk
+      if (ticketNum && assigneeId) _assignHdTicket(ticketNum, assigneeId);
       document.getElementById('modal-new-story').classList.add('hidden');
       e.target.reset();
       refreshBoard();
@@ -620,7 +828,17 @@ const App = (() => {
     });
   }
 
-  return { init, refreshBoard, refreshBurndown, refreshProgreso, refreshConsultas, refreshHelpdeskPanel, refreshSolPanel, refreshSemanal, refreshPendientes, refreshUsuariosPizza, refreshBanner };
+  return {
+    init, refreshBoard, refreshBurndown, refreshProgreso, refreshConsultas,
+    refreshHelpdeskPanel, refreshSolPanel, refreshSemanal, refreshPendientes,
+    refreshUsuariosPizza, refreshBanner,
+    // Helpers HD compartidos con board.js / helpdesk-panel.js
+    hdBase: _hdBase,
+    hdFetchSafe: _hdFetchSafe,
+    fetchHdUsers: _fetchHdUsers,
+    assignHdTicket: _assignHdTicket,
+    getSession: () => _session,
+  };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);

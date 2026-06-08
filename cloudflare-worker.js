@@ -13,13 +13,13 @@
 
 const CORS = {
   'Access-Control-Allow-Origin':   '*',
-  'Access-Control-Allow-Methods':  'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods':  'GET, POST, PATCH, OPTIONS',
   'Access-Control-Allow-Headers':  'Content-Type, Authorization',
   'Access-Control-Expose-Headers': 'Content-Disposition, Content-Type, Content-Length',
   'Access-Control-Max-Age':        '86400',
 };
 
-const ALLOWED_METHODS    = new Set(['GET', 'POST', 'OPTIONS', 'HEAD']);
+const ALLOWED_METHODS    = new Set(['GET', 'POST', 'PATCH', 'OPTIONS', 'HEAD']);
 const PASSTHROUGH_HEADERS = ['content-type', 'content-disposition', 'content-length'];
 
 function _buildResponse(body, upstreamResp) {
@@ -42,7 +42,7 @@ export default {
     if (!ALLOWED_METHODS.has(request.method)) {
       return new Response(
         JSON.stringify({ error: `Método ${request.method} no permitido.` }),
-        { status: 405, headers: { ...CORS, 'Content-Type': 'application/json', 'Allow': 'GET, POST' } },
+        { status: 405, headers: { ...CORS, 'Content-Type': 'application/json', 'Allow': 'GET, POST, PATCH' } },
       );
     }
 

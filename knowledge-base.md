@@ -36,8 +36,12 @@ Reemplazar el seguimiento manual de tareas por un board Kanban integrado con el 
 | `js/burndown.js` | Gráfico burndown + métricas + velocidad de equipo |
 | `js/progreso.js` | Vista de registro de avances |
 | `js/consultas.js` | Vista de consultas y bloqueos |
-| `js/helpdesk.js` | Cliente API Helpdesk (lookup de tickets, auth JWT) |
-| `js/helpdesk-panel.js` | Vista tabla Helpdesk con estadísticas y notas inline |
+| `js/helpdesk.js` | Cliente API Helpdesk (lookup de tickets para asociar a tareas) |
+| `js/helpdesk-auth.js` | Auth del Helpdesk por usuario: `login`/`logout`/`fetchWithAuth` (token de la sesión) |
+| `js/helpdesk-panel.js` | Vista tabla Helpdesk: sync, clasificación, estadísticas, notas inline, filtros |
+| `js/semanal.js` | Vista "HelpDesk Semanal": asignación semanal de consultor (calendario por semanas) |
+| `js/pendientes.js` | Vista "Pendientes": tickets marcados como pendientes |
+| `js/usuarios-pizza.js` | Vista "TUsuariosPizza": registro de penalizaciones (vacaciones >15 días / atentado) |
 | `js/sol-panel.js` | Panel Scrum Master (Mi Panel) |
 | `data/users.json` | Equipo (estático) |
 | `data/clients.json` | Clientes (estático) |
@@ -223,7 +227,10 @@ Estructura del JSON raíz de sprints:
 
 ## 7. Clientes y mapeo Helpdesk
 
-El `CLIENT_MAP` en `js/helpdesk.js` traduce el nombre de la API al ID interno:
+Hay **dos estructuras** de clientes, ambas en `js/helpdesk-panel.js` (y una copia parcial de `CLIENT_MAP` en `js/helpdesk.js`):
+
+- **`CLIENTES_VALIDOS`** (`Set`): filtro del sync. Solo los tickets cuyo `cliente` (uppercase, trim) esté en este Set entran a la tabla Helpdesk. Variantes con/sin tilde se listan por separado (ej. `SENOR` y `SEÑOR`).
+- **`CLIENT_MAP`** (objeto nombre→ID): traduce el nombre del API al ID interno usado al asociar un ticket a una tarea / modal de cliente.
 
 | Nombre en API Helpdesk | ID interno |
 |---|---|
@@ -238,6 +245,11 @@ El `CLIENT_MAP` en `js/helpdesk.js` traduce el nombre de la API al ID interno:
 | BANCO DEL AUSTRO | `austro` |
 | VAZCREDIT | `vazcredit` |
 | COAC SENOR DE GIRON / COAC SEÑOR DE GIRON | `giron` |
+| FININVEST OVERSEAS INC. LTD. | `fininvest` |
+| SEGURA COOP | `segura` |
+| PUNTOPRESTAMO | `puntoprestamo` |
+
+> Para agregar un cliente hay que añadirlo **en ambas** estructuras (`CLIENTES_VALIDOS` y `CLIENT_MAP`) o no aparecerá en la tabla. Hoy los 15 clientes están en las dos.
 
 ---
 
@@ -290,14 +302,31 @@ todo → in_progress → review (EN CERTIFICACIÓN) → done
 
 ## 9. Vistas y navegación
 
-| Tab | Vista | Descripción |
+La barra superior agrupa las vistas en **dos dropdowns** (`.nav-dropdown`) más una tab suelta. En ≤768px se replica en un **sidebar responsive** (`.sidebar-item`, mismo `data-view`). Cada item navega por su atributo `data-view`.
+
+**Dropdown "Scrum":**
+
+| Tab | data-view | Descripción |
 |---|---|---|
-| Board | `view-board` | Kanban 4 columnas + filtros por prioridad, asignado, cliente |
-| Burndown | `view-burndown` | Gráfico burndown + métricas KPI + velocidad del equipo |
-| Progreso | `view-progreso` | Registro de avances por historia |
-| Consultas | `view-consultas` | Consultas y bloqueos del equipo |
-| Helpdesk | `view-helpdesk` | Tabla Excel de tickets Helpdesk + estadísticas + notas inline |
-| Mi Panel | `view-sol` | Panel Scrum Master — solo visible si `role === 'Scrum Master'` |
+| Board | `board` | Kanban 4 columnas + filtros por prioridad, asignado, cliente |
+| Burndown | `burndown` | Gráfico burndown + métricas KPI + velocidad del equipo |
+| Progreso | `progreso` | Registro de avances por historia |
+| Consultas | `consultas` | Consultas y bloqueos del equipo |
+
+**Dropdown "HelpDesk":**
+
+| Tab | data-view | Descripción |
+|---|---|---|
+| Tickets | `helpdesk` | Tabla Excel de tickets Helpdesk: sync, clasificación, estadísticas, notas, filtros |
+| HelpDesk Semanal | `semanal` | Calendario de asignación semanal de consultor de guardia |
+| Mi Panel | `sol` | Panel Scrum Master — oculto por defecto (`.nav-tab-sol .hidden`), visible para Scrum Master o Helpdesk MSC001 |
+| Pendientes | `pendientes` | Tickets marcados como pendientes (`hdPendientes`) |
+
+**Tab suelta:**
+
+| Tab | data-view | Descripción |
+|---|---|---|
+| TUsuariosPizza | `tusuariospizza` | Registro de penalizaciones — oculto por defecto (`.nav-tab-pizza .hidden`), visible solo para MSC001 |
 
 ---
 
@@ -316,12 +345,42 @@ KPIs numéricos en la parte superior correspondientes a cada bloque.
 
 ---
 
-## 11. Helpdesk — integración API
+## 11. Helpdesk — autenticación e integración API
 
-- **Credenciales:** usuario `HELPDESK1`, password `MtRuLxgDz6q5` (token JWT, se cachea 50 min en sessionStorage).
+### Autenticación por usuario (ya NO hay credencial compartida)
+
+Cada persona inicia sesión en `login.html` con **sus propias credenciales del Helpdesk** — el credencial fijo `HELPDESK1` quedó eliminado. Flujo (`js/helpdesk-auth.js`):
+
+1. `HelpdeskAuth.login(usuario, pass)` → `POST /auth/login` (`force_logout: 'true'`) devuelve `access_token`.
+2. `GET /users/me` con ese token → `profile`.
+3. La sesión se guarda en `localStorage` bajo `fit-daily_session`:
+   ```js
+   { id, name, role, apiRole: profile.role_description, token, ... }
+   ```
+   - `role` → rol local de Fit-Daily (de `users.json` si el usuario existe ahí, si no `role_description` o `'Usuario'`).
+   - `apiRole` → `role_description` del Helpdesk, **autoritativo para permisos**.
+4. `App.init()` redirige a `login.html` si no hay sesión con `token`.
+5. `HelpdeskAuth.fetchWithAuth` adjunta el `Bearer` token; ante **401/403** borra la sesión y redirige al login. `App._hdFetchSafe` es la variante "best-effort" que NO redirige (para escrituras donde fallar es aceptable).
+
+### Lookup e integración
+
 - **Prioridad API → interna:** `1-2` → alta, `3` → media, `4+` → baja.
-- **Lookup de ticket:** primero intenta endpoint directo `GET /tickets/:id`; si falla busca en listado paginado (2 páginas, 40 items c/u, orden `modified_date_order=desc`).
-- **Proxy:** en producción usa `HELPDESK_PROXY_URL` (Cloudflare Worker). En desarrollo usa `http://localhost:3001`.
+- **Lookup de ticket** (`js/helpdesk.js`): primero `GET /tickets/:id`; si falla busca en listado paginado (2 páginas, 40 items, `modified_date_order=desc`).
+- **Asignación:** `PATCH /tickets/tickets/:id` con `{ assigned_user_id }` (vía `_hdFetchSafe`).
+- **Usuarios asignables:** se descubren desde los tickets sincronizados (`HelpdeskPanel.getHdUsers()`); fallback a `users.json` si aún no se hizo un ↻ Sincronizar.
+- **Proxy:** producción = Cloudflare Worker `HELPDESK_PROXY_URL`; desarrollo = `http://localhost:3001` (`proxy.py`).
+
+---
+
+## 11.b Panel Helpdesk — clasificación de tickets
+
+`js/helpdesk-panel.js` clasifica cada ticket sincronizado y le asigna color y orden. Constantes clave:
+
+- **`CLASIF_ORDER` / `CLASIF_COLOR`** — categorías ordenadas por urgencia: `URGENTE`, `CRITICO SIN MOVIMIENTO`, `ALTA PRIORIDAD`, `RECIENTE`, `REQUIERE REVISION`, `CLIENTE PENDIENTE`, `VERIFICAR MOTIVO DE NO ASIGNACION`, `SIN ASIGNAR`, `COMENTARIO ENVIADO POR FITBANK`, `SIN ACCION`.
+- **`PRIORITY_ACTIONS`** (`Set`) — acciones que marcan prioridad: `ASIGNAR TECNICO`, `REQUIERE REVISION`, `ESCALAR INMEDIATAMENTE`, `ATENDER INMEDIATAMENTE`, `REVISAR HOY`.
+- **`EMPLEADOS`** (`Set` de user_ids) — IDs del equipo de soporte para distinguir mensajes de empleado vs cliente (vía `entry_user_role` del API): `JPHP001, VINC001, MSC001, FSGC001, ORLR001, KIMA001, KDLS001, BMHJ001, DSGS001, JCEO001, CUC001, JFQV001`.
+- **Renombre de estatus en pantalla** (solo display): `APROBADO` → **CLIENTE CONTENTO 😊**, `DEVUELTO` → **TÉCNICO TRISTE 😢**.
+- La tabla tiene **filtro por Estatus**, búsqueda remota automática y un botón **Limpiar** siempre visible.
 
 ---
 
@@ -329,29 +388,74 @@ KPIs numéricos en la parte superior correspondientes a cada bloque.
 
 | Clave | Contenido |
 |---|---|
-| `fit-daily_v1` | Fallback cuando Firebase no está configurado (sprints, stories, progress, queries) |
-| `fit-daily_session` | Sesión del usuario logueado (sessionStorage) |
+| `fit-daily_v1` | Fallback cuando Firebase no está configurado (sprints, stories, progress, queries, weeklySupport, hdPendientes) |
+| `fit-daily_session` | Sesión del usuario logueado — **`localStorage`** (compartida entre pestañas), incluye `token` y `apiRole` |
 | `fit-daily_hd_actions` | Tickets marcados con "Acción pendiente" `{ ticketId: true }` (también en Firebase) |
 | `fit-daily_hd_notes` | Notas inline de tickets Helpdesk `{ ticketId: "texto" }` (también en Firebase) |
 | `fit-daily_sol_notes` | Notas del panel Sol para tickets de cliente pendiente (también en Firebase) |
 
-> El token JWT del Helpdesk ya no se guarda en el cliente — lo gestiona el Cloudflare Worker con secrets.
-> La migración de claves `fitscrum_*` → `fit-daily_*` ocurre automáticamente al cargar la app.
+> La sesión migró de `sessionStorage` (por pestaña) → `localStorage` (compartida entre pestañas); la migración de `fitscrum_session`/`fit-daily_session` ocurre automáticamente al cargar la app.
+> El token del Helpdesk vive en la sesión local (lo necesita `fetchWithAuth`); las llamadas pasan por el Cloudflare Worker.
 
 ---
 
 ## 13. Configuración para deploy
 
-Editar `js/firebase-config.js` antes de subir:
+`js/firebase-config.js` **auto-detecta el entorno** por `window.location.hostname`:
 
 ```js
-window.FIREBASE_DB_URL   = 'https://TU-PROYECTO-default-rtdb.firebaseio.com';
-window.HELPDESK_PROXY_URL = 'https://TU-WORKER.workers.dev';
+const _IS_LOCALHOST = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+// LOCAL  → 'TU-PROYECTO...' (fuerza fallback a localStorage, NO toca Firebase de prod)
+// PROD   → URL real
+window.FIREBASE_DB_URL = _IS_LOCALHOST
+  ? 'https://TU-PROYECTO-default-rtdb.firebaseio.com'
+  : 'https://fit-daily-ab113-default-rtdb.firebaseio.com';
+
+window.HELPDESK_PROXY_URL = _IS_LOCALHOST
+  ? 'http://localhost:3001'
+  : 'https://fit-daily-proxy.contreras-sol-4to5.workers.dev';
 ```
 
-Firebase detecta si está configurado comprobando que la URL no contenga `'TU-PROYECTO'`. Igual para el proxy con `'TU-WORKER'`.
+- En **local** los datos se aíslan en `localStorage` (no se escribe a Firebase de producción) y el proxy es `proxy.py` en `localhost:3001`.
+- `data.js` detecta "configurado" comprobando que la URL no contenga `'TU-PROYECTO'`; el proxy con `'TU-WORKER'`.
+- En Firebase los datos se guardan bajo `/fit-daily/` con subclaves: `sprints`, `stories`, `progress`, `queries`, `weeklySupport`, `hdActions`, `hdNotes`, `solNotes`, `hdPendientes`.
 
-En Firebase los datos se guardan bajo el nodo `/fit-daily/` con subclaves: `sprints`, `stories`, `progress`, `queries`, `weeklySupport`, `hdActions`, `hdNotes`, `solNotes`.
+### Cache-busting
+
+Todos los assets en `index.html`/`login.html` llevan sufijo `?v=N` (actualmente `?v=16`) + meta `no-cache`. **Al hacer cambios de JS/CSS hay que subir el número de versión** para invalidar el cache de GitHub Pages.
+
+---
+
+## 13.b Roles y permisos
+
+Los permisos se resuelven en `App.init()` ([js/app.js:111](js/app.js#L111)) a partir de la sesión:
+
+- **`isHelpdesk`** = `id === 'MSC001'` (rol Helpdesk admin propio de Fit-Daily).
+- **`isSupervisor`** = `apiRole` (del Helpdesk) contiene `'SUPERVISOR'`.
+
+| Capacidad | Quién | Implementación |
+|---|---|---|
+| Tab "Mi Panel" | Scrum Master o `isHelpdesk` | quita `.hidden` de `.nav-tab-sol` |
+| Tab "TUsuariosPizza" | solo `isHelpdesk` | quita `.hidden` de `.nav-tab-pizza` |
+| Borrar tarjeta individual | `isHelpdesk` o `isSupervisor` | `body.can-delete-cards` |
+| Mover tarjetas ajenas | `isHelpdesk` o `isSupervisor` | `body.can-move-all-cards` |
+| Borrar board completo | solo `isHelpdesk` | `body.can-delete-board` + botón `#btn-clear-board` |
+
+> Otros roles (SOPORTE, etc.) solo pueden mover **sus propias** tarjetas.
+
+---
+
+## 13.c Vistas auxiliares Helpdesk
+
+### HelpDesk Semanal (`js/semanal.js`)
+Calendario por semanas para asignar al **consultor de guardia** de cada semana. El chip con el nombre del consultor se ancla al **viernes** (día ancla de la semana). Se persiste en Firebase bajo `weeklySupport` (`{ weeks: {...} }`). Sin asignación muestra "Sin asignar".
+
+### Pendientes (`js/pendientes.js`)
+Tabla de tickets marcados manualmente como pendientes. Datos en `hdPendientes` (`{ ticketId: { ticket, asunto, clienteRaw, addedAt } }`), ordenados por `addedAt` descendente. Se agregan/quitan desde la tabla Helpdesk.
+
+### TUsuariosPizza (`js/usuarios-pizza.js`) — solo MSC001
+Registro de penalizaciones del equipo ("el que paga la pizza"). Motivos (`MOTIVOS`): `vacaciones` ("Más de 15 días de vacaciones ininterrumpidos") y `atentado` ("Atentado en el sistema"). Maneja una ventana de `DOS_SEMANAS_MS` (14 días).
 
 ---
 

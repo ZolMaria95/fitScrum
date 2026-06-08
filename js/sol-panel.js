@@ -284,8 +284,6 @@ const SolPanel = (() => {
 
     el.querySelectorAll('.sol-assign-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        AppData.updateStoryStatus(btn.dataset.id, 'in_progress');
-        App.refreshBoard();
         _renderNewTodo();
       });
     });

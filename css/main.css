@@ -524,6 +524,11 @@ body {
 .story-card.dragging { opacity: 0.35; }
 .story-card:active { cursor: grabbing; }
 
+/* Permisos: si NO soy supervisor/helpdesk, solo puedo mover MIS cards.
+   Las que no son mías muestran cursor "no permitido" — son visibles pero no draggables. */
+body:not(.can-move-all-cards) .story-card.not-mine { cursor: not-allowed; }
+body:not(.can-move-all-cards) .story-card.not-mine:active { cursor: not-allowed; }
+
 .story-card.priority-alta  { border-left: 3px solid var(--error); }
 .story-card.priority-media { border-left: 3px solid var(--accent); }
 .story-card.priority-baja  { border-left: 3px solid var(--border); }
@@ -671,6 +676,84 @@ body.can-delete-board #btn-clear-board { display: inline-flex; }
   text-transform: uppercase;
   letter-spacing: 0.3px;
   white-space: nowrap;
+}
+
+.card-hd-status {
+  display: block;
+  width: 100%;
+  margin: 6px 0 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #F4F8FB;
+  color: #1F3864;
+  cursor: pointer;
+  outline: none;
+}
+
+.card-hd-status:hover { background: #E7F0F9; }
+.card-hd-status:disabled { opacity: 0.5; cursor: wait; }
+
+/* Dropdown buscable (asignados HD) — input + lista filtrable */
+.searchable-select {
+  width: 100%;
+}
+
+.searchable-select input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Lista renderizada INLINE (no absoluta) — empuja el contenido hacia abajo */
+/* Esto evita que el overflow:auto del modal la recorte */
+.searchable-select-list {
+  display: none;
+  margin-top: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.searchable-select.open .searchable-select-list { display: block !important; }
+
+.searchable-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #F0F0F0;
+}
+
+.searchable-item:last-child { border-bottom: none; }
+.searchable-item:hover { background: #EBF3FB; }
+
+.searchable-item-name {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.searchable-item-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.searchable-loading,
+.searchable-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .card-due {
@@ -2034,6 +2117,89 @@ canvas#burndown-chart { width: 100%; height: auto; display: block; }
   padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+/* Composer: enviar mensaje nuevo al ticket */
+.hd-msg-composer {
+  border-top: 1px solid var(--border);
+  padding: 10px 16px 12px;
+  background: #FAFAFA;
+  flex-shrink: 0;
+}
+
+.hd-msg-toolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.hd-msg-toolbar button[data-cmd] {
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.hd-msg-toolbar button[data-cmd]:hover { background: #F0F0F0; }
+
+.hd-msg-attach-label {
+  cursor: pointer;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  font-size: 13px;
+  user-select: none;
+}
+
+.hd-msg-attach-label:hover { background: #F0F0F0; }
+
+.hd-msg-files {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.hd-msg-editor {
+  min-height: 70px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.hd-msg-editor:focus { border-color: #04BAF0; }
+
+.hd-msg-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.hd-msg-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.hd-msg-status {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 /* Conversación */

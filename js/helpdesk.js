@@ -46,6 +46,7 @@ const Helpdesk = (() => {
       client:   clientId,
       clientRaw,
       priority: prioMap,
+      estatus:  raw.estado            || '',
     };
   }
 

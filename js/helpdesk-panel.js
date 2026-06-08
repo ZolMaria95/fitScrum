@@ -4,7 +4,7 @@ const HelpdeskPanel = (() => {
   const BASE = _proxyUrl + '/api/v1';
 
   // ── Constantes (igual que el flujo n8n) ───────────────
-  // Solo los clientes con tickets en Helpdesk — controla el sync y la tabla
+  // Clientes válidos para el sync con Helpdesk y la tabla de tickets
   const CLIENTES_VALIDOS = new Set([
     'COOPERATIVA DE AHORRO Y CREDITO ERCO',
     'COAC CAPCPE GUALAQUIZA',
@@ -18,6 +18,9 @@ const HelpdeskPanel = (() => {
     'VAZCREDIT',
     'COAC SENOR DE GIRON',
     'COAC SEÑOR DE GIRON',
+    'FININVEST OVERSEAS INC. LTD.',
+    'SEGURA COOP',
+    'PUNTOPRESTAMO',
   ]);
 
   const CLIENT_MAP = {
@@ -70,11 +73,197 @@ const HelpdeskPanel = (() => {
     'KIMA001','KDLS001','BMHJ001','DSGS001','JCEO001','CUC001','JFQV001',
   ]);
 
+  // Cache de usuarios HD descubiertos desde los tickets (ID → nombre)
+  // Se persiste en localStorage para sobrevivir reloads y estar disponible
+  // antes del primer sync.
+  const HD_USERS_LS_KEY = 'fit-daily_hd_users';
+
+  // Determina si un cache parece tener IDs del Helpdesk (formato XXX001+) o
+  // IDs locales (2-3 caracteres tipo "SC"). Si es local viejo → descartar.
+  function _looksLikeHdCache(arr) {
+    if (!Array.isArray(arr) || !arr.length) return false;
+    // Al menos la mitad de los IDs deben tener formato HD (≥4 chars, terminan en dígitos)
+    const hdRx = /^[A-Z]+\d+$/;
+    const hits = arr.filter(u => u && typeof u.id === 'string' && hdRx.test(u.id)).length;
+    return hits >= Math.max(1, Math.floor(arr.length / 2));
+  }
+
+  let _hdUsers = (() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(HD_USERS_LS_KEY) || '[]');
+      if (_looksLikeHdCache(cached)) return cached;
+    } catch (_) {}
+    // Primer arranque o cache viejo (con IDs locales): sembrar con EMPLEADOS
+    // (los nombres reales se llenarán al hacer ↻ Sincronizar)
+    return [...EMPLEADOS].map(id => ({ id, name: id }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+  })();
+
+  function _saveHdUsers() {
+    try { localStorage.setItem(HD_USERS_LS_KEY, JSON.stringify(_hdUsers)); } catch (_) {}
+  }
+
+  // Persistir el seed inicial para que el siguiente reload no lo recalcule
+  _saveHdUsers();
+
+  // Intentar traer la lista completa del API en background (sin auto-logout
+  // si falla). Si tu sesión tiene permiso, llena el cache con TODOS los
+  // empleados, no solo los descubiertos en tickets sincronizados.
+  async function _tryFetchAllHdUsers() {
+    if (typeof App === 'undefined' || !App.hdFetchSafe) return;
+    const endpoints = ['/users', '/users/', '/users/list', '/users/all', '/employees'];
+    for (const ep of endpoints) {
+      try {
+        const r = await App.hdFetchSafe(`${BASE}${ep}`);
+        if (!r.ok) continue;
+        const data = await r.json();
+        const items = Array.isArray(data)
+          ? data
+          : (data.items || data.data || data.users || data.results || []);
+        if (!items.length) continue;
+
+        const map = new Map();
+        _hdUsers.forEach(u => { if (u.id) map.set(u.id, u.name || u.id); });
+        let descartadosCliente = 0, descartadosInactivos = 0;
+        items.forEach(u => {
+          const id = String(u.user_id || u.id || u.username || '').trim().toUpperCase();
+          const name = String(
+            u.person_name || u.full_name || u.name || u.display_name ||
+            u.person_alias || u.username || id
+          ).trim();
+          if (!id) return;
+          // Excluir usuarios inactivos (user_status === false)
+          if (u.user_status === false) { descartadosInactivos++; return; }
+          // Filtro: excluir SOLO clientes. Señales de cliente:
+          //   role_description contiene "CLIENTE", o tiene client_id / client_description.
+          // Cualquier otro rol (Soporte, Supervisor, Administrador…) es empleado.
+          const role = String(u.role_description || u.role || '').trim().toUpperCase();
+          const esCliente = role.includes('CLIENTE')
+            || (u.client_id && Number(u.client_id) > 0)
+            || !!String(u.client_description || '').trim();
+          if (esCliente) { descartadosCliente++; return; }
+          const prev = map.get(id);
+          if (name && (!prev || prev === id)) map.set(id, name);
+          else if (!prev) map.set(id, id);
+        });
+        _hdUsers = [...map.entries()]
+          .map(([id, name]) => ({ id, name }))
+          .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
+        _saveHdUsers();
+        console.log(`[HD users] enriquecidos vía ${ep}: ${_hdUsers.length} empleados (${descartadosCliente} clientes, ${descartadosInactivos} inactivos descartados de ${items.length})`);
+        return;
+      } catch (_) {}
+    }
+    console.warn('[HD users] ningún endpoint de usuarios respondió — se usan los descubiertos en tickets');
+  }
+  // Dispara en background — no bloquea init
+  setTimeout(_tryFetchAllHdUsers, 800);
+
+  // Para empleados que solo tienen ID como nombre (no se encontró nombre real),
+  // intentar resolver vía GET /api/v1/users/{id} en background. Usa hdFetchSafe
+  // así un 401/403/404 no rompe la sesión.
+  async function _resolveMissingNames() {
+    if (typeof App === 'undefined' || !App.hdFetchSafe) return;
+    // Limita concurrencia a 3 fetches simultáneos
+    const pendientes = _hdUsers.filter(u => u.id && (!u.name || u.name === u.id));
+    if (!pendientes.length) return;
+    console.log(`[HD users] resolviendo nombres faltantes: ${pendientes.length}`);
+
+    const lookups = ['/users/', '/users/profile/']; // patrones de endpoint a probar
+    let endpointOk = null;
+
+    async function _fetchOne(id) {
+      const tryEPs = endpointOk ? [endpointOk] : lookups;
+      for (const ep of tryEPs) {
+        try {
+          const r = await App.hdFetchSafe(`${BASE}${ep}${encodeURIComponent(id)}`);
+          if (!r.ok) continue;
+          const data = await r.json();
+          const u = Array.isArray(data) ? data[0] : (data.item || data.data || data);
+          if (!u) continue;
+          const name = String(u.full_name || u.person_name || u.name
+                            || u.display_name || u.username || '').trim();
+          if (name) {
+            endpointOk = ep;
+            return name;
+          }
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    // Procesar en lotes de 3 para no saturar
+    const BATCH = 3;
+    let cambios = 0;
+    for (let i = 0; i < pendientes.length; i += BATCH) {
+      const lote = pendientes.slice(i, i + BATCH);
+      const results = await Promise.all(lote.map(u => _fetchOne(u.id).then(n => ({ id: u.id, name: n }))));
+      results.forEach(({ id, name }) => {
+        if (name) {
+          const target = _hdUsers.find(u => u.id === id);
+          if (target) { target.name = name; cambios++; }
+        }
+      });
+    }
+    if (cambios) {
+      _hdUsers.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
+      _saveHdUsers();
+      console.log(`[HD users] nombres resueltos: ${cambios}`);
+    }
+  }
+  // Disparar después de _tryFetchAllHdUsers, para que actúe sobre lo descubierto
+  setTimeout(_resolveMissingNames, 2500);
+
+  // Extrae empleados únicos de los tickets sincronizados.
+  // Combina: cache previo + EMPLEADOS conocidos + datos descubiertos en tickets.
+  function _buildHdUsersFromTickets() {
+    const map = new Map();
+    // Conserva los que ya estaban en cache
+    _hdUsers.forEach(u => { if (u.id) map.set(u.id, u.name || u.id); });
+    // Asegura la presencia de los empleados conocidos (id como fallback)
+    EMPLEADOS.forEach(id => { if (!map.has(id)) map.set(id, id); });
+
+    // Heurística: assigned_user_id en un ticket SIEMPRE es un empleado interno.
+    // entry_user_id puede ser cliente, por eso solo lo aceptamos si aparece
+    // como assigned_user_id en algún otro ticket (o ya estaba en cache).
+    const empleadosDescubiertos = new Set();
+    _tickets.forEach(t => {
+      const aid = String(t.usuarioAsignado || '').trim().toUpperCase();
+      if (aid) empleadosDescubiertos.add(aid);
+    });
+    // Empleados ya conocidos también cuentan
+    map.forEach((_, id) => empleadosDescubiertos.add(id));
+
+    _tickets.forEach(t => {
+      const cands = [
+        [t.usuarioAsignado, t.nombreAsignado],
+        [t.usuarioIngreso,  t.nombreIngreso],
+      ];
+      cands.forEach(([id, name]) => {
+        id = String(id || '').trim().toUpperCase();
+        if (!id) return;
+        // Solo aceptamos IDs que sabemos son empleados (vía assigned o EMPLEADOS o cache previo)
+        if (!empleadosDescubiertos.has(id)) return;
+        const realName = String(name || '').trim();
+        const prev = map.get(id);
+        if (realName && (!prev || prev === id)) {
+          map.set(id, realName);
+        } else if (!prev) {
+          map.set(id, id);
+        }
+      });
+    });
+
+    _hdUsers = [...map.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
+    _saveHdUsers();
+  }
+
+  function getHdUsers() { return _hdUsers.slice(); }
+
   // Etiqueta visible del estatus (no toca el valor interno, solo el render)
   function _estatusLabel(estatus) {
-    const e = String(estatus || '').toUpperCase();
-    if (e.includes('APROBADO')) return 'CLIENTE CONTENTO 😊';
-    if (e.includes('DEVUELTO')) return 'TÉCNICO TRISTE 😢';
     return estatus || '';
   }
 
@@ -488,6 +677,10 @@ const HelpdeskPanel = (() => {
       }
 
       _setStatus(`✓ ${_tickets.length} tickets — ${new Date().toLocaleTimeString('es-ES')}`, 'ok');
+      // Actualiza el caché de usuarios HD con lo descubierto en este sync
+      _buildHdUsersFromTickets();
+      // Resuelve nombres faltantes vía API en background
+      setTimeout(_resolveMissingNames, 200);
       _render();
     } catch (err) {
       const msg = err.message || '';
@@ -603,6 +796,14 @@ const HelpdeskPanel = (() => {
     });
   }
 
+  // ID del usuario en sesión (= assigned_user_id del Helpdesk, ej. 'MSC001')
+  function _currentUserId() {
+    try {
+      const s = JSON.parse(localStorage.getItem('fit-daily_session') || 'null');
+      return String(s?.id || '').trim().toUpperCase();
+    } catch (_) { return ''; }
+  }
+
   function _render() {
     if (_tab === 'estadisticas') { _renderStats(); return; }
     // No destruir un editor de nota abierto durante el ciclo de sincronización
@@ -611,14 +812,19 @@ const HelpdeskPanel = (() => {
     const list = document.getElementById('hd-list');
     if (!list) return;
 
-    const isPrio = _tab === 'prioritarios';
+    const isPrio      = _tab === 'prioritarios';
+    const isAsignados = _tab === 'asignados';
+    const _uid        = _currentUserId();
 
     // Actualizar contadores
     const cntPrio = _tickets.filter(t => PRIORITY_ACTIONS.has(t.accion)).length;
+    const cntAsig = _uid ? _tickets.filter(t => t.usuarioAsignado === _uid).length : 0;
     const el1 = document.getElementById('hd-count-prio');
     const el2 = document.getElementById('hd-count-all');
+    const el3 = document.getElementById('hd-count-asignados');
     if (el1) el1.textContent = cntPrio;
     if (el2) el2.textContent = _tickets.length;
+    if (el3) el3.textContent = cntAsig;
 
     // Filas base: resultado remoto > búsqueda por número (todos) > tab actual
     let base;
@@ -626,6 +832,8 @@ const HelpdeskPanel = (() => {
       base = [_remoteResult];
     } else if (_filterTicket) {
       base = _tickets; // búsqueda por nro: ignorar tab, buscar en todos los cargados
+    } else if (isAsignados) {
+      base = _tickets.filter(t => t.usuarioAsignado === _uid);
     } else {
       base = isPrio ? _tickets.filter(t => PRIORITY_ACTIONS.has(t.accion)) : _tickets;
     }
@@ -697,7 +905,7 @@ const HelpdeskPanel = (() => {
     const bodyHTML = sorted.length
       ? sorted.map(t => _rowHTML(t, notes, actions, pendientes)).join('')
       : `<tr><td colspan="15" class="hd-no-results">
-          Sin resultados para los filtros aplicados.
+          ${isAsignados && !hasFilter ? 'No tienes tickets asignados.' : 'Sin resultados para los filtros aplicados.'}
           ${_filterTicket && _filterTicket.length >= 4 ? `
             <div style="margin-top:12px">
               <button class="hd-search-remote-btn" id="hd-btn-search-remote" data-ticket="${_filterTicket}">
@@ -1051,8 +1259,15 @@ const HelpdeskPanel = (() => {
       </div>`;
   }
 
+  // Ticket activo en el modal de mensajes (lo lee el composer al enviar)
+  let _activeMsgTicket = null;
+  let _msgFiles        = [];
+
   // ── Modal: conversación completa + adjuntos ──────────
   async function _abrirModalMensaje(t) {
+    _activeMsgTicket = t.ticket;
+    _msgFiles        = [];
+
     let overlay = document.getElementById('hd-modal-msg');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -1070,11 +1285,38 @@ const HelpdeskPanel = (() => {
           </div>
           <div id="hd-msg-asunto" class="hd-msg-asunto"></div>
           <div class="modal-body hd-conv-wrap" id="hd-conv-body"></div>
+          <div class="hd-msg-composer">
+            <div class="hd-msg-toolbar">
+              <button type="button" data-cmd="bold"      title="Negrita (Ctrl+B)"><b>B</b></button>
+              <button type="button" data-cmd="italic"    title="Cursiva (Ctrl+I)"><i>I</i></button>
+              <button type="button" data-cmd="underline" title="Subrayar (Ctrl+U)"><u>U</u></button>
+              <label class="hd-msg-attach-label" title="Adjuntar archivo">
+                📎 <input type="file" id="hd-msg-attach" multiple hidden>
+              </label>
+              <span id="hd-msg-files" class="hd-msg-files"></span>
+            </div>
+            <div id="hd-msg-editor" class="hd-msg-editor" contenteditable="true"
+                 data-placeholder="Escribir mensaje..."></div>
+            <div class="hd-msg-actions">
+              <button id="hd-msg-send" class="btn-primary" type="button">Enviar</button>
+              <span id="hd-msg-status" class="hd-msg-status"></span>
+            </div>
+          </div>
         </div>`;
       document.body.appendChild(overlay);
       document.getElementById('hd-msg-close').addEventListener('click', () => overlay.classList.add('hidden'));
       overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
+      _wireComposer();
     }
+    // Limpiar composer en cada apertura
+    const editor = document.getElementById('hd-msg-editor');
+    if (editor) editor.innerHTML = '';
+    const filesEl = document.getElementById('hd-msg-files');
+    if (filesEl) filesEl.textContent = '';
+    const inputFile = document.getElementById('hd-msg-attach');
+    if (inputFile) inputFile.value = '';
+    const stEl = document.getElementById('hd-msg-status');
+    if (stEl) stEl.textContent = '';
 
     // Llenar encabezado de inmediato y mostrar loading
     document.getElementById('hd-msg-ticket').textContent  = `#${t.ticket}`;
@@ -1194,6 +1436,86 @@ const HelpdeskPanel = (() => {
     _hydrateAttachments(convBody);
   }
 
+  // ── Composer: botones de formato + adjuntos + envío al API ─────
+  function _wireComposer() {
+    // Botones B / I / U → execCommand sobre el editor
+    document.querySelectorAll('.hd-msg-toolbar button[data-cmd]').forEach(btn => {
+      btn.addEventListener('mousedown', e => e.preventDefault()); // mantener foco en el editor
+      btn.addEventListener('click', () => {
+        document.execCommand(btn.dataset.cmd, false, null);
+        document.getElementById('hd-msg-editor').focus();
+      });
+    });
+
+    // Selección de archivos
+    document.getElementById('hd-msg-attach').addEventListener('change', e => {
+      _msgFiles = [...e.target.files];
+      document.getElementById('hd-msg-files').textContent =
+        _msgFiles.length ? _msgFiles.map(f => f.name).join(', ') : '';
+    });
+
+    // Enviar
+    document.getElementById('hd-msg-send').addEventListener('click', () => _sendTicketMessage());
+  }
+
+  async function _uploadAttachment(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    // Usa el helper "safe" de App (no auto-logout en 401/403)
+    const r = await App.hdFetchSafe(`${BASE}/attachments`, {
+      method: 'POST', body: fd,
+    });
+    if (!r.ok) throw new Error('upload ' + r.status);
+    const data = await r.json();
+    return data.id || data.attach_id || data.attachment_id;
+  }
+
+  async function _sendTicketMessage() {
+    if (!_activeMsgTicket) return;
+    const editor   = document.getElementById('hd-msg-editor');
+    const statusEl = document.getElementById('hd-msg-status');
+    const sendBtn  = document.getElementById('hd-msg-send');
+    const detail   = (editor.innerHTML || '').trim();
+    if (!detail && !_msgFiles.length) {
+      statusEl.textContent = 'Escribe un mensaje o adjunta un archivo.';
+      return;
+    }
+
+    sendBtn.disabled = true;
+    statusEl.textContent = 'Enviando...';
+
+    try {
+      const attach_ids = [];
+      for (const f of _msgFiles) {
+        statusEl.textContent = `Subiendo "${f.name}"...`;
+        attach_ids.push(await _uploadAttachment(f));
+      }
+      statusEl.textContent = 'Enviando mensaje...';
+      const r = await App.hdFetchSafe(
+        `${BASE}/tickets/${_activeMsgTicket}/messages`,
+        { method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ detail, attach_ids }) }
+      );
+      if (!r.ok) throw new Error(r.status);
+
+      editor.innerHTML = '';
+      _msgFiles = [];
+      document.getElementById('hd-msg-files').textContent = '';
+      document.getElementById('hd-msg-attach').value = '';
+      statusEl.textContent = 'Enviado ✓';
+
+      // Recargar conversación para mostrar el mensaje recién enviado
+      const t = _findTicket(_activeMsgTicket);
+      if (t) _abrirModalMensaje(t);
+    } catch (e) {
+      console.warn('[HD send msg]', e);
+      statusEl.textContent = 'Error al enviar.';
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
   // ── Crear tarea desde ticket ──────────────────────────
   function _abrirModalTarea(ticketNum) {
     const t = _findTicket(ticketNum);
@@ -1207,20 +1529,48 @@ const HelpdeskPanel = (() => {
 
     const prioMap  = t.orden <= 1 ? 'alta' : t.orden <= 2 ? 'alta' : t.orden <= 3 ? 'media' : 'baja';
     const clientId = CLIENT_MAP[t.clienteRaw] || null;
-    const team     = AppData.getTeam();
     const clients  = getValidClients();
 
-    document.getElementById('ns-client').innerHTML =
+    const sel = document.getElementById('ns-client');
+    sel.innerHTML =
       `<option value="">Seleccionar cliente...</option>` +
       clients.map(c => `<option value="${c.id}" ${c.id === clientId ? 'selected' : ''}>${c.name}</option>`).join('');
-    document.getElementById('ns-assignee').innerHTML =
-      team.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
 
-    document.getElementById('ns-ticket').value   = ticketNum;
-    document.getElementById('ns-title').value    = t.asunto;
-    document.getElementById('ns-priority').value = prioMap;
+    // Cliente no mapeado: agregar opción con nombre crudo y seleccionarla
+    if (!clientId && t.clienteRaw) {
+      const opt = document.createElement('option');
+      opt.value = t.clienteRaw;
+      opt.textContent = `${t.clienteRaw} (no mapeado)`;
+      opt.dataset.unmapped = '1';
+      opt.selected = true;
+      sel.appendChild(opt);
+    }
+
+    // Asignee: dropdown buscable con usuarios del Helpdesk (mismo patrón que el modal nueva tarea)
+    const search = document.getElementById('ns-assignee-search');
+    const hidden = document.getElementById('ns-assignee');
+    const list   = document.getElementById('ns-assignee-list');
+    if (search) search.value = '';
+    if (hidden) hidden.value = '';
+    if (list)   list.innerHTML = '<div class="searchable-loading">Cargando...</div>';
+    if (App && typeof App.fetchHdUsers === 'function') {
+      App.fetchHdUsers().then(users => {
+        if (!list) return;
+        list.innerHTML = users.map(u =>
+          `<div class="searchable-item" data-id="${u.id}" data-name="${u.name.replace(/"/g,'&quot;')}">
+             <span class="searchable-item-name">${u.name}</span>
+             <span class="searchable-item-id">${u.id}</span>
+           </div>`
+        ).join('');
+      });
+    }
+
+    document.getElementById('ns-ticket').value      = ticketNum;
+    document.getElementById('ns-title').value       = t.asunto;
+    document.getElementById('ns-priority').value    = prioMap;
     document.getElementById('ns-description').value = '';
-    document.getElementById('ns-duedate').value  = '';
+    document.getElementById('ns-duedate').value     = '';
+    document.getElementById('ns-hd-estatus').value  = t.estatus || '';
 
     const statusEl       = document.getElementById('ticket-search-status');
     statusEl.textContent = clientId
@@ -1279,5 +1629,5 @@ const HelpdeskPanel = (() => {
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients };
+  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients, getHdUsers };
 })();

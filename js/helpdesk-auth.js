@@ -7,7 +7,7 @@ const HelpdeskAuth = (() => {
   // Lee el token de la sesión actual del usuario
   function _token() {
     try {
-      const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+      const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
       return s?.token || null;
     } catch (_) { return null; }
   }
@@ -62,7 +62,7 @@ const HelpdeskAuth = (() => {
 
     if ((r.status === 401 || r.status === 403) && t) {
       // Token expirado o inválido → forzar re-login
-      sessionStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(SESSION_KEY);
       alert('Tu sesión del Helpdesk expiró. Vuelve a iniciar sesión.');
       window.location.href = 'login.html';
     }

@@ -9,7 +9,7 @@
   <title>Fit-Daily — Soft Warehouse SA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/main.css?v=4">
+  <link rel="stylesheet" href="css/main.css?v=21">
 </head>
 <body>
 
@@ -292,6 +292,9 @@
           <button class="hd-tab" data-hdtab="todos">
             Todos los tickets <span class="hd-tab-count" id="hd-count-all">0</span>
           </button>
+          <button class="hd-tab" data-hdtab="asignados">
+            Asignados a mí <span class="hd-tab-count" id="hd-count-asignados">0</span>
+          </button>
           <button class="hd-tab" data-hdtab="estadisticas">
             Estadísticas
           </button>
@@ -488,13 +491,20 @@
           <div class="form-row-two">
             <div class="form-group">
               <label>Asignado a *</label>
-              <select id="ns-assignee" required></select>
+              <div class="searchable-select" id="ns-assignee-wrap">
+                <input type="text" id="ns-assignee-search"
+                       placeholder="Clic para ver lista o escribir nombre..."
+                       autocomplete="off" required>
+                <div class="searchable-select-list" id="ns-assignee-list"></div>
+              </div>
+              <input type="hidden" id="ns-assignee" name="assignee">
             </div>
             <div class="form-group">
               <label>Fecha de entrega *</label>
               <input type="date" id="ns-duedate" required>
             </div>
           </div>
+          <input type="hidden" id="ns-hd-estatus">
           <div class="form-actions">
             <button type="button" class="btn-secondary" data-close="modal-new-story">Cancelar</button>
             <button type="submit" class="btn-primary">Crear Tarea</button>
@@ -740,20 +750,20 @@
     </div>
   </div>
 
-  <script src="js/firebase-config.js?v=4"></script>
-  <script src="js/helpdesk-auth.js?v=4"></script>
-  <script src="js/helpdesk.js?v=4"></script>
-  <script src="js/pendientes.js?v=4"></script>
-  <script src="js/usuarios-pizza.js?v=4"></script>
-  <script src="js/helpdesk-panel.js?v=4"></script>
-  <script src="js/data.js?v=4"></script>
-  <script src="js/board.js?v=4"></script>
-  <script src="js/burndown.js?v=4"></script>
-  <script src="js/progreso.js?v=4"></script>
-  <script src="js/consultas.js?v=4"></script>
-  <script src="js/sol-panel.js?v=4"></script>
-  <script src="js/semanal.js?v=4"></script>
-  <script src="js/app.js?v=4"></script>
+  <script src="js/firebase-config.js?v=21"></script>
+  <script src="js/helpdesk-auth.js?v=21"></script>
+  <script src="js/helpdesk.js?v=21"></script>
+  <script src="js/pendientes.js?v=21"></script>
+  <script src="js/usuarios-pizza.js?v=21"></script>
+  <script src="js/helpdesk-panel.js?v=21"></script>
+  <script src="js/data.js?v=21"></script>
+  <script src="js/board.js?v=21"></script>
+  <script src="js/burndown.js?v=21"></script>
+  <script src="js/progreso.js?v=21"></script>
+  <script src="js/consultas.js?v=21"></script>
+  <script src="js/sol-panel.js?v=21"></script>
+  <script src="js/semanal.js?v=21"></script>
+  <script src="js/app.js?v=21"></script>
 
   <!-- ─── Sidebar overlay ─────────────────────────────── -->
   <div id="sidebar-overlay" class="sidebar-overlay"></div>

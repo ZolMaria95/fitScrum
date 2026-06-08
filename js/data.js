@@ -55,6 +55,44 @@ const AppData = (() => {
     }).catch(err => console.warn(`[Firebase] ${path}:`, err));
   }
 
+  // PATCH: merge sólo los campos enviados — evita race conditions de PUT total
+  function _fbPatch(path, data) {
+    fetch(_dbUrl(path), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).catch(err => console.warn(`[Firebase PATCH] ${path}:`, err));
+  }
+
+  // DELETE: elimina un nodo individual (usado para borrar una story por su ID)
+  function _fbDelete(path) {
+    fetch(_dbUrl(path), { method: 'DELETE' })
+      .catch(err => console.warn(`[Firebase DELETE] ${path}:`, err));
+  }
+
+  // Array de stories → objeto keyed por ID (formato de almacenamiento en Firebase)
+  function _arrToMap(arr) {
+    return Object.fromEntries((arr || []).filter(s => s && s.id).map(s => [s.id, s]));
+  }
+
+  // Normaliza el nodo `stories` de Firebase: acepta array (legacy) u objeto keyed (nuevo)
+  function _normalizeStories(fbVal) {
+    const raw = fbVal && fbVal.stories;
+    if (Array.isArray(raw))               return raw.filter(Boolean);
+    if (raw && typeof raw === 'object')   return Object.values(raw).filter(Boolean);
+    return [];
+  }
+
+  // Actualiza campos de una story sin tocar las demás — escribe por ID estable
+  // (no por índice de array) para que altas/bajas concurrentes no se pisen.
+  function _patchStoryField(storyId, fields) {
+    const story = _stories.stories.find(s => s.id === storyId);
+    if (!story) return;
+    Object.assign(story, fields);
+    if (_fbReady()) _fbPatch('stories/stories/' + storyId, fields);
+    else            _lsPut('stories', _stories);
+  }
+
   // ── localStorage fallback ────────────────────────────
   function _lsGet() {
     return JSON.parse(localStorage.getItem(LS_KEY) || '{}');
@@ -112,12 +150,28 @@ const AppData = (() => {
       _team = localUsers;
       _fbPut('users', localUsers);
 
-      [_sprints, _stories, _progress, _queries] = await Promise.all([
+      [_sprints, _progress, _queries] = await Promise.all([
         _seedOrLoad(fbSp, 'data/sprints.json',  'sprints'),
-        _seedOrLoad(fbSt, 'data/stories.json',  'stories'),
         _seedOrLoad(fbPr, 'data/progress.json', 'progress'),
         _seedOrLoad(fbQu, 'data/queries.json',  'queries'),
       ]);
+
+      // Stories: se guardan como mapa keyed por ID en Firebase (evita que el PUT del
+      // array completo de un usuario borre tareas creadas por otro). Migra el array
+      // legacy a mapa una sola vez; en memoria se mantiene como array.
+      let stArr;
+      if (fbSt === null) {
+        const seed = await _loadLocal('data/stories.json');
+        stArr = seed.stories || [];
+        _fbPut('stories/stories', _arrToMap(stArr));            // siembra como mapa
+      } else {
+        stArr = _normalizeStories(fbSt);
+        if (Array.isArray(fbSt.stories)) {
+          _fbPut('stories/stories', _arrToMap(stArr));          // migra legacy → mapa
+        }
+      }
+      _stories = { stories: stArr };
+
       _weekly = fbWk || { weeks: {} };
 
       // Migrate from localStorage on first Firebase load
@@ -218,8 +272,7 @@ const AppData = (() => {
   function getStoriesBySprint(id) { return _stories.stories.filter(s => s.sprint === id); }
 
   function updateStoryStatus(storyId, status) {
-    const s = _stories.stories.find(s => s.id === storyId);
-    if (s) { s.status = status; _persist('stories', _stories); }
+    _patchStoryField(storyId, { status });
   }
 
   function addStory(data) {
@@ -244,60 +297,64 @@ const AppData = (() => {
       ...data,
     };
     _stories.stories.push(task);
-    _persist('stories', _stories);
+    // Escribir SOLO la nueva story por su ID (merge) — nunca PUT del array completo,
+    // que podría borrar tareas creadas por otros usuarios en paralelo.
+    if (_fbReady()) _fbPatch('stories/stories', { [task.id]: task });
+    else            _lsPut('stories', _stories);
     return task;
   }
 
   function approveStory(storyId) {
-    const s = _stories.stories.find(s => s.id === storyId);
-    if (s) {
-      s.approved     = true;
-      s.approvedDate = new Date().toISOString().split('T')[0];
-      _persist('stories', _stories);
-    }
+    _patchStoryField(storyId, {
+      approved:     true,
+      approvedDate: new Date().toISOString().split('T')[0],
+    });
   }
 
   function unapproveStory(storyId) {
-    const s = _stories.stories.find(s => s.id === storyId);
-    if (s) {
-      s.approved     = false;
-      s.approvedDate = null;
-      _persist('stories', _stories);
-    }
+    _patchStoryField(storyId, { approved: false, approvedDate: null });
   }
 
   function updateStoryProgress(storyId, progress) {
-    const s = _stories.stories.find(s => s.id === storyId);
-    if (s) { s.progress = progress; _persist('stories', _stories); }
+    _patchStoryField(storyId, { progress });
   }
 
   function updateStoryDueDate(storyId, dueDate) {
-    const s = _stories.stories.find(s => s.id === storyId);
-    if (s) { s.dueDate = dueDate; _persist('stories', _stories); }
+    _patchStoryField(storyId, { dueDate });
   }
 
   function updateStoryTitle(storyId, title) {
-    const s = _stories.stories.find(s => s.id === storyId);
-    if (s) { s.title = title; _persist('stories', _stories); }
+    _patchStoryField(storyId, { title });
   }
 
   function updateStoryDescription(storyId, description) {
-    const s = _stories.stories.find(s => s.id === storyId);
-    if (s) { s.description = description; _persist('stories', _stories); }
+    _patchStoryField(storyId, { description });
+  }
+
+  function updateStoryAssignee(storyId, assignee) {
+    _patchStoryField(storyId, { assignee });
+  }
+
+  function updateStoryHdEstatus(storyId, hdEstatus) {
+    _patchStoryField(storyId, { hdEstatus });
+  }
+
+  function updateStoryPriority(storyId, priority) {
+    _patchStoryField(storyId, { priority });
   }
 
   function setWaitingClient(storyId, waiting) {
-    const s = _stories.stories.find(s => s.id === storyId);
-    if (s) {
-      s.waitingClient = waiting;
-      s.waitingDate   = waiting ? new Date().toISOString().split('T')[0] : null;
-      _persist('stories', _stories);
-    }
+    _patchStoryField(storyId, {
+      waitingClient: waiting,
+      waitingDate:   waiting ? new Date().toISOString().split('T')[0] : null,
+    });
   }
 
   function deleteStory(storyId) {
     _stories.stories = _stories.stories.filter(s => s.id !== storyId);
-    _persist('stories', _stories);
+    // Borrar SOLO ese nodo por ID — no reescribir el array completo.
+    if (_fbReady()) _fbDelete('stories/stories/' + storyId);
+    else            _lsPut('stories', _stories);
   }
 
   // ── Team ─────────────────────────────────────────────
@@ -463,12 +520,50 @@ const AppData = (() => {
     _persist('weeklySupport', _weekly);
   }
 
+  // ── Real-time sync: poll Firebase para detectar cambios de otros usuarios ─
+  let _pollTimer = null;
+  function startPolling(onUpdate, intervalMs = 30000) {
+    if (!_fbReady() || _pollTimer) return;
+    _pollTimer = setInterval(async () => {
+      try {
+        const remote    = await _fbGet('stories');
+        const remoteArr = _normalizeStories(remote);
+        if (!remoteArr.length) return; // nodo vacío/ausente: no mergear (evita wipe)
+        let changed = false;
+        // Merge remote → local: agregar nuevas, actualizar diferentes
+        remoteArr.forEach(rs => {
+          if (!rs || !rs.id) return;
+          const local = _stories.stories.find(s => s.id === rs.id);
+          if (!local) {
+            _stories.stories.push(rs);
+            changed = true;
+          } else if (JSON.stringify(local) !== JSON.stringify(rs)) {
+            Object.assign(local, rs);
+            changed = true;
+          }
+        });
+        // Remover localmente las que ya no están en remoto
+        const remoteIds = new Set(remoteArr.filter(s => s && s.id).map(s => s.id));
+        const before = _stories.stories.length;
+        _stories.stories = _stories.stories.filter(s => remoteIds.has(s.id));
+        if (_stories.stories.length !== before) changed = true;
+        if (changed && typeof onUpdate === 'function') onUpdate();
+      } catch (e) { /* silencioso — reintenta en el próximo ciclo */ }
+    }, intervalMs);
+  }
+
+  function stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
   return {
     init,
     getSprints, getActiveSprint, setActiveSprint, addSprint, updateSprint, deleteSprint,
     getAllStories, getStoriesBySprint, updateStoryStatus, addStory, deleteStory,
     getTeam, getMember,
-    updateStoryProgress, updateStoryDueDate, updateStoryTitle, updateStoryDescription, approveStory, unapproveStory, setWaitingClient,
+    updateStoryProgress, updateStoryDueDate, updateStoryTitle, updateStoryDescription,
+    updateStoryAssignee, updateStoryHdEstatus, updateStoryPriority,
+    approveStory, unapproveStory, setWaitingClient,
     getClients, getClient,
     getProgress, addProgressEntry,
     getQueries, addQuery, resolveQuery,
@@ -479,5 +574,6 @@ const AppData = (() => {
     getSolNotes, setSolNote,
     getWeeklySupport, getWeekAssignment, setWeekAssignment, clearWeekAssignment,
     getWeekTickets, addWeekTicket, removeWeekTicket,
+    startPolling, stopPolling,
   };
 })();

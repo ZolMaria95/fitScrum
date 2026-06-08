@@ -189,13 +189,13 @@
     <div class="login-footer">Herramienta interna — no compartir credenciales</div>
   </div>
 
-  <script src="js/firebase-config.js"></script>
-  <script src="js/helpdesk-auth.js"></script>
+  <script src="js/firebase-config.js?v=21"></script>
+  <script src="js/helpdesk-auth.js?v=21"></script>
   <script>
     const SESSION_KEY = 'fit-daily_session';
 
     // Si ya hay sesión válida con token → ir directo a la app
-    const existing = sessionStorage.getItem(SESSION_KEY);
+    const existing = localStorage.getItem(SESSION_KEY);
     if (existing) {
       try {
         const s = JSON.parse(existing);
@@ -245,7 +245,7 @@
         // Enriquecer con datos del equipo local si coincide
         const local = teamLocal.find(u => u.id === profile.user_id);
 
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        localStorage.setItem(SESSION_KEY, JSON.stringify({
           id:      profile.user_id,
           name:    local?.name  || profile.person_name || profile.person_alias || profile.user_id,
           role:    local?.role  || profile.role_description || 'Usuario',

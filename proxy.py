@@ -24,7 +24,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _cors(self):
         self.send_header('Access-Control-Allow-Origin',  '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
 
     def do_OPTIONS(self):
@@ -40,6 +40,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if self.path.startswith('/api/') or self.path.startswith('/auth/'):
+            self._forward()
+        else:
+            self.send_response(405)
+            self.end_headers()
+
+    def do_PATCH(self):
+        if self.path.startswith('/api/'):
             self._forward()
         else:
             self.send_response(405)

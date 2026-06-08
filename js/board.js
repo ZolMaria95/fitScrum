@@ -3,6 +3,7 @@ const Board = (() => {
   let _clientFilter    = 'all';
   let _activeAssignees = new Set();
   let _draggedId       = null;
+  let _currentStories  = []; // historias del sprint actual (para el conteo WIP)
 
   const STATUSES = ['todo', 'in_progress', 'review', 'done'];
   const STATUS_LABELS = {
@@ -12,7 +13,18 @@ const Board = (() => {
     done:        'Finalizado',
   };
 
+  // Estados válidos para cambiar en el Helpdesk (desde el board)
+  const HD_STATUSES = [
+    'EN PROCESO',
+    'INFO PENDIENTE CLIENTE',
+    'ENTREGADO',
+    'DEVUELTO',
+    'APROBADO',
+    'CERRADO POR EL CLIENTE',
+  ];
+
   function render(stories, team, clients) {
+    _currentStories = stories;
     const assigneeIds = [...new Set(stories.map(s => s.assignee).filter(Boolean))];
 
     _renderAssigneeChips(team, assigneeIds);
@@ -51,14 +63,107 @@ const Board = (() => {
     _attachDragEvents();
   }
 
+  // Valida el paso todo → in_progress: límite WIP de 2 + confirmación de inicio.
+  // Devuelve true si se permite (y asigna la tarea cuando corresponde), false para abortar.
+  function _canStartWork(task) {
+    const session    = (typeof App !== 'undefined' && App.getSession) ? (App.getSession() || {}) : {};
+    const myId       = String(session.id || '').trim().toUpperCase();
+    const isHelpdesk = myId === 'MSC001';
+
+    // Solo el técnico asignado o Helpdesk pueden iniciar una tarea desde To Do.
+    // Supervisores y otros roles con can-move-all-cards quedan bloqueados aquí.
+    if (!isHelpdesk && task.assignee && myId !== String(task.assignee).trim().toUpperCase()) {
+      alert('Solo el técnico asignado puede iniciar esta tarea.');
+      return false;
+    }
+
+    // Técnico efectivo que trabajará la tarea
+    let assigneeId = task.assignee;
+    if (!assigneeId) {
+      if (isHelpdesk) {
+        alert('Esta tarea no tiene técnico asignado. Asigna un técnico antes de iniciarla.');
+        return false;
+      }
+      assigneeId = session.id; // se asume que quien la mueve es el asignado
+    }
+
+    // Límite WIP: máximo 2 tareas en progreso por técnico (en el sprint actual)
+    const enProgreso = _currentStories.filter(
+      s => s.status === 'in_progress' && s.assignee === assigneeId
+    ).length;
+    if (enProgreso >= 2) {
+      const nombre = (AppData.getTeam().find(m => m.id === assigneeId) || {}).name || assigneeId;
+      alert(`${nombre} ya tiene ${enProgreso} tareas en progreso. ` +
+            `Debe cerrar alguna antes de iniciar otra.`);
+      return false;
+    }
+
+    // Confirmación de inicio
+    if (!confirm(`¿Deseas iniciar a trabajar en "${task.title}"?`)) return false;
+
+    // Si estaba sin asignar y la mueve un técnico → asignársela
+    if (!task.assignee) AppData.updateStoryAssignee(task.id, assigneeId);
+    return true;
+  }
+
+  // Sincroniza el estado del ticket Helpdesk con el de la card:
+  //   → In Progress  ⇒  EN PROCESO
+  //   → Done         ⇒  ENTREGADO
+  // Fire-and-forget: si no tiene ticket o ya está en ese estado, no hace nada.
+  async function _pushHdEstado(task, estado) {
+    if (!task || !task.ticket || task.hdEstatus === estado) return;
+    try {
+      const r = await App.hdFetchSafe(
+        `${App.hdBase()}/tickets/tickets/${task.ticket}`,
+        { method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estado }) }
+      );
+      if (r.ok) AppData.updateStoryHdEstatus(task.id, estado);
+      else console.warn('[HD estado] no se pudo actualizar ticket', task.ticket, '→', estado, r.status);
+    } catch (err) {
+      console.warn('[HD estado]', err);
+    }
+  }
+
+  // ── Resolución de asignado (team local o empleado del Helpdesk) ──────
+  // El asignado puede ser un ID de users.json (2 letras) o un user_id del
+  // Helpdesk (ej. MSC001). Devuelve { id, name, color, label } para pintar avatar.
+  const _AVATAR_PALETTE = ['#04BAF0','#27AE60','#F29E3B','#9B59B6','#E74C3C',
+    '#1ABC9C','#2980B9','#F2811D','#8E44AD','#16A085','#C0392B','#D35400'];
+  function _colorFor(id) {
+    let h = 0; const s = String(id || '');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return _AVATAR_PALETTE[h % _AVATAR_PALETTE.length];
+  }
+  function _initialsFromName(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  function _hdUsers() {
+    return (window.HelpdeskPanel && HelpdeskPanel.getHdUsers) ? HelpdeskPanel.getHdUsers() : [];
+  }
+  function _resolveMember(id, team) {
+    if (!id) return null;
+    const t = (team || []).find(m => m.id === id);
+    if (t) return { id: t.id, name: t.name, color: t.color, label: t.id };
+    const u = _hdUsers().find(x => x.id === id);
+    const name = u ? u.name : id;
+    return { id, name, color: _colorFor(id), label: _initialsFromName(name) };
+  }
+
   // ── Chips de asignado ────────────────────────────────
   function _renderAssigneeChips(team, assigneeIds) {
     const wrap = document.getElementById('assignee-filters');
     const allActive = _activeAssignees.size === 0;
-    const chipsHTML = team.filter(m => assigneeIds.includes(m.id)).map(m => `
-      <div class="assignee-chip ${_activeAssignees.has(m.id) ? '' : 'inactive'}"
-           data-id="${m.id}" style="background:${m.color}" title="${m.name}">${m.id}</div>
-    `).join('');
+    const chipsHTML = assigneeIds.map(id => {
+      const m = _resolveMember(id, team);
+      if (!m) return '';
+      return `<div class="assignee-chip ${_activeAssignees.has(id) ? '' : 'inactive'}"
+           data-id="${id}" style="background:${m.color}" title="${m.name}">${m.label}</div>`;
+    }).join('');
     const clearBtnHTML = `
       <button class="assignee-clear-btn ${allActive ? 'active' : ''}"
               id="assignee-clear" title="Mostrar todos (sin filtro de asignado)">Todos</button>
@@ -100,11 +205,11 @@ const Board = (() => {
 
   // ── HTML de la card ──────────────────────────────────
   function _cardHTML(task, team, clients) {
-    const member = team.find(m => m.id === task.assignee);
+    const member = _resolveMember(task.assignee, team);
     const client = clients.find(c => c.id === task.client);
 
     const assigneeEl = member
-      ? `<div class="card-assignee" style="background:${member.color}" title="${member.name}">${member.id}</div>`
+      ? `<div class="card-assignee" style="background:${member.color}" title="${member.name}">${member.label}</div>`
       : `<div class="card-unassigned" title="Sin asignar"></div>`;
 
     const dueStr    = task.dueDate ? _fmtShort(task.dueDate) : '';
@@ -136,8 +241,19 @@ const Board = (() => {
       ? `<span class="card-due ${dueCls}">📅 ${dueStr}</span>`
       : `<span class="card-due" style="color:var(--text-muted);font-style:italic">📅 —</span>`;
 
+    // Badge de estado HD: solo si la tarea tiene N° de ticket
+    const hdStatusEl = task.ticket
+      ? `<select class="card-hd-status" data-ticket="${task.ticket}" data-story="${task.id}"
+                 onclick="event.stopPropagation()" draggable="false"
+                 title="Cambiar estado del ticket en Helpdesk">
+           <option value="">HD: ${task.hdEstatus || '—'}</option>
+           ${HD_STATUSES.map(s => `<option value="${s}">${s}</option>`).join('')}
+         </select>`
+      : '';
+
     return `
-      <div class="story-card priority-${task.priority}${isSoon ? ' card-soon' : ''}" data-id="${task.id}" draggable="true">
+      <div class="story-card priority-${task.priority}${isSoon ? ' card-soon' : ''}"
+           data-id="${task.id}" data-assignee="${task.assignee || ''}" draggable="true">
         <div class="card-top">
           <span class="card-ticket">#${task.ticket || '—'}</span>
           ${clientBadge}
@@ -145,6 +261,7 @@ const Board = (() => {
         </div>
         <div class="card-title">${task.title}</div>
         ${alertBadge}
+        ${hdStatusEl}
         ${extraEl}
         <div class="card-bottom">
           ${dueEl}
@@ -270,11 +387,53 @@ const Board = (() => {
       });
     });
 
+    // Cambio de estado del ticket Helpdesk desde el board (Feature 5 + 6)
+    document.querySelectorAll('.card-hd-status').forEach(sel => {
+      sel.addEventListener('change', async e => {
+        e.stopPropagation();
+        const newStatus = sel.value;
+        if (!newStatus) return;
+        const ticketId  = sel.dataset.ticket;
+        const storyId   = sel.dataset.story;
+        sel.disabled    = true;
+        try {
+          // Feature 6: si el ticket no tiene asignado → auto-asignar al usuario actual
+          const session = (App.getSession && App.getSession()) || {};
+          await _maybeAutoAssign(ticketId, session.id);
+
+          // PATCH del estado en el Helpdesk (sin auto-logout en 401/403)
+          const r = await App.hdFetchSafe(
+            `${App.hdBase()}/tickets/tickets/${ticketId}`,
+            { method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ estado: newStatus }) }
+          );
+          if (!r.ok) throw new Error(r.status);
+
+          // Actualizar local + refresh
+          AppData.updateStoryHdEstatus(storyId, newStatus);
+          App.refreshBoard();
+        } catch (err) {
+          console.warn('[HD status change]', err);
+          alert('No se pudo cambiar el estado del ticket en Helpdesk.');
+          sel.value = ''; // reset
+        } finally {
+          sel.disabled = false;
+        }
+      });
+      // Bloquear que el select dispare drag/click de la card
+      sel.addEventListener('mousedown',  e => e.stopPropagation());
+      sel.addEventListener('dragstart',  e => { e.preventDefault(); e.stopPropagation(); });
+    });
+
     // Checkbox certificado → mueve a DONE
     document.querySelectorAll('.cert-check').forEach(chk => {
       chk.addEventListener('change', e => {
         if (e.target.checked) {
-          AppData.updateStoryStatus(e.target.dataset.id, 'done');
+          const id = e.target.dataset.id;
+          AppData.updateStoryStatus(id, 'done');
+          const task = _currentStories.find(s => s.id === id);
+          if (task) _pushHdEstado(task, 'ENTREGADO');
           App.refreshBoard();
           App.refreshBanner();
         }
@@ -311,12 +470,50 @@ const Board = (() => {
     return '#27AE60';
   }
 
+  // Feature 6: consulta el ticket; si está sin asignar → lo asigna al usuario actual
+  async function _maybeAutoAssign(ticketId, currentUserId) {
+    if (!ticketId || !currentUserId) return;
+    try {
+      const r = await App.hdFetchSafe(`${App.hdBase()}/tickets/tickets/${ticketId}`);
+      if (!r.ok) return;
+      const raw = await r.json();
+      const ticket = Array.isArray(raw) ? raw[0] : (raw.item || raw.data || raw);
+      const assigned = ticket && (ticket.assigned_user_id || ticket.assignedUserId);
+      if (!assigned) {
+        await App.assignHdTicket(ticketId, currentUserId);
+      }
+    } catch (e) {
+      // si falla el GET, no bloqueamos el cambio de estado — solo registramos
+      console.warn('[HD auto-assign check]', e);
+    }
+  }
+
   // ── Drag & Drop ──────────────────────────────────────
   function _attachDragEvents() {
+    const canMoveAll = document.body.classList.contains('can-move-all-cards');
+    const session    = (typeof App !== 'undefined' && App.getSession) ? App.getSession() : {};
+    const myId       = String((session && session.id) || '').trim().toUpperCase();
+
+    // Marca visualmente las cards no movibles cuando el usuario está restringido
+    document.querySelectorAll('.story-card').forEach(card => {
+      const owner = String(card.dataset.assignee || '').trim().toUpperCase();
+      if (!canMoveAll && (!owner || owner !== myId)) {
+        card.classList.add('not-mine');
+      }
+    });
+
     document.querySelectorAll('.story-card').forEach(card => {
       card.addEventListener('dragstart', e => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL' || e.target.tagName === 'SPAN') {
           e.preventDefault(); return;
+        }
+        // Permiso: si no soy supervisor/helpdesk, solo puedo mover mis propias cards
+        if (!canMoveAll) {
+          const owner = String(card.dataset.assignee || '').trim().toUpperCase();
+          if (!owner || owner !== myId) {
+            e.preventDefault();
+            return;
+          }
         }
         _draggedId = card.dataset.id;
         card.classList.add('dragging');
@@ -335,7 +532,15 @@ const Board = (() => {
         e.preventDefault();
         col.classList.remove('drag-over');
         if (_draggedId && col.dataset.status) {
-          AppData.updateStoryStatus(_draggedId, col.dataset.status);
+          const task   = _currentStories.find(s => s.id === _draggedId);
+          const target = col.dataset.status;
+          if (task && task.status === 'todo' && target === 'in_progress' && !_canStartWork(task)) {
+            return; // bloqueado o cancelado: la tarea se queda en To Do
+          }
+          AppData.updateStoryStatus(_draggedId, target);
+          if (target === 'in_progress')  _pushHdEstado(task, 'EN PROCESO');
+          else if (target === 'review')  _pushHdEstado(task, 'INSTALADO PARA CERTIFICACIÓN');
+          else if (target === 'done')    _pushHdEstado(task, 'ENTREGADO');
           App.refreshBoard();
           App.refreshBanner();
         }
@@ -345,12 +550,22 @@ const Board = (() => {
 
   // ── Modal detalle ────────────────────────────────────
   function _openDetail(task, team, clients) {
-    const member = team.find(m => m.id === task.assignee);
     const client = clients.find(c => c.id === task.client);
     const pLabel = { alta: 'Alta', media: 'Media', baja: 'Baja' }[task.priority];
     const dueStr = task.dueDate
       ? new Date(task.dueDate + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })
       : '—';
+
+    // Lista de asignables: empleados del Helpdesk (API), con fallback al team local.
+    // Asegura que el asignado actual aparezca aunque no esté en la lista.
+    let assigneeList = _hdUsers().length ? _hdUsers().slice() : team.map(m => ({ id: m.id, name: m.name }));
+    if (task.assignee && !assigneeList.some(m => m.id === task.assignee)) {
+      const r = _resolveMember(task.assignee, team);
+      assigneeList = [{ id: r.id, name: r.name }, ...assigneeList];
+    }
+
+    // Prioridad y demás campos extra: editables solo en To Do / In Progress
+    const editable = task.status === 'todo' || task.status === 'in_progress';
 
     const initPct   = task.progress ?? 0;
     const initColor = _progColor(initPct);
@@ -363,8 +578,21 @@ const Board = (() => {
       <div class="detail-meta">
         ${task.ticket ? `<span class="card-ticket" style="font-size:13px">#${task.ticket}</span>` : ''}
         ${client ? `<span class="card-client-badge" style="background:${client.color}20;color:${client.color};border:1px solid ${client.color}40;font-size:12px;padding:3px 10px;border-radius:10px">${client.name}</span>` : ''}
-        <span class="badge badge-${task.priority}">${pLabel}</span>
-        ${member ? `<span style="font-size:12px;color:var(--text-mid)">→ ${member.name}</span>` : ''}
+      </div>
+      <div class="detail-status-row" style="margin-top:10px">
+        <label>Asignado a:</label>
+        <select class="status-select" id="detail-assignee">
+          <option value="">Sin asignar</option>
+          ${assigneeList.map(m => `<option value="${m.id}" ${task.assignee === m.id ? 'selected' : ''}>${m.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="detail-status-row" style="margin-top:10px">
+        <label>Prioridad:</label>
+        ${editable
+          ? `<select class="status-select" id="detail-priority">
+               ${['alta','media','baja'].map(p => `<option value="${p}" ${task.priority === p ? 'selected' : ''}>${({alta:'Alta',media:'Media',baja:'Baja'})[p]}</option>`).join('')}
+             </select>`
+          : `<span class="badge badge-${task.priority}">${pLabel}</span>`}
       </div>
       <div class="detail-section-title">Descripción</div>
       <textarea id="detail-description" class="detail-description-input" rows="3" placeholder="Detalle adicional, contexto, pasos...">${safeDesc}</textarea>
@@ -396,6 +624,24 @@ const Board = (() => {
         <button class="btn-secondary" id="detail-delete" style="padding:5px 12px;font-size:12px;color:var(--error);border-color:var(--error)">Eliminar</button>
       </div>`;
 
+    // Cargar empleados del Helpdesk (API) y repoblar el select de asignado.
+    // El render inicial ya puso un fallback; esto trae la lista completa aunque
+    // aún no se haya hecho ↻ Sincronizar en la vista de Tickets.
+    if (App && typeof App.fetchHdUsers === 'function') {
+      App.fetchHdUsers().then(users => {
+        const sel = document.getElementById('detail-assignee');
+        if (!sel || !users || !users.length) return;
+        let list = users.slice();
+        if (task.assignee && !list.some(m => m.id === task.assignee)) {
+          const r = _resolveMember(task.assignee, team);
+          list = [{ id: r.id, name: r.name }, ...list];
+        }
+        sel.innerHTML =
+          `<option value="">Sin asignar</option>` +
+          list.map(m => `<option value="${m.id}" ${task.assignee === m.id ? 'selected' : ''}>${m.name}</option>`).join('');
+      });
+    }
+
     // Barra de progreso en modal: actualización en tiempo real
     const progInput = document.getElementById('detail-prog');
     const progBar   = document.getElementById('detail-bar');
@@ -418,6 +664,10 @@ const Board = (() => {
     });
 
     document.getElementById('detail-save').addEventListener('click', () => {
+      const newStatus = document.getElementById('detail-status').value;
+      if (task.status === 'todo' && newStatus === 'in_progress' && !_canStartWork(task)) {
+        return; // bloqueado o cancelado: el modal queda abierto sin guardar nada
+      }
       let raw = Math.min(100, Math.max(0, parseInt(progInput.value, 10) || 0));
       let pct = raw % 5 === 0 ? raw : Math.min(100, raw + (5 - raw % 5));
       const newTitle = document.getElementById('detail-title').value.trim();
@@ -426,8 +676,15 @@ const Board = (() => {
       AppData.updateStoryTitle(task.id, newTitle);
       AppData.updateStoryDescription(task.id, newDesc);
       AppData.updateStoryProgress(task.id, pct);
-      AppData.updateStoryStatus(task.id, document.getElementById('detail-status').value);
+      AppData.updateStoryStatus(task.id, newStatus);
       AppData.updateStoryDueDate(task.id, document.getElementById('detail-duedate').value);
+      AppData.updateStoryAssignee(task.id, document.getElementById('detail-assignee').value || null);
+      const prioSel = document.getElementById('detail-priority');
+      if (prioSel) AppData.updateStoryPriority(task.id, prioSel.value);
+      // Sincronizar estado del ticket Helpdesk según el nuevo estado de la card
+      if (newStatus === 'in_progress')  _pushHdEstado({ ...task, status: newStatus }, 'EN PROCESO');
+      else if (newStatus === 'review')  _pushHdEstado({ ...task, status: newStatus }, 'INSTALADO PARA CERTIFICACIÓN');
+      else if (newStatus === 'done')    _pushHdEstado({ ...task, status: newStatus }, 'ENTREGADO');
       document.getElementById('modal-card').classList.add('hidden');
       App.refreshBoard();
       App.refreshBanner();
