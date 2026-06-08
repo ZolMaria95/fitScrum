@@ -147,11 +147,12 @@ const App = (() => {
 
     refreshBoard();
 
-    // Sync en tiempo real: detectar cambios de otros usuarios cada 30s
-    AppData.startPolling(() => {
+    // Sync en tiempo real: streaming SSE de Firebase (updates casi instantáneos;
+    // fallback automático a polling si el navegador no soporta EventSource)
+    AppData.startStreaming(() => {
       refreshBoard();
       refreshBanner();
-    }, 30000);
+    });
   }
 
   // ── Borrar TODAS las tareas del sprint actual (solo MSC001) ──

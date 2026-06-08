@@ -46,8 +46,33 @@ const AppData = (() => {
     return r.json(); // returns null when the node doesn't exist yet
   }
 
+  // Registro de escrituras locales recientes de stories (id → timestamp). El
+  // merge remoto respeta una ventana de gracia por-ID: durante ese lapso el
+  // estado local manda sobre el remoto. Evita dos races al sincronizar:
+  //   • tareas recién creadas que se borran antes de propagarse a Firebase
+  //   • cards recién movidas que "revierten" por un snapshot remoto stale
+  const _GRACE_MS = 8000; // ventana de gracia por-ID tras una escritura local
+  const _recentWrites = new Map();
+  function _markStoryWrite(path, data) {
+    if (typeof path !== 'string' || !path.startsWith('stories')) return;
+    const now = Date.now();
+    const single = path.match(/^stories\/stories\/(.+)$/);
+    if (single) {
+      _recentWrites.set(decodeURIComponent(single[1]), now);
+    } else if (data && typeof data === 'object') {
+      // 'stories/stories' (mapa id→story) o 'stories' ({ stories: {...} })
+      const map = path === 'stories' ? (data.stories || {}) : data;
+      Object.keys(map).forEach(id => _recentWrites.set(id, now));
+    }
+    // Prune de entradas expiradas para que el mapa no crezca sin límite
+    if (_recentWrites.size > 200) {
+      for (const [id, ts] of _recentWrites) if (now - ts >= _GRACE_MS) _recentWrites.delete(id);
+    }
+  }
+
   function _fbPut(path, data) {
     // Fire-and-forget: in-memory state is already updated, Firebase syncs in background
+    _markStoryWrite(path, data);
     fetch(_dbUrl(path), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -57,6 +82,7 @@ const AppData = (() => {
 
   // PATCH: merge sólo los campos enviados — evita race conditions de PUT total
   function _fbPatch(path, data) {
+    _markStoryWrite(path, data);
     fetch(_dbUrl(path), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -66,6 +92,7 @@ const AppData = (() => {
 
   // DELETE: elimina un nodo individual (usado para borrar una story por su ID)
   function _fbDelete(path) {
+    _markStoryWrite(path);
     fetch(_dbUrl(path), { method: 'DELETE' })
       .catch(err => console.warn(`[Firebase DELETE] ${path}:`, err));
   }
@@ -520,36 +547,94 @@ const AppData = (() => {
     _persist('weeklySupport', _weekly);
   }
 
-  // ── Real-time sync: poll Firebase para detectar cambios de otros usuarios ─
+  // ── Real-time sync ────────────────────────────────────────────────────────
+  // ¿La story `id` fue escrita localmente dentro de la ventana de gracia?
+  function _writtenRecently(id) {
+    const ts = _recentWrites.get(id);
+    return ts != null && (Date.now() - ts < _GRACE_MS);
+  }
+
+  // Merge remoto → local. Devuelve true si hubo cambios. Reutilizado por el
+  // streaming SSE y por el polling de respaldo. Las stories escritas localmente
+  // hace < _GRACE_MS se respetan (el estado local manda) para no revertir ni
+  // borrar cambios que Firebase aún no propagó.
+  function _applyRemoteStories(remoteArr) {
+    if (!remoteArr || !remoteArr.length) return false; // nodo vacío: no mergear (evita wipe)
+    let changed = false;
+    // Agregar nuevas, actualizar diferentes
+    remoteArr.forEach(rs => {
+      if (!rs || !rs.id) return;
+      if (_writtenRecently(rs.id)) return; // local manda durante la gracia
+      const local = _stories.stories.find(s => s.id === rs.id);
+      if (!local) {
+        _stories.stories.push(rs);
+        changed = true;
+      } else if (JSON.stringify(local) !== JSON.stringify(rs)) {
+        Object.assign(local, rs);
+        changed = true;
+      }
+    });
+    // Remover locales ausentes en remoto — salvo las recién escritas localmente,
+    // que aún pueden no estar en el snapshot (evita borrar una tarea nueva).
+    const remoteIds = new Set(remoteArr.filter(s => s && s.id).map(s => s.id));
+    const before = _stories.stories.length;
+    _stories.stories = _stories.stories.filter(s => remoteIds.has(s.id) || _writtenRecently(s.id));
+    if (_stories.stories.length !== before) changed = true;
+    return changed;
+  }
+
+  async function _syncStoriesOnce(onUpdate) {
+    try {
+      const remote = await _fbGet('stories');
+      if (_applyRemoteStories(_normalizeStories(remote)) && typeof onUpdate === 'function') onUpdate();
+    } catch (e) { /* silencioso — reintenta en el próximo evento/ciclo */ }
+  }
+
+  // ── Streaming SSE (Firebase REST EventSource): updates casi instantáneos ────
+  // Cada cambio en `stories` dispara un evento → re-fetch debounced + merge.
+  // Reutilizamos el merge (no parseamos deltas) para mantener la lógica robusta.
+  let _es = null;
+  let _streamDebounce = null;
+  let _safetyTimer = null;
+
+  function startStreaming(onUpdate) {
+    if (!_fbReady() || _es) return;
+    if (typeof EventSource === 'undefined') {
+      console.warn('[sync] EventSource no soportado — fallback a polling 5s');
+      startPolling(onUpdate, 5000);
+      return;
+    }
+    const trigger = () => {
+      clearTimeout(_streamDebounce);
+      _streamDebounce = setTimeout(() => _syncStoriesOnce(onUpdate), 250);
+    };
+    try {
+      _es = new EventSource(_dbUrl('stories'));
+    } catch (e) {
+      console.warn('[sync] EventSource falló al abrir — fallback a polling 5s', e);
+      startPolling(onUpdate, 5000);
+      return;
+    }
+    // Firebase emite eventos NOMBRADOS (put/patch), no `message`
+    _es.addEventListener('put', trigger);
+    _es.addEventListener('patch', trigger);
+    _es.addEventListener('open', () => console.log('[sync] streaming SSE conectado'));
+    _es.addEventListener('error', () => { /* EventSource reintenta solo */ });
+    // Red de seguridad: re-sync cada 60s por si se cae la conexión o se pierde un evento
+    _safetyTimer = setInterval(() => _syncStoriesOnce(onUpdate), 60000);
+  }
+
+  function stopStreaming() {
+    if (_es) { try { _es.close(); } catch (_) {} _es = null; }
+    clearTimeout(_streamDebounce);
+    if (_safetyTimer) { clearInterval(_safetyTimer); _safetyTimer = null; }
+  }
+
+  // Polling de respaldo (fallback cuando no hay SSE)
   let _pollTimer = null;
   function startPolling(onUpdate, intervalMs = 30000) {
     if (!_fbReady() || _pollTimer) return;
-    _pollTimer = setInterval(async () => {
-      try {
-        const remote    = await _fbGet('stories');
-        const remoteArr = _normalizeStories(remote);
-        if (!remoteArr.length) return; // nodo vacío/ausente: no mergear (evita wipe)
-        let changed = false;
-        // Merge remote → local: agregar nuevas, actualizar diferentes
-        remoteArr.forEach(rs => {
-          if (!rs || !rs.id) return;
-          const local = _stories.stories.find(s => s.id === rs.id);
-          if (!local) {
-            _stories.stories.push(rs);
-            changed = true;
-          } else if (JSON.stringify(local) !== JSON.stringify(rs)) {
-            Object.assign(local, rs);
-            changed = true;
-          }
-        });
-        // Remover localmente las que ya no están en remoto
-        const remoteIds = new Set(remoteArr.filter(s => s && s.id).map(s => s.id));
-        const before = _stories.stories.length;
-        _stories.stories = _stories.stories.filter(s => remoteIds.has(s.id));
-        if (_stories.stories.length !== before) changed = true;
-        if (changed && typeof onUpdate === 'function') onUpdate();
-      } catch (e) { /* silencioso — reintenta en el próximo ciclo */ }
-    }, intervalMs);
+    _pollTimer = setInterval(() => _syncStoriesOnce(onUpdate), intervalMs);
   }
 
   function stopPolling() {
@@ -574,6 +659,7 @@ const AppData = (() => {
     getSolNotes, setSolNote,
     getWeeklySupport, getWeekAssignment, setWeekAssignment, clearWeekAssignment,
     getWeekTickets, addWeekTicket, removeWeekTicket,
+    startStreaming, stopStreaming,
     startPolling, stopPolling,
   };
 })();
