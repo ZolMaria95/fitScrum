@@ -154,10 +154,14 @@ const Board = (() => {
     return { id, name, color: _colorFor(id), label: _initialsFromName(name), role: u ? (u.role || '') : '' };
   }
 
-  // Etiqueta de asignado: "MSC001 Maria Sol Contreras · Supervisor"
+  // Etiqueta de asignado: "MSC001 Maria Sol Contreras · Supervisor".
+  // Si el nombre no se resolvió (name === id) NO se duplica el código.
   function _assigneeLabel(u) {
-    const role = u && u.role ? ` · ${u.role}` : '';
-    return `${(u && u.id) || ''} ${(u && u.name) || ''}${role}`.trim();
+    if (!u) return '';
+    const id   = u.id || '';
+    const name = (u.name && u.name !== id) ? u.name : '';
+    const role = u.role ? ` · ${u.role}` : '';
+    return `${id}${name ? ' ' + name : ''}${role}`.trim();
   }
 
   // Outside-click para cerrar el dropdown de asignado del modal (una sola vez)
@@ -194,7 +198,7 @@ const Board = (() => {
         html += filtered.map(u =>
           `<div class="searchable-item" data-id="${u.id}" data-label="${_assigneeLabel(u).replace(/"/g,'&quot;')}">
              <span class="searchable-item-main">
-               <span class="searchable-item-name">${u.name}</span>
+               <span class="searchable-item-name">${(u.name && u.name !== u.id) ? u.name : '<em style="color:var(--text-muted)">(sin nombre)</em>'}</span>
                ${u.role ? `<span class="searchable-item-role">${u.role}</span>` : ''}
              </span>
              <span class="searchable-item-id">${u.id}</span>
@@ -776,7 +780,12 @@ const Board = (() => {
       if (prioSel) AppData.updateStoryPriority(task.id, prioSel.value);
       // Si cambió el asignado y la tarea tiene ticket → reflejarlo en el Helpdesk (PUT)
       if (task.ticket && newAssignee && newAssignee !== task.assignee) {
-        App.assignHdTicket(task.ticket, newAssignee);
+        App.assignHdTicket(task.ticket, newAssignee).then(res => {
+          if (res && !res.ok) alert(
+            `⚠️ No se pudo asignar el ticket #${task.ticket} en el Helpdesk ` +
+            `(HTTP ${res.status || 'sin respuesta'}).` + (res.detail ? `\n\nAPI: ${res.detail}` : '')
+          );
+        });
       }
       // Sincronizar estado del ticket Helpdesk según el nuevo estado de la card
       if (newStatus === 'in_progress')  _pushHdEstado({ ...task, status: newStatus }, 'EN PROCESO');

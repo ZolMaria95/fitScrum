@@ -1576,10 +1576,11 @@ const HelpdeskPanel = (() => {
         // Mismo formato que el modal de nueva tarea: código + nombre + rol,
         // con data-label (el handler de selección en app.js lee dataset.label)
         list.innerHTML = users.map(u => {
-          const label = `${u.id} ${u.name}${u.role ? ' · ' + u.role : ''}`;
+          const _nm   = (u.name && u.name !== u.id) ? u.name : '';
+          const label = `${u.id}${_nm ? ' ' + _nm : ''}${u.role ? ' · ' + u.role : ''}`;
           return `<div class="searchable-item" data-id="${u.id}" data-label="${label.replace(/"/g,'&quot;')}">
              <span class="searchable-item-main">
-               <span class="searchable-item-name">${u.name}</span>
+               <span class="searchable-item-name">${_nm || '<em style="color:var(--text-muted)">(sin nombre)</em>'}</span>
                ${u.role ? `<span class="searchable-item-role">${u.role}</span>` : ''}
              </span>
              <span class="searchable-item-id">${u.id}</span>

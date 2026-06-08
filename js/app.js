@@ -76,8 +76,9 @@ const App = (() => {
   // y reenviamos el objeto completo (así no se pierden los demás campos). Si el
   // PUT completo es rechazado por el schema (422), reintentamos con body parcial.
   // Usa _hdFetchSafe para que un 401/403/404 no cierre sesión.
+  // Devuelve { ok, status, detail } para que el caller pueda avisar al usuario.
   async function _assignHdTicket(ticketId, userId) {
-    if (!ticketId || !userId) return;
+    if (!ticketId || !userId) return { ok: false, status: 0, detail: 'falta ticket o usuario' };
     const url = `${_hdBase()}/tickets/tickets/${ticketId}`;
     const _put = (body) => _hdFetchSafe(url, {
       method: 'PUT',
@@ -86,25 +87,29 @@ const App = (() => {
     });
     const _body = async (r) => { try { return r && r.text ? await r.text() : ''; } catch (_) { return ''; } };
     try {
+      let fullDetail = '';
       const getR = await _hdFetchSafe(url);
       if (getR.ok) {
         const data = await getR.json();
         const raw  = Array.isArray(data) ? data[0] : (data && (data.item || data.data) || data);
         if (raw && raw.ticket_id) {
           const full = await _put({ ...raw, assigned_user_id: userId });
-          if (full.ok) { console.log('[HD assign] OK (ticket completo)', ticketId, '→', userId); return full; }
-          console.warn('[HD assign] PUT completo falló', full.status, await _body(full));
+          if (full.ok) { console.log('[HD assign] OK (ticket completo)', ticketId, '→', userId); return { ok: true, status: full.status }; }
+          fullDetail = await _body(full);
+          console.warn('[HD assign] PUT completo falló', full.status, fullDetail);
         }
       } else {
         console.warn('[HD assign] GET ticket falló', ticketId, getR.status);
       }
       // Fallback: PUT con solo el campo de asignación
       const part = await _put({ assigned_user_id: userId });
-      if (part.ok) console.log('[HD assign] OK (parcial)', ticketId, '→', userId);
-      else         console.warn('[HD assign] PUT parcial falló', part.status, await _body(part));
-      return part;
+      if (part.ok) { console.log('[HD assign] OK (parcial)', ticketId, '→', userId); return { ok: true, status: part.status }; }
+      const partDetail = await _body(part);
+      console.warn('[HD assign] PUT parcial falló', part.status, partDetail);
+      return { ok: false, status: part.status || 0, detail: partDetail || fullDetail || '' };
     } catch (e) {
       console.warn('[HD assign] error', ticketId, e);
+      return { ok: false, status: 0, detail: String((e && e.message) || e) };
     }
   }
 
@@ -681,10 +686,13 @@ const App = (() => {
       clearTimeout(_autoSearchTimer);
     }
 
-    // Etiqueta visible al seleccionar: "MSC001 Maria Sol Contreras · Supervisor"
+    // Etiqueta visible al seleccionar: "MSC001 Maria Sol Contreras · Supervisor".
+    // Si el nombre no se resolvió (name === id) NO se duplica el código.
     function _assigneeLabel(u) {
+      const id   = u.id || '';
+      const name = (u.name && u.name !== id) ? u.name : '';
       const role = u.role ? ` · ${u.role}` : '';
-      return `${u.id} ${u.name}${role}`;
+      return `${id}${name ? ' ' + name : ''}${role}`;
     }
 
     // Dropdown buscable: render del listado filtrado (busca por código y nombre)
@@ -703,7 +711,7 @@ const App = (() => {
       list.innerHTML = filtered.map(u =>
         `<div class="searchable-item" data-id="${u.id}" data-label="${_assigneeLabel(u).replace(/"/g,'&quot;')}">
            <span class="searchable-item-main">
-             <span class="searchable-item-name">${u.name}</span>
+             <span class="searchable-item-name">${(u.name && u.name !== u.id) ? u.name : '<em style="color:var(--text-muted)">(sin nombre)</em>'}</span>
              ${u.role ? `<span class="searchable-item-role">${u.role}</span>` : ''}
            </span>
            <span class="searchable-item-id">${u.id}</span>
@@ -801,7 +809,14 @@ const App = (() => {
         waitingDate:   waitingDate,
       });
       // Si la tarea tiene ticket asociado → notificar asignación al Helpdesk
-      if (ticketNum && assigneeId) _assignHdTicket(ticketNum, assigneeId);
+      if (ticketNum && assigneeId) {
+        _assignHdTicket(ticketNum, assigneeId).then(res => {
+          if (res && !res.ok) alert(
+            `⚠️ La tarea se creó, pero NO se pudo asignar el ticket #${ticketNum} en el Helpdesk ` +
+            `(HTTP ${res.status || 'sin respuesta'}).` + (res.detail ? `\n\nAPI: ${res.detail}` : '')
+          );
+        });
+      }
       document.getElementById('modal-new-story').classList.add('hidden');
       e.target.reset();
       refreshBoard();
