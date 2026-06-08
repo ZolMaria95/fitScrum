@@ -623,16 +623,21 @@ body.can-delete-board #btn-clear-board { display: inline-flex; }
   max-width: 110px;
 }
 
+/* Píldora con el código de usuario del API (ej. MSC001) en vez de iniciales */
 .card-assignee {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 9px;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
   color: white;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 

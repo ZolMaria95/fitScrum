@@ -304,7 +304,7 @@ const Board = (() => {
     const client = clients.find(c => c.id === task.client);
 
     const assigneeEl = member
-      ? `<div class="card-assignee" style="background:${member.color}" title="${member.name}">${member.label}</div>`
+      ? `<div class="card-assignee" style="background:${member.color}" title="${member.name}">${member.id}</div>`
       : `<div class="card-unassigned" title="Sin asignar"></div>`;
 
     const dueStr    = task.dueDate ? _fmtShort(task.dueDate) : '';
