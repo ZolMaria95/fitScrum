@@ -257,7 +257,7 @@ const Board = (() => {
       const m = _resolveMember(id, team);
       if (!m) return '';
       return `<div class="assignee-chip ${_activeAssignees.has(id) ? '' : 'inactive'}"
-           data-id="${id}" style="background:${m.color}" title="${m.name}">${m.label}</div>`;
+           data-id="${id}" style="background:${m.color}" title="${m.name}">${m.id}</div>`;
     }).join('');
     const clearBtnHTML = `
       <button class="assignee-clear-btn ${allActive ? 'active' : ''}"
