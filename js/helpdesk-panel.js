@@ -1573,12 +1573,18 @@ const HelpdeskPanel = (() => {
     if (App && typeof App.fetchHdUsers === 'function') {
       App.fetchHdUsers().then(users => {
         if (!list) return;
-        list.innerHTML = users.map(u =>
-          `<div class="searchable-item" data-id="${u.id}" data-name="${u.name.replace(/"/g,'&quot;')}">
-             <span class="searchable-item-name">${u.name}</span>
+        // Mismo formato que el modal de nueva tarea: código + nombre + rol,
+        // con data-label (el handler de selección en app.js lee dataset.label)
+        list.innerHTML = users.map(u => {
+          const label = `${u.id} ${u.name}${u.role ? ' · ' + u.role : ''}`;
+          return `<div class="searchable-item" data-id="${u.id}" data-label="${label.replace(/"/g,'&quot;')}">
+             <span class="searchable-item-main">
+               <span class="searchable-item-name">${u.name}</span>
+               ${u.role ? `<span class="searchable-item-role">${u.role}</span>` : ''}
+             </span>
              <span class="searchable-item-id">${u.id}</span>
-           </div>`
-        ).join('');
+           </div>`;
+        }).join('');
       });
     }
 
