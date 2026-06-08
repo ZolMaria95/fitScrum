@@ -781,11 +781,13 @@ const Board = (() => {
       // Si cambió el asignado y la tarea tiene ticket → reflejarlo en el Helpdesk (PUT)
       if (task.ticket && newAssignee && newAssignee !== task.assignee) {
         App.assignHdTicket(task.ticket, newAssignee).then(res => {
-          if (res && !res.ok) alert(
-            `⚠️ La asignación NO quedó en el Helpdesk.\n` +
-            `ticket #${task.ticket} → ${newAssignee}\n` +
-            `GET ${res.getStatus} · PUT ${res.status} · assigned_user_id ahora: ${res.after || '(vacío)'}` +
-            (res.detail ? `\nAPI: ${res.detail}` : '')
+          if (res && res.ok) alert(
+            `✓ Asignación OK en Helpdesk: ticket #${task.ticket} → ${newAssignee}\n` +
+            `CAMPO CORRECTO: "${res.field}"`
+          );
+          else alert(
+            `⚠️ La asignación NO quedó (ticket #${task.ticket} → ${newAssignee}).\n` +
+            (res && res.tried ? `Campos probados:\n${res.tried.join('  ')}` : (res && res.detail) || 'sin respuesta')
           );
         });
       }

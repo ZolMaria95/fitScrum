@@ -71,12 +71,11 @@ const App = (() => {
   function _invalidateHdUsersCache() { _hdUsersCache = null; }
 
   // Asignación del ticket en el Helpdesk (solo si la tarea tiene ticket).
-  // El API NO acepta PATCH/POST en /tickets/tickets/:id — el único método de
-  // update es PUT. Round-trip: GET el ticket, cambiamos assigned_user_id y
-  // reenviamos el objeto completo. Luego RE-GET para CONFIRMAR que el API
-  // realmente guardó la asignación (un 200 no garantiza que el campo persistió).
-  // Usa _hdFetchSafe para que un 401/403/404 no cierre sesión.
-  // Devuelve { ok, status, detail, before, after, getStatus } para el caller.
+  // SONDA TEMPORAL: el API devuelve 200 al PUT pero ignora `assigned_user_id`.
+  // El campo de escritura para asignar tiene OTRO nombre. Probamos candidatos
+  // uno por uno (GET → PUT {...raw, [campo]:userId} → re-GET) y nos quedamos con
+  // el que haga que assigned_user_id realmente persista. Reporta el campo ganador.
+  // Devuelve { ok, status, detail, after, getStatus, field, tried }.
   async function _assignHdTicket(ticketId, userId) {
     if (!ticketId || !userId) return { ok: false, status: 0, detail: 'falta ticket o usuario' };
     const url   = `${_hdBase()}/tickets/tickets/${ticketId}`;
@@ -86,30 +85,36 @@ const App = (() => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const _body   = async (r) => { try { return r && r.text ? await r.text() : ''; } catch (_) { return ''; } };
     const _unwrap = (d) => Array.isArray(d) ? d[0] : (d && (d.item || d.data) || d);
     const _aid    = (o) => o ? String(o.assigned_user_id || '').trim().toUpperCase() : '';
+    // Nombres candidatos del campo de asignación en el schema de escritura
+    const CAMPOS = [
+      'assigned_user_id', 'assigned_user', 'assigned_to', 'assigned_to_id',
+      'assigned_to_user_id', 'assignee_id', 'assignee', 'technician_id',
+      'technician', 'assigned_person_id', 'responsible_user_id', 'assign_to',
+    ];
     try {
-      // 1) GET el ticket actual
       const getR = await _hdFetchSafe(url);
-      let raw = null, before = '';
-      if (getR.ok) { raw = _unwrap(await getR.json()); before = _aid(raw); }
-      else console.warn('[HD assign] GET ticket falló', ticketId, getR.status);
-
-      // 2) PUT: ticket completo con assigned_user_id cambiado (o parcial si no hubo GET)
-      const putBody = (raw && raw.ticket_id) ? { ...raw, assigned_user_id: userId }
-                                             : { assigned_user_id: userId };
-      const putR    = await _put(putBody);
-      const detail  = putR.ok ? '' : await _body(putR);
-      if (!putR.ok) console.warn('[HD assign] PUT falló', ticketId, putR.status, detail);
-
-      // 3) RE-GET: confirmar que el API guardó la asignación
-      let after = '';
-      const reGet = await _hdFetchSafe(url);
-      if (reGet.ok) after = _aid(_unwrap(await reGet.json()));
-      const ok = after === want;
-      console.log('[HD assign]', { ticketId, userId, getStatus: getR.status, before, putStatus: putR.status, after, persistió: ok, detail });
-      return { ok, status: putR.status, detail, before, after, getStatus: getR.status };
+      if (!getR.ok) {
+        console.warn('[HD assign] GET ticket falló', ticketId, getR.status);
+        return { ok: false, status: getR.status, getStatus: getR.status, after: '', detail: 'GET falló' };
+      }
+      const raw = _unwrap(await getR.json());
+      const tried = [];
+      for (const field of CAMPOS) {
+        const putR = await _put({ ...raw, [field]: userId });
+        let after = '';
+        const reGet = await _hdFetchSafe(url);
+        if (reGet.ok) after = _aid(_unwrap(await reGet.json()));
+        tried.push(`${field}:${putR.status}${after === want ? '✓' : ''}`);
+        if (after === want) {
+          console.log('[HD assign] ✓ CAMPO CORRECTO:', field, tried);
+          return { ok: true, status: putR.status, getStatus: getR.status, after, field, tried };
+        }
+      }
+      console.warn('[HD assign] ningún campo funcionó', tried);
+      return { ok: false, status: 200, getStatus: getR.status, after: '', field: '', tried,
+               detail: 'ningún campo funcionó → ' + tried.join('  ') };
     } catch (e) {
       console.warn('[HD assign] error', ticketId, e);
       return { ok: false, status: 0, detail: String((e && e.message) || e) };
@@ -812,13 +817,16 @@ const App = (() => {
         waitingDate:   waitingDate,
       });
       // Si la tarea tiene ticket asociado → notificar asignación al Helpdesk
+      // (SONDA TEMPORAL: avisa siempre con el resultado de la búsqueda de campo)
       if (ticketNum && assigneeId) {
         _assignHdTicket(ticketNum, assigneeId).then(res => {
-          if (res && !res.ok) alert(
-            `⚠️ La tarea se creó, pero la asignación NO quedó en el Helpdesk.\n` +
-            `ticket #${ticketNum} → ${assigneeId}\n` +
-            `GET ${res.getStatus} · PUT ${res.status} · assigned_user_id ahora: ${res.after || '(vacío)'}` +
-            (res.detail ? `\nAPI: ${res.detail}` : '')
+          if (res && res.ok) alert(
+            `✓ Asignación OK en Helpdesk: ticket #${ticketNum} → ${assigneeId}\n` +
+            `CAMPO CORRECTO: "${res.field}"`
+          );
+          else alert(
+            `⚠️ La asignación NO quedó (ticket #${ticketNum} → ${assigneeId}).\n` +
+            (res && res.tried ? `Campos probados (campo:status):\n${res.tried.join('  ')}` : (res && res.detail) || 'sin respuesta')
           );
         });
       }
