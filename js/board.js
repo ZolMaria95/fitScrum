@@ -148,10 +148,101 @@ const Board = (() => {
   function _resolveMember(id, team) {
     if (!id) return null;
     const t = (team || []).find(m => m.id === id);
-    if (t) return { id: t.id, name: t.name, color: t.color, label: t.id };
+    if (t) return { id: t.id, name: t.name, color: t.color, label: t.id, role: t.role || '' };
     const u = _hdUsers().find(x => x.id === id);
     const name = u ? u.name : id;
-    return { id, name, color: _colorFor(id), label: _initialsFromName(name) };
+    return { id, name, color: _colorFor(id), label: _initialsFromName(name), role: u ? (u.role || '') : '' };
+  }
+
+  // Etiqueta de asignado: "MSC001 Maria Sol Contreras · Supervisor"
+  function _assigneeLabel(u) {
+    const role = u && u.role ? ` · ${u.role}` : '';
+    return `${(u && u.id) || ''} ${(u && u.name) || ''}${role}`.trim();
+  }
+
+  // Outside-click para cerrar el dropdown de asignado del modal (una sola vez)
+  let _detailAssigneeOutsideWired = false;
+  function _wireDetailAssigneeOutside() {
+    if (_detailAssigneeOutsideWired) return;
+    _detailAssigneeOutsideWired = true;
+    document.addEventListener('click', e => {
+      const wrap = document.getElementById('detail-assignee-wrap');
+      if (wrap && !wrap.contains(e.target)) wrap.classList.remove('open');
+    });
+  }
+
+  // Dropdown buscable de asignado dentro del modal de detalle.
+  // Devuelve un updater(newUsers) para refrescar cuando llegan empleados del API.
+  function _setupDetailAssignee(users, currentId, team) {
+    const wrap   = document.getElementById('detail-assignee-wrap');
+    const search = document.getElementById('detail-assignee-search');
+    const hidden = document.getElementById('detail-assignee');
+    const list   = document.getElementById('detail-assignee-list');
+    if (!wrap || !search || !hidden || !list) return null;
+
+    let _users = users.slice();
+    const norm = s => String(s || '').toLowerCase();
+
+    const render = (filter) => {
+      const f = norm(filter);
+      const filtered = f
+        ? _users.filter(u => norm(u.name).includes(f) || norm(u.id).includes(f))
+        : _users;
+      let html = `<div class="searchable-item searchable-item-clear" data-id="" data-label="">
+          <span class="searchable-item-name" style="color:var(--text-muted)">— Sin asignar —</span></div>`;
+      if (filtered.length) {
+        html += filtered.map(u =>
+          `<div class="searchable-item" data-id="${u.id}" data-label="${_assigneeLabel(u).replace(/"/g,'&quot;')}">
+             <span class="searchable-item-main">
+               <span class="searchable-item-name">${u.name}</span>
+               ${u.role ? `<span class="searchable-item-role">${u.role}</span>` : ''}
+             </span>
+             <span class="searchable-item-id">${u.id}</span>
+           </div>`).join('');
+      } else if (f) {
+        html += `<div class="searchable-empty">Sin coincidencias</div>`;
+      }
+      list.innerHTML = html;
+    };
+
+    const setLabel = () => {
+      const cur = _users.find(u => u.id === currentId);
+      hidden.value = currentId || '';
+      if (cur) search.value = _assigneeLabel(cur);
+      else if (currentId) {
+        const r = _resolveMember(currentId, team);
+        search.value = _assigneeLabel({ id: r.id, name: r.name, role: r.role });
+      } else search.value = '';
+    };
+    setLabel();
+
+    search.addEventListener('focus', () => { wrap.classList.add('open'); search.select(); render(''); });
+    search.addEventListener('click',  () => { wrap.classList.add('open'); render(search.value); });
+    search.addEventListener('input',  () => {
+      wrap.classList.add('open');
+      render(search.value);
+      const exact = _users.find(u => _assigneeLabel(u) === search.value);
+      hidden.value = exact ? exact.id : '';
+    });
+    search.addEventListener('keydown', e => { if (e.key === 'Escape') wrap.classList.remove('open'); });
+    list.addEventListener('mousedown', e => {
+      const item = e.target.closest('.searchable-item');
+      if (!item) return;
+      e.preventDefault();
+      search.value = item.dataset.label || '';
+      hidden.value = item.dataset.id || '';
+      wrap.classList.remove('open');
+    });
+    _wireDetailAssigneeOutside();
+
+    return (newUsers) => {
+      _users = newUsers.slice();
+      currentId = hidden.value;
+      if (wrap.classList.contains('open')) render(search.value);
+      // Re-pinta la etiqueta si el asignado actual ya tiene nombre/rol resuelto
+      const cur = _users.find(u => u.id === hidden.value);
+      if (cur && document.activeElement !== search) search.value = _assigneeLabel(cur);
+    };
   }
 
   // ── Chips de asignado ────────────────────────────────
@@ -558,10 +649,10 @@ const Board = (() => {
 
     // Lista de asignables: empleados del Helpdesk (API), con fallback al team local.
     // Asegura que el asignado actual aparezca aunque no esté en la lista.
-    let assigneeList = _hdUsers().length ? _hdUsers().slice() : team.map(m => ({ id: m.id, name: m.name }));
+    let assigneeList = _hdUsers().length ? _hdUsers().slice() : team.map(m => ({ id: m.id, name: m.name, role: m.role || '' }));
     if (task.assignee && !assigneeList.some(m => m.id === task.assignee)) {
       const r = _resolveMember(task.assignee, team);
-      assigneeList = [{ id: r.id, name: r.name }, ...assigneeList];
+      assigneeList = [{ id: r.id, name: r.name, role: r.role || '' }, ...assigneeList];
     }
 
     // Prioridad y demás campos extra: editables solo en To Do / In Progress
@@ -579,12 +670,13 @@ const Board = (() => {
         ${task.ticket ? `<span class="card-ticket" style="font-size:13px">#${task.ticket}</span>` : ''}
         ${client ? `<span class="card-client-badge" style="background:${client.color}20;color:${client.color};border:1px solid ${client.color}40;font-size:12px;padding:3px 10px;border-radius:10px">${client.name}</span>` : ''}
       </div>
-      <div class="detail-status-row" style="margin-top:10px">
-        <label>Asignado a:</label>
-        <select class="status-select" id="detail-assignee">
-          <option value="">Sin asignar</option>
-          ${assigneeList.map(m => `<option value="${m.id}" ${task.assignee === m.id ? 'selected' : ''}>${m.name}</option>`).join('')}
-        </select>
+      <div class="detail-assignee-block" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+        <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px">Asignado a:</label>
+        <div class="searchable-select" id="detail-assignee-wrap">
+          <input type="text" id="detail-assignee-search" placeholder="Buscar por código o nombre..." autocomplete="off">
+          <div class="searchable-select-list" id="detail-assignee-list"></div>
+        </div>
+        <input type="hidden" id="detail-assignee">
       </div>
       <div class="detail-status-row" style="margin-top:10px">
         <label>Prioridad:</label>
@@ -624,21 +716,21 @@ const Board = (() => {
         <button class="btn-secondary" id="detail-delete" style="padding:5px 12px;font-size:12px;color:var(--error);border-color:var(--error)">Eliminar</button>
       </div>`;
 
-    // Cargar empleados del Helpdesk (API) y repoblar el select de asignado.
+    // Dropdown buscable de asignado (código + nombre + rol)
+    const _updateDetailAssignee = _setupDetailAssignee(assigneeList, task.assignee || '', team);
+
+    // Cargar empleados del Helpdesk (API) y refrescar la lista del dropdown.
     // El render inicial ya puso un fallback; esto trae la lista completa aunque
     // aún no se haya hecho ↻ Sincronizar en la vista de Tickets.
-    if (App && typeof App.fetchHdUsers === 'function') {
+    if (App && typeof App.fetchHdUsers === 'function' && _updateDetailAssignee) {
       App.fetchHdUsers().then(users => {
-        const sel = document.getElementById('detail-assignee');
-        if (!sel || !users || !users.length) return;
+        if (!users || !users.length) return;
         let list = users.slice();
         if (task.assignee && !list.some(m => m.id === task.assignee)) {
           const r = _resolveMember(task.assignee, team);
-          list = [{ id: r.id, name: r.name }, ...list];
+          list = [{ id: r.id, name: r.name, role: r.role || '' }, ...list];
         }
-        sel.innerHTML =
-          `<option value="">Sin asignar</option>` +
-          list.map(m => `<option value="${m.id}" ${task.assignee === m.id ? 'selected' : ''}>${m.name}</option>`).join('');
+        _updateDetailAssignee(list);
       });
     }
 

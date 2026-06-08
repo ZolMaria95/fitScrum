@@ -746,7 +746,27 @@ body.can-delete-board #btn-clear-board { display: inline-flex; }
   background: var(--bg);
   padding: 1px 6px;
   border-radius: 4px;
+  flex-shrink: 0;
+  margin-left: 8px;
 }
+
+/* Nombre + rol apilados en la fila del dropdown de asignado */
+.searchable-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.searchable-item-role {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  font-weight: 600;
+}
+
+.searchable-item-clear .searchable-item-name { font-style: italic; }
 
 .searchable-loading,
 .searchable-empty {

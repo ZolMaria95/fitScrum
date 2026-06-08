@@ -77,6 +77,16 @@ const HelpdeskPanel = (() => {
   // Se persiste en localStorage para sobrevivir reloads y estar disponible
   // antes del primer sync.
   const HD_USERS_LS_KEY = 'fit-daily_hd_users';
+  // Rol por empleado (id → "Soporte" | "Supervisor" | …). Se llena desde el API
+  // de usuarios (role_description); los tickets no traen rol. Persiste aparte.
+  const HD_ROLES_LS_KEY = 'fit-daily_hd_roles';
+  let _hdRoles = (() => {
+    try { return JSON.parse(localStorage.getItem(HD_ROLES_LS_KEY) || '{}') || {}; }
+    catch (_) { return {}; }
+  })();
+  function _saveHdRoles() {
+    try { localStorage.setItem(HD_ROLES_LS_KEY, JSON.stringify(_hdRoles)); } catch (_) {}
+  }
 
   // Determina si un cache parece tener IDs del Helpdesk (formato XXX001+) o
   // IDs locales (2-3 caracteres tipo "SC"). Si es local viejo → descartar.
@@ -137,15 +147,18 @@ const HelpdeskPanel = (() => {
           // Filtro: excluir SOLO clientes. Señales de cliente:
           //   role_description contiene "CLIENTE", o tiene client_id / client_description.
           // Cualquier otro rol (Soporte, Supervisor, Administrador…) es empleado.
-          const role = String(u.role_description || u.role || '').trim().toUpperCase();
+          const roleRaw = String(u.role_description || u.role || '').trim();
+          const role = roleRaw.toUpperCase();
           const esCliente = role.includes('CLIENTE')
             || (u.client_id && Number(u.client_id) > 0)
             || !!String(u.client_description || '').trim();
           if (esCliente) { descartadosCliente++; return; }
+          if (roleRaw) _hdRoles[id] = roleRaw;
           const prev = map.get(id);
           if (name && (!prev || prev === id)) map.set(id, name);
           else if (!prev) map.set(id, id);
         });
+        _saveHdRoles();
         _hdUsers = [...map.entries()]
           .map(([id, name]) => ({ id, name }))
           .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
@@ -183,6 +196,8 @@ const HelpdeskPanel = (() => {
           if (!u) continue;
           const name = String(u.full_name || u.person_name || u.name
                             || u.display_name || u.username || '').trim();
+          const roleRaw = String(u.role_description || u.role || '').trim();
+          if (roleRaw) { _hdRoles[id] = roleRaw; _saveHdRoles(); }
           if (name) {
             endpointOk = ep;
             return name;
@@ -260,7 +275,9 @@ const HelpdeskPanel = (() => {
     _saveHdUsers();
   }
 
-  function getHdUsers() { return _hdUsers.slice(); }
+  function getHdUsers() {
+    return _hdUsers.map(u => ({ id: u.id, name: u.name || u.id, role: _hdRoles[u.id] || '' }));
+  }
 
   // Etiqueta visible del estatus (no toca el valor interno, solo el render)
   function _estatusLabel(estatus) {

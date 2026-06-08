@@ -60,7 +60,7 @@ const App = (() => {
     if (!users.length) {
       // Fallback: usuarios locales (IDs cortos — sincronización HD no funcionará
       // hasta que se haga un ↻ Sincronizar para llenar la lista real)
-      users = AppData.getTeam().map(u => ({ id: u.id, name: u.name }));
+      users = AppData.getTeam().map(u => ({ id: u.id, name: u.name, role: u.role || '' }));
     }
     _hdUsersCache = users.slice().sort((a, b) => a.name.localeCompare(b.name, 'es'));
     return _hdUsersCache;
@@ -655,7 +655,13 @@ const App = (() => {
       clearTimeout(_autoSearchTimer);
     }
 
-    // Dropdown buscable: render del listado filtrado
+    // Etiqueta visible al seleccionar: "MSC001 Maria Sol Contreras · Supervisor"
+    function _assigneeLabel(u) {
+      const role = u.role ? ` · ${u.role}` : '';
+      return `${u.id} ${u.name}${role}`;
+    }
+
+    // Dropdown buscable: render del listado filtrado (busca por código y nombre)
     function _renderAssigneeList(users, filter) {
       const list = document.getElementById('ns-assignee-list');
       if (!list) return;
@@ -669,8 +675,11 @@ const App = (() => {
         return;
       }
       list.innerHTML = filtered.map(u =>
-        `<div class="searchable-item" data-id="${u.id}" data-name="${u.name.replace(/"/g,'&quot;')}">
-           <span class="searchable-item-name">${u.name}</span>
+        `<div class="searchable-item" data-id="${u.id}" data-label="${_assigneeLabel(u).replace(/"/g,'&quot;')}">
+           <span class="searchable-item-main">
+             <span class="searchable-item-name">${u.name}</span>
+             ${u.role ? `<span class="searchable-item-role">${u.role}</span>` : ''}
+           </span>
            <span class="searchable-item-id">${u.id}</span>
          </div>`
       ).join('');
@@ -708,7 +717,7 @@ const App = (() => {
         wrap.classList.add('open');
         if (_hdUsersCache) {
           _renderAssigneeList(_hdUsersCache, search.value);
-          const exact = _hdUsersCache.find(u => u.name === search.value);
+          const exact = _hdUsersCache.find(u => _assigneeLabel(u) === search.value);
           hidden.value = exact ? exact.id : '';
         }
       });
@@ -718,7 +727,7 @@ const App = (() => {
         const item = e.target.closest('.searchable-item');
         if (!item) return;
         e.preventDefault(); // evita que el input pierda el foco antes de leer el dataset
-        search.value = item.dataset.name;
+        search.value = item.dataset.label;
         hidden.value = item.dataset.id;
         wrap.classList.remove('open');
       });
