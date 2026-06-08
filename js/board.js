@@ -782,8 +782,10 @@ const Board = (() => {
       if (task.ticket && newAssignee && newAssignee !== task.assignee) {
         App.assignHdTicket(task.ticket, newAssignee).then(res => {
           if (res && !res.ok) alert(
-            `⚠️ No se pudo asignar el ticket #${task.ticket} en el Helpdesk ` +
-            `(HTTP ${res.status || 'sin respuesta'}).` + (res.detail ? `\n\nAPI: ${res.detail}` : '')
+            `⚠️ La asignación NO quedó en el Helpdesk.\n` +
+            `ticket #${task.ticket} → ${newAssignee}\n` +
+            `GET ${res.getStatus} · PUT ${res.status} · assigned_user_id ahora: ${res.after || '(vacío)'}` +
+            (res.detail ? `\nAPI: ${res.detail}` : '')
           );
         });
       }

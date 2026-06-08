@@ -72,41 +72,44 @@ const App = (() => {
 
   // Asignación del ticket en el Helpdesk (solo si la tarea tiene ticket).
   // El API NO acepta PATCH/POST en /tickets/tickets/:id — el único método de
-  // update es PUT. Hacemos round-trip: GET el ticket, cambiamos assigned_user_id
-  // y reenviamos el objeto completo (así no se pierden los demás campos). Si el
-  // PUT completo es rechazado por el schema (422), reintentamos con body parcial.
+  // update es PUT. Round-trip: GET el ticket, cambiamos assigned_user_id y
+  // reenviamos el objeto completo. Luego RE-GET para CONFIRMAR que el API
+  // realmente guardó la asignación (un 200 no garantiza que el campo persistió).
   // Usa _hdFetchSafe para que un 401/403/404 no cierre sesión.
-  // Devuelve { ok, status, detail } para que el caller pueda avisar al usuario.
+  // Devuelve { ok, status, detail, before, after, getStatus } para el caller.
   async function _assignHdTicket(ticketId, userId) {
     if (!ticketId || !userId) return { ok: false, status: 0, detail: 'falta ticket o usuario' };
-    const url = `${_hdBase()}/tickets/tickets/${ticketId}`;
-    const _put = (body) => _hdFetchSafe(url, {
+    const url   = `${_hdBase()}/tickets/tickets/${ticketId}`;
+    const want  = String(userId).trim().toUpperCase();
+    const _put  = (body) => _hdFetchSafe(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const _body = async (r) => { try { return r && r.text ? await r.text() : ''; } catch (_) { return ''; } };
+    const _body   = async (r) => { try { return r && r.text ? await r.text() : ''; } catch (_) { return ''; } };
+    const _unwrap = (d) => Array.isArray(d) ? d[0] : (d && (d.item || d.data) || d);
+    const _aid    = (o) => o ? String(o.assigned_user_id || '').trim().toUpperCase() : '';
     try {
-      let fullDetail = '';
+      // 1) GET el ticket actual
       const getR = await _hdFetchSafe(url);
-      if (getR.ok) {
-        const data = await getR.json();
-        const raw  = Array.isArray(data) ? data[0] : (data && (data.item || data.data) || data);
-        if (raw && raw.ticket_id) {
-          const full = await _put({ ...raw, assigned_user_id: userId });
-          if (full.ok) { console.log('[HD assign] OK (ticket completo)', ticketId, '→', userId); return { ok: true, status: full.status }; }
-          fullDetail = await _body(full);
-          console.warn('[HD assign] PUT completo falló', full.status, fullDetail);
-        }
-      } else {
-        console.warn('[HD assign] GET ticket falló', ticketId, getR.status);
-      }
-      // Fallback: PUT con solo el campo de asignación
-      const part = await _put({ assigned_user_id: userId });
-      if (part.ok) { console.log('[HD assign] OK (parcial)', ticketId, '→', userId); return { ok: true, status: part.status }; }
-      const partDetail = await _body(part);
-      console.warn('[HD assign] PUT parcial falló', part.status, partDetail);
-      return { ok: false, status: part.status || 0, detail: partDetail || fullDetail || '' };
+      let raw = null, before = '';
+      if (getR.ok) { raw = _unwrap(await getR.json()); before = _aid(raw); }
+      else console.warn('[HD assign] GET ticket falló', ticketId, getR.status);
+
+      // 2) PUT: ticket completo con assigned_user_id cambiado (o parcial si no hubo GET)
+      const putBody = (raw && raw.ticket_id) ? { ...raw, assigned_user_id: userId }
+                                             : { assigned_user_id: userId };
+      const putR    = await _put(putBody);
+      const detail  = putR.ok ? '' : await _body(putR);
+      if (!putR.ok) console.warn('[HD assign] PUT falló', ticketId, putR.status, detail);
+
+      // 3) RE-GET: confirmar que el API guardó la asignación
+      let after = '';
+      const reGet = await _hdFetchSafe(url);
+      if (reGet.ok) after = _aid(_unwrap(await reGet.json()));
+      const ok = after === want;
+      console.log('[HD assign]', { ticketId, userId, getStatus: getR.status, before, putStatus: putR.status, after, persistió: ok, detail });
+      return { ok, status: putR.status, detail, before, after, getStatus: getR.status };
     } catch (e) {
       console.warn('[HD assign] error', ticketId, e);
       return { ok: false, status: 0, detail: String((e && e.message) || e) };
@@ -812,8 +815,10 @@ const App = (() => {
       if (ticketNum && assigneeId) {
         _assignHdTicket(ticketNum, assigneeId).then(res => {
           if (res && !res.ok) alert(
-            `⚠️ La tarea se creó, pero NO se pudo asignar el ticket #${ticketNum} en el Helpdesk ` +
-            `(HTTP ${res.status || 'sin respuesta'}).` + (res.detail ? `\n\nAPI: ${res.detail}` : '')
+            `⚠️ La tarea se creó, pero la asignación NO quedó en el Helpdesk.\n` +
+            `ticket #${ticketNum} → ${assigneeId}\n` +
+            `GET ${res.getStatus} · PUT ${res.status} · assigned_user_id ahora: ${res.after || '(vacío)'}` +
+            (res.detail ? `\nAPI: ${res.detail}` : '')
           );
         });
       }
