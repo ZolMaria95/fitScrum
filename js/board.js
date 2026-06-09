@@ -726,13 +726,22 @@ const Board = (() => {
       </div>` : ''}`;
 
     // Conversación del ticket (mensajes del Helpdesk) — solo si la tarea tiene ticket.
-    // Consulta fresco al API y reutiliza el render completo de la tabla Helpdesk
-    // (mensajes clasificados + adjuntos + imágenes embebidas con auth).
-    if (task.ticket && window.HelpdeskPanel && HelpdeskPanel.renderTicketConversation) {
-      const conv = document.getElementById('detail-ticket-conv');
-      HelpdeskPanel.renderTicketConversation(conv, task.ticket).catch(() => {
-        if (conv) conv.innerHTML = '<div class="detail-conv-info">No se pudieron cargar los mensajes.</div>';
-      });
+    // Consulta fresco al API por número de ticket y reutiliza el render completo de
+    // la tabla Helpdesk (mensajes clasificados + adjuntos + imágenes con auth).
+    if (task.ticket) {
+      const conv  = document.getElementById('detail-ticket-conv');
+      const tieneFn = window.HelpdeskPanel && typeof HelpdeskPanel.renderTicketConversation === 'function';
+      console.log('[Card v36] Conversación ticket', task.ticket, '· conv?', !!conv, '· fn?', tieneFn);
+      if (!tieneFn) {
+        if (conv) conv.innerHTML = '<div class="detail-conv-info">HelpdeskPanel no disponible (recarga con Cmd+Shift+R).</div>';
+      } else {
+        HelpdeskPanel.renderTicketConversation(conv, task.ticket)
+          .then(() => console.log('[Card v36] Conversación renderizada para', task.ticket))
+          .catch(err => {
+            console.error('[Card v36] Error cargando conversación:', err);
+            if (conv) conv.innerHTML = '<div class="detail-conv-info">No se pudieron cargar los mensajes.</div>';
+          });
+      }
     }
 
     // Dropdown buscable de asignado (código + nombre + rol)

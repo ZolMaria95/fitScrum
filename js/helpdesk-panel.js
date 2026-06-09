@@ -320,14 +320,26 @@ const HelpdeskPanel = (() => {
 
   // ── Fetch mensajes de un ticket ───────────────────────
   async function _fetchMessages(ticketId) {
+    const url = `${BASE}/tickets/${ticketId}/messages?limit=50`;
     try {
-      const r = await HelpdeskAuth.fetchWithAuth(
-        `${BASE}/tickets/${ticketId}/messages?limit=50`,
-      );
-      if (!r.ok) return [];
+      const r = await HelpdeskAuth.fetchWithAuth(url);
+      if (!r.ok) {
+        console.warn('[Helpdesk] _fetchMessages', ticketId, '→ HTTP', r.status, url);
+        return [];
+      }
       const data = await r.json();
-      return Array.isArray(data) ? data : [];
-    } catch (_) { return []; }
+      // El API suele devolver un array directo; tolera {items|messages|data:[...]}.
+      const arr = Array.isArray(data) ? data
+                : Array.isArray(data?.items)    ? data.items
+                : Array.isArray(data?.messages) ? data.messages
+                : Array.isArray(data?.data)     ? data.data
+                : [];
+      console.log('[Helpdesk] _fetchMessages', ticketId, '→', r.status, '·', arr.length, 'mensajes');
+      return arr;
+    } catch (e) {
+      console.error('[Helpdesk] _fetchMessages error', ticketId, url, e);
+      return [];
+    }
   }
 
   // ── Sanitizar HTML del mensaje (quitar scripts/eventos) ─
