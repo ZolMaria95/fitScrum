@@ -342,6 +342,32 @@ const HelpdeskPanel = (() => {
     }
   }
 
+  // ── Adjunto a nivel ticket (no de los mensajes) ───────
+  // Escanea el ticket crudo en busca de campos de adjunto (attach/adjunto/
+  // archivo) y devuelve los ids numéricos. El nombre del campo no está
+  // documentado, por eso la detección es por patrón en vez de campo fijo.
+  function _ticketAttachIds(t) {
+    if (!t || typeof t !== 'object') return [];
+    const ids  = [];
+    const push = v => { if (v !== null && v !== undefined && v !== '') ids.push(String(v)); };
+    Object.entries(t).forEach(([k, v]) => {
+      if (!/attach|adjunt|archivo/i.test(k)) return;
+      if (Array.isArray(v)) v.forEach(push);
+      else if (typeof v === 'string' || typeof v === 'number') push(v);
+    });
+    return [...new Set(ids)].filter(id => /^\d+$/.test(id)); // ids del API son numéricos
+  }
+
+  // Pide el ticket completo (el listado a veces no trae todos los campos).
+  async function _fetchTicketRaw(ticketId) {
+    try {
+      const r = await HelpdeskAuth.fetchWithAuth(`${BASE}/tickets/tickets/${ticketId}`);
+      if (!r.ok) return null;
+      const raw = await r.json();
+      return Array.isArray(raw) ? raw[0] : (raw.item || raw.data || raw);
+    } catch (_) { return null; }
+  }
+
   // ── Sanitizar HTML del mensaje (quitar scripts/eventos) ─
   function _safeHtml(html) {
     return String(html || '')
@@ -398,19 +424,58 @@ const HelpdeskPanel = (() => {
   }
 
   // ── Interceptar links de adjunto en el DOM renderizado ─
+  // Imágenes (.jpg/.png/…) → lightbox (mismo popup que el resto de imágenes);
+  // cualquier otro adjunto → descarga. Si el link no trae extensión, se resuelve
+  // al hacer clic según el content-type real del adjunto.
   function _hydrateAttachLinks(container) {
+    const IMG_RE  = /\.(jpe?g|png|gif|webp|bmp|svg)$/i;
+    const HAS_EXT = /\.[a-z0-9]{1,5}$/i;
     container.querySelectorAll('a[href*="/attachments/"]').forEach(a => {
       const match = a.href.match(/\/attachments\/(\d+)/);
       if (!match) return;
-      const id     = match[1];
-      const nombre = a.textContent.trim() || a.download || `adjunto_${id}`;
-      a.href        = '#';
-      a.title       = `Descargar ${nombre}`;
-      a.addEventListener('click', e => {
+      const id       = match[1];
+      const nombre   = a.textContent.trim() || a.download || `adjunto_${id}`;
+      const esImagen = IMG_RE.test(nombre);
+      const incierto = !HAS_EXT.test(nombre);
+      a.href  = '#';
+      a.title = esImagen ? `Ver ${nombre}` : `Descargar ${nombre}`;
+      a.addEventListener('click', async e => {
         e.preventDefault();
-        _downloadAttachment(id, nombre);
+        if (esImagen) { _openAttachImage(a, id, nombre); return; }
+        if (!incierto) { _downloadAttachment(id, nombre); return; }
+        // Sin extensión → resolver por content-type real
+        try {
+          const r  = await HelpdeskAuth.fetchWithAuth(`${BASE}/attachments/${id}`);
+          const ct = (r.headers.get('content-type') || '').split(';')[0].trim();
+          if (ct.startsWith('image/')) {
+            const url = URL.createObjectURL(await r.blob());
+            a.dataset.blobUrl = url;
+            _openImageLightbox(url, nombre);
+          } else {
+            _downloadAttachment(id, nombre);
+          }
+        } catch (_) { _downloadAttachment(id, nombre); }
       });
     });
+  }
+
+  // Abre una imagen adjunta (link <a>) en el lightbox; baja el blob con auth
+  // una sola vez y lo cachea en el elemento para reaperturas instantáneas.
+  async function _openAttachImage(a, id, nombre) {
+    if (a.dataset.blobUrl) { _openImageLightbox(a.dataset.blobUrl, nombre); return; }
+    const prev = a.textContent;
+    a.textContent = '⏳ cargando…';
+    try {
+      const r = await HelpdeskAuth.fetchWithAuth(`${BASE}/attachments/${id}`);
+      if (!r.ok) throw new Error(r.status);
+      const url = URL.createObjectURL(await r.blob());
+      a.dataset.blobUrl = url;
+      a.textContent = prev;
+      _openImageLightbox(url, nombre);
+    } catch (_) {
+      a.textContent = prev;
+      _downloadAttachment(id, nombre); // fallback: descargar
+    }
   }
 
   // ── Descargar adjunto con auth (lee nombre real del header) ──
@@ -463,6 +528,9 @@ const HelpdeskPanel = (() => {
           img.src     = URL.createObjectURL(blob);
           img.style.opacity = '1';
           img.className     = 'hd-conv-img';
+          img.style.cursor  = 'zoom-in';
+          const _bu = img.src;
+          img.addEventListener('click', () => _openImageLightbox(_bu, img.title || img.alt || ''));
         } else {
           img.remove();
         }
@@ -509,7 +577,7 @@ const HelpdeskPanel = (() => {
           img.className = 'hd-conv-img';
           img.title = nombre;
           img.style.cursor = 'zoom-in';
-          img.addEventListener('click', () => window.open(url, '_blank'));
+          img.addEventListener('click', () => _openImageLightbox(url, nombre));
           btn.replaceWith(img);
         } else {
           // No-imagen → actualizar botón con nombre real
@@ -532,16 +600,77 @@ const HelpdeskPanel = (() => {
     }
   }
 
+  // ── Lightbox de imagen (popup propio, no pestaña nueva) ───────
+  // Muestra una imagen a tamaño grande sobre un overlay. Cierra con ✕, clic
+  // fuera o Esc. Reutiliza un único overlay en el DOM.
+  let _lightboxKeyHandler = null;
+  function _openImageLightbox(url, alt = '') {
+    let ov = document.getElementById('hd-img-lightbox');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'hd-img-lightbox';
+      ov.className = 'hd-img-lightbox hidden';
+      ov.innerHTML = `
+        <button class="hd-img-lightbox-close" title="Cerrar">✕</button>
+        <img class="hd-img-lightbox-img" alt="">`;
+      document.body.appendChild(ov);
+      const close = () => {
+        ov.classList.add('hidden');
+        if (_lightboxKeyHandler) { document.removeEventListener('keydown', _lightboxKeyHandler); _lightboxKeyHandler = null; }
+      };
+      ov.addEventListener('click', e => { if (e.target === ov || e.target.classList.contains('hd-img-lightbox-close')) close(); });
+    }
+    const img = ov.querySelector('.hd-img-lightbox-img');
+    img.src = url;
+    img.alt = alt;
+    ov.classList.remove('hidden');
+    _lightboxKeyHandler = e => { if (e.key === 'Escape') ov.querySelector('.hd-img-lightbox-close').click(); };
+    document.addEventListener('keydown', _lightboxKeyHandler);
+  }
+
+  // ── Popup independiente de conversación (mayor visibilidad) ───
+  // Overlay grande que muestra la conversación completa de un ticket. Lo abre
+  // el botón del modal de la card. Reutiliza renderTicketConversation.
+  let _convPopupKeyHandler = null;
+  async function openConversationPopup(ticketId, mensajesPrecargados) {
+    let ov = document.getElementById('hd-conv-popup');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'hd-conv-popup';
+      ov.className = 'hd-conv-popup hidden';
+      ov.innerHTML = `
+        <div class="hd-conv-popup-card">
+          <div class="hd-conv-popup-head">
+            <span class="hd-conv-popup-title"></span>
+            <button class="hd-conv-popup-close" title="Cerrar">✕</button>
+          </div>
+          <div class="hd-conv-popup-body"></div>
+        </div>`;
+      document.body.appendChild(ov);
+      const close = () => {
+        ov.classList.add('hidden');
+        if (_convPopupKeyHandler) { document.removeEventListener('keydown', _convPopupKeyHandler); _convPopupKeyHandler = null; }
+      };
+      ov.addEventListener('click', e => { if (e.target === ov || e.target.classList.contains('hd-conv-popup-close')) close(); });
+    }
+    ov.querySelector('.hd-conv-popup-title').textContent = `💬 Conversación del ticket #${ticketId}`;
+    ov.classList.remove('hidden');
+    _convPopupKeyHandler = e => { if (e.key === 'Escape') ov.querySelector('.hd-conv-popup-close').click(); };
+    document.addEventListener('keydown', _convPopupKeyHandler);
+    await renderTicketConversation(ov.querySelector('.hd-conv-popup-body'), ticketId, mensajesPrecargados);
+  }
+
   // ── Conversación completa de un ticket (reutilizable) ─────────
   // Consulta los mensajes del ticket al API y los renderiza en `container`:
   // clasificados (empleado/cliente/sistema), con adjuntos e imágenes embebidas
-  // hidratadas con auth. La usan el modal de la tabla Helpdesk y el modal de
-  // detalle de la card del board. Siempre consulta fresco al API (sin caché).
-  async function renderTicketConversation(container, ticketId) {
+  // hidratadas con auth. La usan el modal de la tabla Helpdesk y el popup de
+  // conversación de la card. `mensajesPrecargados` evita un segundo fetch si el
+  // llamador ya los obtuvo (p. ej. el botón de la card que muestra el conteo).
+  async function renderTicketConversation(container, ticketId, mensajesPrecargados) {
     if (!container) return;
     container.innerHTML = '<div class="hd-conv-loading">Cargando mensajes y adjuntos...</div>';
 
-    const mensajes = await _fetchMessages(ticketId);
+    const mensajes = Array.isArray(mensajesPrecargados) ? mensajesPrecargados : await _fetchMessages(ticketId);
     const adjuntos = _extractAttachments(mensajes);
 
     // Ordenar de más antiguo a más reciente
@@ -672,6 +801,9 @@ const HelpdeskPanel = (() => {
       fechaIngreso:       t.entry_date      || '',
       fechaMod:           t.modified_date   || '',
       usuarioUltimaMod:   t.assigned_user_id || '',
+      // adjunto a nivel ticket (puede venir vacío si el listado no lo trae;
+      // el modal lo resuelve pidiendo el ticket completo al abrirse)
+      adjuntosTicket:     _ticketAttachIds(t),
       // campos de mensaje (se llenan luego)
       ultimoMensaje:      '',
       fechaUltimoMensaje: '',
@@ -1426,6 +1558,7 @@ const HelpdeskPanel = (() => {
             <button class="modal-close" id="hd-msg-close">✕</button>
           </div>
           <div id="hd-msg-asunto" class="hd-msg-asunto"></div>
+          <div id="hd-msg-ticket-attach" class="hd-msg-ticket-attach"></div>
           <div class="modal-body hd-conv-wrap" id="hd-conv-body"></div>
           <div class="hd-msg-composer">
             <div class="hd-msg-toolbar">
@@ -1448,6 +1581,12 @@ const HelpdeskPanel = (() => {
       document.body.appendChild(overlay);
       document.getElementById('hd-msg-close').addEventListener('click', () => overlay.classList.add('hidden'));
       overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
+      // Descargar el adjunto a nivel ticket (el nombre real lo lee del header)
+      document.getElementById('hd-msg-ticket-attach').addEventListener('click', e => {
+        const btn = e.target.closest('button[data-attach-id]');
+        if (!btn || btn.disabled) return;
+        _downloadAttachment(btn.dataset.attachId, `ticket_${_activeMsgTicket}_adjunto`);
+      });
       _wireComposer();
     }
     // Limpiar composer en cada apertura
@@ -1469,7 +1608,27 @@ const HelpdeskPanel = (() => {
       `<div class="hd-conv-loading">Cargando mensajes y adjuntos...</div>`;
     overlay.classList.remove('hidden');
 
+    _renderTicketAttachBtns(t);   // botón de adjunto del ticket (async, en paralelo)
     await renderTicketConversation(document.getElementById('hd-conv-body'), t.ticket);
+  }
+
+  // Pinta el/los botón(es) de descarga del adjunto a nivel ticket. Usa el id
+  // capturado en el mapeo; si el listado no lo trajo, pide el ticket completo.
+  async function _renderTicketAttachBtns(t) {
+    const box = document.getElementById('hd-msg-ticket-attach');
+    if (!box) return;
+    box.innerHTML = '';
+    let ids = Array.isArray(t.adjuntosTicket) ? t.adjuntosTicket : [];
+    if (!ids.length) {
+      const raw = await _fetchTicketRaw(t.ticket);
+      ids = _ticketAttachIds(raw);
+      if (raw && !ids.length) console.log('[Helpdesk] ticket sin adjunto detectado — claves:', Object.keys(raw));
+      t.adjuntosTicket = ids;  // cachear en el ticket en memoria
+    }
+    if (t.ticket !== _activeMsgTicket || !ids.length) return; // modal cambió o sin adjunto
+    box.innerHTML = ids.map((id, i) =>
+      `<button class="hd-attach-item hd-ticket-attach-btn" data-attach-id="${id}">📎 Descargar adjunto${ids.length > 1 ? ' ' + (i + 1) : ''}</button>`
+    ).join('');
   }
 
   // ── Composer: botones de formato + adjuntos + envío al API ─────
@@ -1672,5 +1831,8 @@ const HelpdeskPanel = (() => {
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients, getHdUsers, renderTicketConversation };
+  // Mensajes crudos de un ticket (para el botón de la card: contar y precargar).
+  const getTicketMessages = _fetchMessages;
+
+  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients, getHdUsers, renderTicketConversation, openConversationPopup, getTicketMessages };
 })();

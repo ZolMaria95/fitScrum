@@ -720,21 +720,31 @@ const Board = (() => {
         <button class="btn-secondary" id="detail-delete" style="padding:5px 12px;font-size:12px;color:var(--error);border-color:var(--error)">Eliminar</button>
       </div>
       ${task.ticket ? `
-      <div class="detail-section-title" style="margin-top:16px">💬 Conversación del ticket #${task.ticket}</div>
-      <div id="detail-ticket-conv" class="detail-conv-wrap">
-        <div class="detail-conv-info">Cargando mensajes...</div>
+      <div class="detail-status-row" style="margin-top:16px">
+        <button class="btn-secondary detail-conv-btn" id="detail-conv-btn" disabled>💬 Cargando mensajes…</button>
       </div>` : ''}`;
 
-    // Conversación del ticket (mensajes del Helpdesk) — solo si la tarea tiene ticket.
-    // Consulta fresco al API por número de ticket y reutiliza el render completo de
-    // la tabla Helpdesk (mensajes clasificados + adjuntos + imágenes con auth).
+    // Conversación del ticket: consulta fresco al API por número de ticket y
+    // habilita un botón que abre la conversación en un popup independiente (mayor
+    // visibilidad). El botón se activa cuando los mensajes terminan de cargar.
     // Nota: HelpdeskPanel es un `const` global (no window.*), de ahí el typeof.
     if (task.ticket && typeof HelpdeskPanel !== 'undefined'
-        && typeof HelpdeskPanel.renderTicketConversation === 'function') {
-      const conv = document.getElementById('detail-ticket-conv');
-      HelpdeskPanel.renderTicketConversation(conv, task.ticket).catch(err => {
-        console.error('[Card] Error cargando conversación:', err);
-        if (conv) conv.innerHTML = '<div class="detail-conv-info">No se pudieron cargar los mensajes.</div>';
+        && typeof HelpdeskPanel.openConversationPopup === 'function') {
+      const btn = document.getElementById('detail-conv-btn');
+      let _msgs = null;
+      HelpdeskPanel.getTicketMessages(task.ticket).then(msgs => {
+        _msgs = msgs || [];
+        if (!btn) return;
+        if (!_msgs.length) { btn.textContent = '💬 Sin mensajes en este ticket'; return; } // queda disabled
+        btn.textContent = `💬 Ver conversación (${_msgs.length})`;
+        btn.disabled = false;
+      }).catch(err => {
+        console.error('[Card] Error cargando mensajes:', err);
+        if (btn) btn.textContent = '💬 No se pudieron cargar los mensajes';
+      });
+      if (btn) btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        HelpdeskPanel.openConversationPopup(task.ticket, _msgs);
       });
     }
 
