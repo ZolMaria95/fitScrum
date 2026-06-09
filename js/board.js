@@ -143,7 +143,7 @@ const Board = (() => {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
   function _hdUsers() {
-    return (window.HelpdeskPanel && HelpdeskPanel.getHdUsers) ? HelpdeskPanel.getHdUsers() : [];
+    return (typeof HelpdeskPanel !== 'undefined' && HelpdeskPanel.getHdUsers) ? HelpdeskPanel.getHdUsers() : [];
   }
   function _resolveMember(id, team) {
     if (!id) return null;
@@ -728,20 +728,14 @@ const Board = (() => {
     // Conversación del ticket (mensajes del Helpdesk) — solo si la tarea tiene ticket.
     // Consulta fresco al API por número de ticket y reutiliza el render completo de
     // la tabla Helpdesk (mensajes clasificados + adjuntos + imágenes con auth).
-    if (task.ticket) {
-      const conv  = document.getElementById('detail-ticket-conv');
-      const tieneFn = window.HelpdeskPanel && typeof HelpdeskPanel.renderTicketConversation === 'function';
-      console.log('[Card v36] Conversación ticket', task.ticket, '· conv?', !!conv, '· fn?', tieneFn);
-      if (!tieneFn) {
-        if (conv) conv.innerHTML = '<div class="detail-conv-info">HelpdeskPanel no disponible (recarga con Cmd+Shift+R).</div>';
-      } else {
-        HelpdeskPanel.renderTicketConversation(conv, task.ticket)
-          .then(() => console.log('[Card v36] Conversación renderizada para', task.ticket))
-          .catch(err => {
-            console.error('[Card v36] Error cargando conversación:', err);
-            if (conv) conv.innerHTML = '<div class="detail-conv-info">No se pudieron cargar los mensajes.</div>';
-          });
-      }
+    // Nota: HelpdeskPanel es un `const` global (no window.*), de ahí el typeof.
+    if (task.ticket && typeof HelpdeskPanel !== 'undefined'
+        && typeof HelpdeskPanel.renderTicketConversation === 'function') {
+      const conv = document.getElementById('detail-ticket-conv');
+      HelpdeskPanel.renderTicketConversation(conv, task.ticket).catch(err => {
+        console.error('[Card] Error cargando conversación:', err);
+        if (conv) conv.innerHTML = '<div class="detail-conv-info">No se pudieron cargar los mensajes.</div>';
+      });
     }
 
     // Dropdown buscable de asignado (código + nombre + rol)
