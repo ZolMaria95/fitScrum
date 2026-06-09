@@ -520,6 +520,119 @@ const HelpdeskPanel = (() => {
     }
   }
 
+  // ── Conversación completa de un ticket (reutilizable) ─────────
+  // Consulta los mensajes del ticket al API y los renderiza en `container`:
+  // clasificados (empleado/cliente/sistema), con adjuntos e imágenes embebidas
+  // hidratadas con auth. La usan el modal de la tabla Helpdesk y el modal de
+  // detalle de la card del board. Siempre consulta fresco al API (sin caché).
+  async function renderTicketConversation(container, ticketId) {
+    if (!container) return;
+    container.innerHTML = '<div class="hd-conv-loading">Cargando mensajes y adjuntos...</div>';
+
+    const mensajes = await _fetchMessages(ticketId);
+    const adjuntos = _extractAttachments(mensajes);
+
+    // Ordenar de más antiguo a más reciente
+    const msgs = [...mensajes].sort((a, b) =>
+      new Date(a.entry_date || 0) - new Date(b.entry_date || 0)
+    );
+
+    // Clasifica el autor del mensaje: prioriza entry_user_role del API,
+    // y solo cae en la lista local EMPLEADOS si el rol no viene.
+    const esEmpleadoMsg = m => {
+      const role = String(m.entry_user_role || '').trim().toUpperCase();
+      if (role) return !role.includes('CLIENTE');
+      return EMPLEADOS.has(String(m.entry_user_id || '').trim().toUpperCase());
+    };
+    const IMG_EXTS   = new Set(['jpg','jpeg','png','gif','webp','bmp','svg']);
+    const _icon = ext =>
+      IMG_EXTS.has(ext) ? '🖼' :
+      ext === 'pdf' ? '📄' :
+      ['xlsx','xls','csv'].includes(ext) ? '📊' :
+      ['docx','doc'].includes(ext) ? '📝' :
+      ['zip','rar','7z','tar','gz'].includes(ext) ? '🗜' : '📎';
+
+    // Adjuntos por mensaje desde attach_id / attach_ids del API
+    function _attachsDeMensaje(m) {
+      const out  = [];
+      const seen = new Set();
+      const ids  = [];
+      if (m.attach_id)  ids.push(m.attach_id);
+      if (Array.isArray(m.attach_ids)) ids.push(...m.attach_ids);
+      ids.forEach(id => {
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          out.push({ id, nombre: `adjunto_${String(id).slice(-6)}`, tamaño: 0 });
+        }
+      });
+      return out;
+    }
+
+    const msgsHTML = msgs.length
+      ? msgs.map(m => {
+          const esSys     = m.system_message === true;
+          const esEmp     = esEmpleadoMsg(m);
+          const fecha     = m.entry_date ? m.entry_date.replace('T', ' ').slice(0, 16) : '';
+          const html      = _safeHtml(m.detail || '');
+          const texto     = _stripHtml(html).trim();
+          const adjMsg    = _attachsDeMensaje(m);
+          if (!texto && !html.includes('<img') && !adjMsg.length) return '';
+          const cls       = esSys ? 'hd-conv-sys' : esEmp ? 'hd-conv-emp' : 'hd-conv-cli';
+          const label     = esSys ? 'Sistema' : (m.entry_user_id || '—');
+
+          const adjHTML = adjMsg.length
+            ? `<div class="hd-conv-attach-row">${adjMsg.map(a => {
+                const ext = a.nombre.split('.').pop().toLowerCase();
+                const kb  = a.tamaño ? ` · ${(a.tamaño / 1024).toFixed(0)} KB` : '';
+                return `<button class="hd-attach-item hd-attach-inline" data-attach-id="${a.id}" data-attach-nombre="${a.nombre.replace(/"/g,'&quot;')}">${_icon(ext)} ${a.nombre}${kb}</button>`;
+              }).join('')}</div>`
+            : '';
+
+          return `
+            <div class="hd-conv-msg ${cls}">
+              <div class="hd-conv-meta">
+                <span class="hd-conv-user">${label}</span>
+                <span class="hd-conv-date">${fecha}</span>
+              </div>
+              ${texto || html.includes('<img') ? `<div class="hd-conv-text">${html}</div>` : ''}
+              ${adjHTML}
+            </div>`;
+        }).join('')
+      : `<div class="hd-conv-empty">Sin mensajes registrados.</div>`;
+
+    const conteo = msgsHTML ? msgs.filter(m => {
+      const html = m.detail || '';
+      return _stripHtml(html).trim() || html.includes('<img') || _attachsDeMensaje(m).length;
+    }).length : 0;
+
+    container.innerHTML = `
+      <div class="hd-conv-header">
+        <span class="hd-conv-count">${conteo} mensaje${conteo !== 1 ? 's' : ''}</span>
+        ${adjuntos.length ? `<span class="hd-conv-adj-count">${adjuntos.length} adjunto${adjuntos.length !== 1 ? 's' : ''}</span>` : ''}
+      </div>
+      <div class="hd-conv-list">${msgsHTML}</div>`;
+
+    // Clic en botones de adjunto → descargar (usando blob ya cacheado si existe)
+    container.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-attach-id]');
+      if (!btn || btn.disabled) return;
+      if (btn.dataset.blobUrl) {
+        const a = document.createElement('a');
+        a.href = btn.dataset.blobUrl;
+        a.download = btn.dataset.attachNombre || `adjunto_${btn.dataset.attachId}`;
+        a.click();
+      } else {
+        _downloadAttachment(btn.dataset.attachId, btn.dataset.attachNombre);
+      }
+    });
+
+    _hydrateAttachLinks(container);  // links <a> → /attachments/{id} del HTML
+    _hydrateImages(container);       // imágenes embebidas con auth
+    _hydrateAttachments(container);  // auto-cargar adjuntos (img inline)
+
+    container.scrollTop = container.scrollHeight; // mostrar lo más reciente
+  }
+
   function _stripHtml(str) {
     return String(str || '')
       .replace(/<[^>]*>/g, '')
@@ -1344,113 +1457,7 @@ const HelpdeskPanel = (() => {
       `<div class="hd-conv-loading">Cargando mensajes y adjuntos...</div>`;
     overlay.classList.remove('hidden');
 
-    const mensajes = await _fetchMessages(t.ticket);
-    const adjuntos = _extractAttachments(mensajes);
-
-    // Ordenar de más antiguo a más reciente
-    const msgs = [...mensajes].sort((a, b) =>
-      new Date(a.entry_date || 0) - new Date(b.entry_date || 0)
-    );
-
-    // Clasifica el autor del mensaje: prioriza entry_user_role del API,
-    // y solo cae en la lista local EMPLEADOS si el rol no viene.
-    const esEmpleadoMsg = m => {
-      const role = String(m.entry_user_role || '').trim().toUpperCase();
-      if (role) return !role.includes('CLIENTE');
-      return EMPLEADOS.has(String(m.entry_user_id || '').trim().toUpperCase());
-    };
-    const IMG_EXTS   = new Set(['jpg','jpeg','png','gif','webp','bmp','svg']);
-    const _icon = ext =>
-      IMG_EXTS.has(ext) ? '🖼' :
-      ext === 'pdf' ? '📄' :
-      ['xlsx','xls','csv'].includes(ext) ? '📊' :
-      ['docx','doc'].includes(ext) ? '📝' :
-      ['zip','rar','7z','tar','gz'].includes(ext) ? '🗜' : '📎';
-
-    // Adjuntos por mensaje desde attach_id / attach_ids del API
-    function _attachsDeMensaje(m) {
-      const out  = [];
-      const seen = new Set();
-      const ids  = [];
-      if (m.attach_id)  ids.push(m.attach_id);
-      if (Array.isArray(m.attach_ids)) ids.push(...m.attach_ids);
-      ids.forEach(id => {
-        if (id && !seen.has(id)) {
-          seen.add(id);
-          out.push({ id, nombre: `adjunto_${String(id).slice(-6)}`, tamaño: 0 });
-        }
-      });
-      return out;
-    }
-
-    const msgsHTML = msgs.length
-      ? msgs.map(m => {
-          const esSys     = m.system_message === true;
-          const esEmp     = esEmpleadoMsg(m);
-          const fecha     = m.entry_date ? m.entry_date.replace('T', ' ').slice(0, 16) : '';
-          const html      = _safeHtml(m.detail || '');
-          const texto     = _stripHtml(html).trim();
-          const adjMsg    = _attachsDeMensaje(m);
-          if (!texto && !html.includes('<img') && !adjMsg.length) return '';
-          const cls       = esSys ? 'hd-conv-sys' : esEmp ? 'hd-conv-emp' : 'hd-conv-cli';
-          const label     = esSys ? 'Sistema' : (m.entry_user_id || '—');
-
-          const adjHTML = adjMsg.length
-            ? `<div class="hd-conv-attach-row">${adjMsg.map(a => {
-                const ext = a.nombre.split('.').pop().toLowerCase();
-                const kb  = a.tamaño ? ` · ${(a.tamaño / 1024).toFixed(0)} KB` : '';
-                return `<button class="hd-attach-item hd-attach-inline" data-attach-id="${a.id}" data-attach-nombre="${a.nombre.replace(/"/g,'&quot;')}">${_icon(ext)} ${a.nombre}${kb}</button>`;
-              }).join('')}</div>`
-            : '';
-
-          return `
-            <div class="hd-conv-msg ${cls}">
-              <div class="hd-conv-meta">
-                <span class="hd-conv-user">${label}</span>
-                <span class="hd-conv-date">${fecha}</span>
-              </div>
-              ${texto || html.includes('<img') ? `<div class="hd-conv-text">${html}</div>` : ''}
-              ${adjHTML}
-            </div>`;
-        }).join('')
-      : `<div class="hd-conv-empty">Sin mensajes registrados.</div>`;
-
-    const conteo = msgsHTML ? msgs.filter(m => {
-      const html = m.detail || '';
-      return _stripHtml(html).trim() || html.includes('<img') || _attachsDeMensaje(m).length;
-    }).length : 0;
-
-    document.getElementById('hd-conv-body').innerHTML = `
-      <div class="hd-conv-header">
-        <span class="hd-conv-count">${conteo} mensaje${conteo !== 1 ? 's' : ''}</span>
-        ${adjuntos.length ? `<span class="hd-conv-adj-count">${adjuntos.length} adjunto${adjuntos.length !== 1 ? 's' : ''}</span>` : ''}
-      </div>
-      <div class="hd-conv-list">${msgsHTML}</div>`;
-
-    const convBody = document.getElementById('hd-conv-body');
-
-    // Clic en botones de adjunto → descargar (usando blob ya cacheado si existe)
-    convBody.addEventListener('click', e => {
-      const btn = e.target.closest('button[data-attach-id]');
-      if (!btn || btn.disabled) return;
-      if (btn.dataset.blobUrl) {
-        const a = document.createElement('a');
-        a.href = btn.dataset.blobUrl;
-        a.download = btn.dataset.attachNombre || `adjunto_${btn.dataset.attachId}`;
-        a.click();
-      } else {
-        _downloadAttachment(btn.dataset.attachId, btn.dataset.attachNombre);
-      }
-    });
-
-    // Interceptar links <a> que apunten a /attachments/{id} (HTML del mensaje)
-    _hydrateAttachLinks(convBody);
-
-    // Cargar imágenes embebidas con auth
-    _hydrateImages(convBody);
-
-    // Auto-cargar todos los adjuntos del modal: detecta tipo, muestra imgs inline
-    _hydrateAttachments(convBody);
+    await renderTicketConversation(document.getElementById('hd-conv-body'), t.ticket);
   }
 
   // ── Composer: botones de formato + adjuntos + envío al API ─────
@@ -1653,39 +1660,5 @@ const HelpdeskPanel = (() => {
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  // Mensajes de un ticket, ordenados (antiguo→reciente) y clasificados como
-  // empleado / cliente / sistema. Reutiliza el fetch, sanitización y la lista
-  // EMPLEADOS para que el modal de la card muestre la conversación sin duplicar lógica.
-  // Cachea por ticket (TTL corto) para que reabrir la misma card sea instantáneo.
-  const _msgCache = new Map(); // ticketId → { ts, data }
-  const _MSG_TTL  = 120000;    // 2 min
-  async function getTicketMessages(ticketId) {
-    const key = String(ticketId);
-    const hit = _msgCache.get(key);
-    if (hit && Date.now() - hit.ts < _MSG_TTL) return hit.data;
-    const mensajes = await _fetchMessages(ticketId);
-    if (!Array.isArray(mensajes)) return [];
-    const data = mensajes
-      .slice()
-      .sort((a, b) => new Date(a.entry_date || 0) - new Date(b.entry_date || 0))
-      .map(m => {
-        const esSys = m.system_message === true;
-        const role  = String(m.entry_user_role || '').trim().toUpperCase();
-        const esEmp = role ? !role.includes('CLIENTE')
-                           : EMPLEADOS.has(String(m.entry_user_id || '').trim().toUpperCase());
-        const html  = _safeHtml(m.detail || '');
-        const texto = _stripHtml(html).trim();
-        return {
-          tipo:  esSys ? 'sys' : esEmp ? 'emp' : 'cli',
-          user:  esSys ? 'Sistema' : (m.entry_user_id || '—'),
-          fecha: m.entry_date ? m.entry_date.replace('T', ' ').slice(0, 16) : '',
-          html, texto,
-        };
-      })
-      .filter(m => m.texto || (m.html && m.html.includes('<img')));
-    _msgCache.set(key, { ts: Date.now(), data });
-    return data;
-  }
-
-  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients, getHdUsers, getTicketMessages };
+  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients, getHdUsers, renderTicketConversation };
 })();
