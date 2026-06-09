@@ -1653,5 +1653,39 @@ const HelpdeskPanel = (() => {
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients, getHdUsers };
+  // Mensajes de un ticket, ordenados (antiguo→reciente) y clasificados como
+  // empleado / cliente / sistema. Reutiliza el fetch, sanitización y la lista
+  // EMPLEADOS para que el modal de la card muestre la conversación sin duplicar lógica.
+  // Cachea por ticket (TTL corto) para que reabrir la misma card sea instantáneo.
+  const _msgCache = new Map(); // ticketId → { ts, data }
+  const _MSG_TTL  = 120000;    // 2 min
+  async function getTicketMessages(ticketId) {
+    const key = String(ticketId);
+    const hit = _msgCache.get(key);
+    if (hit && Date.now() - hit.ts < _MSG_TTL) return hit.data;
+    const mensajes = await _fetchMessages(ticketId);
+    if (!Array.isArray(mensajes)) return [];
+    const data = mensajes
+      .slice()
+      .sort((a, b) => new Date(a.entry_date || 0) - new Date(b.entry_date || 0))
+      .map(m => {
+        const esSys = m.system_message === true;
+        const role  = String(m.entry_user_role || '').trim().toUpperCase();
+        const esEmp = role ? !role.includes('CLIENTE')
+                           : EMPLEADOS.has(String(m.entry_user_id || '').trim().toUpperCase());
+        const html  = _safeHtml(m.detail || '');
+        const texto = _stripHtml(html).trim();
+        return {
+          tipo:  esSys ? 'sys' : esEmp ? 'emp' : 'cli',
+          user:  esSys ? 'Sistema' : (m.entry_user_id || '—'),
+          fecha: m.entry_date ? m.entry_date.replace('T', ' ').slice(0, 16) : '',
+          html, texto,
+        };
+      })
+      .filter(m => m.texto || (m.html && m.html.includes('<img')));
+    _msgCache.set(key, { ts: Date.now(), data });
+    return data;
+  }
+
+  return { sync, render, setup, getClientPendingTickets, getPendingActionTickets, getValidClients, getHdUsers, getTicketMessages };
 })();

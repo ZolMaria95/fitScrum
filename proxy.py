@@ -4,7 +4,7 @@ Servidor local para Fit-Daily.
 - Reenvía /api/v1/* hacia https://helpdesk-api.fit-bank.com
 Corre en puerto 3001. Abrir: http://localhost:3001
 """
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 import urllib.request
 import urllib.error
 import ssl
@@ -89,7 +89,7 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(str(e).encode())
 
 if __name__ == '__main__':
-    server = HTTPServer(('localhost', PORT), Handler)
+    server = ThreadingHTTPServer(('localhost', PORT), Handler)
     print(f'✓ Servidor corriendo en http://localhost:{PORT}')
     print(f'  Archivos estáticos: {ROOT}')
     print(f'  Proxy API hacia:    {TARGET}')

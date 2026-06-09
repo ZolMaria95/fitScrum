@@ -718,7 +718,33 @@ const Board = (() => {
       <div class="detail-status-row" style="margin-top:14px">
         <button class="btn-primary" id="detail-save" style="padding:5px 12px;font-size:12px">Guardar</button>
         <button class="btn-secondary" id="detail-delete" style="padding:5px 12px;font-size:12px;color:var(--error);border-color:var(--error)">Eliminar</button>
-      </div>`;
+      </div>
+      ${task.ticket ? `
+      <div class="detail-section-title" style="margin-top:16px">💬 Conversación del ticket #${task.ticket}</div>
+      <div id="detail-ticket-conv" class="detail-conv-wrap">
+        <div class="detail-conv-info">Cargando mensajes...</div>
+      </div>` : ''}`;
+
+    // Conversación del ticket (mensajes del Helpdesk) — solo si la tarea tiene ticket
+    if (task.ticket && window.HelpdeskPanel && HelpdeskPanel.getTicketMessages) {
+      const conv = document.getElementById('detail-ticket-conv');
+      HelpdeskPanel.getTicketMessages(task.ticket).then(msgs => {
+        if (!conv) return;
+        if (!msgs.length) { conv.innerHTML = '<div class="detail-conv-info">Sin mensajes en este ticket.</div>'; return; }
+        conv.innerHTML = msgs.map(m =>
+          `<div class="hd-conv-msg hd-conv-${m.tipo}">
+             <div class="hd-conv-meta">
+               <span class="hd-conv-user">${m.user}</span>
+               <span class="hd-conv-date">${m.fecha}</span>
+             </div>
+             <div class="hd-conv-text">${m.html}</div>
+           </div>`
+        ).join('');
+        conv.scrollTop = conv.scrollHeight; // mostrar lo más reciente
+      }).catch(() => {
+        if (conv) conv.innerHTML = '<div class="detail-conv-info">No se pudieron cargar los mensajes.</div>';
+      });
+    }
 
     // Dropdown buscable de asignado (código + nombre + rol)
     const _updateDetailAssignee = _setupDetailAssignee(assigneeList, task.assignee || '', team);
