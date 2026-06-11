@@ -102,16 +102,36 @@
 
 .conv-text {
   line-height: 1.4;
+  overflow-wrap: anywhere; // el texto (incluidas palabras/URLs largas) siempre envuelve
   word-break: break-word;
+  overflow-x: auto; // red de seguridad: contenido rígido (tablas) scrollea, no desborda
+
+  // Preformateado: envolver en vez de empujar el ancho.
+  :where(pre, code) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
 
   :where(img) {
     max-width: 100%;
+    height: auto;
     border-radius: 6px;
     cursor: zoom-in;
     margin: 4px 0;
+    float: none !important; // evita íconos embebidos flotando fuera del globo
   }
   :where(a) {
     color: var(--mat-sys-primary);
+    word-break: break-all;
+  }
+  :where(table) {
+    max-width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  :where(td, th) {
+    border: 1px solid var(--mat-sys-outline-variant);
+    padding: 2px 6px;
   }
 }
 
