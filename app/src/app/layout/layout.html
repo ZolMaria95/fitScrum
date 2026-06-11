@@ -1,0 +1,35 @@
+<mat-toolbar color="primary" class="topbar">
+  <span class="brand">Fit-Daily</span>
+
+  <button mat-button [matMenuTriggerFor]="scrumMenu">Scrum</button>
+  <mat-menu #scrumMenu="matMenu">
+    <a mat-menu-item routerLink="/board" routerLinkActive="active">Board</a>
+    <a mat-menu-item routerLink="/burndown" routerLinkActive="active">Burndown</a>
+    <a mat-menu-item routerLink="/progreso" routerLinkActive="active">Progreso</a>
+    <a mat-menu-item routerLink="/consultas" routerLinkActive="active">Consultas</a>
+  </mat-menu>
+
+  <button mat-button [matMenuTriggerFor]="hdMenu">Helpdesk</button>
+  <mat-menu #hdMenu="matMenu">
+    <a mat-menu-item routerLink="/tickets" routerLinkActive="active">Tickets</a>
+    <a mat-menu-item routerLink="/semanal" routerLinkActive="active">HelpDesk Semanal</a>
+    @if (puedeVerMiPanel()) {
+      <a mat-menu-item routerLink="/mi-panel" routerLinkActive="active">Mi Panel</a>
+    }
+    <a mat-menu-item routerLink="/pendientes" routerLinkActive="active">Pendientes</a>
+  </mat-menu>
+
+  <span class="spacer"></span>
+
+  @if (session(); as s) {
+    <span class="user-chip" [style.background]="s.color">{{ s.id }}</span>
+    <span class="user-name">{{ s.name }}</span>
+  }
+  <button mat-icon-button (click)="logout()" title="Cerrar sesión" aria-label="Cerrar sesión">
+    <mat-icon>logout</mat-icon>
+  </button>
+</mat-toolbar>
+
+<main class="content">
+  <router-outlet />
+</main>

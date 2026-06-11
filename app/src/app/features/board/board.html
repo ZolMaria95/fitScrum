@@ -1,0 +1,168 @@
+<div class="board-toolbar">
+  <mat-button-toggle-group
+    class="prio-filter"
+    [value]="priorityFilter()"
+    (change)="setPriority($event.value)"
+    hideSingleSelectionIndicator
+    aria-label="Filtrar por prioridad"
+  >
+    @for (p of PRIORITY_FILTERS; track p) {
+      <mat-button-toggle [value]="p">{{ p === 'all' ? 'Todas' : PRIORITY_LABELS[p] }}</mat-button-toggle>
+    }
+  </mat-button-toggle-group>
+
+  @if (assigneeChips().length) {
+    <div class="assignee-filter">
+      <span class="filter-label">Asignado:</span>
+      <mat-chip-set>
+        @for (m of assigneeChips(); track m.id) {
+          <mat-chip
+            class="achip"
+            [class.inactive]="activeAssignees().size > 0 && !activeAssignees().has(m.id)"
+            [style.background]="m.color"
+            [matTooltip]="m.name"
+            (click)="toggleAssignee(m.id)"
+          >{{ m.id }}</mat-chip>
+        }
+        <button class="todos-btn" [class.active]="activeAssignees().size === 0" (click)="clearAssignees()">Todos</button>
+      </mat-chip-set>
+    </div>
+  }
+
+  <mat-form-field appearance="outline" class="client-filter" subscriptSizing="dynamic">
+    <mat-label>Cliente</mat-label>
+    <mat-select [value]="clientFilter()" (selectionChange)="setClientFilter($event.value)">
+      <mat-option value="all">Todos los clientes</mat-option>
+      @for (c of clients(); track c.id) {
+        <mat-option [value]="c.id">{{ c.name }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <span class="spacer"></span>
+
+  <button mat-flat-button color="primary" (click)="openNew()">
+    <mat-icon>add</mat-icon> Tarea
+  </button>
+  @if (puedeBorrarBoard()) {
+    <button mat-stroked-button class="danger" (click)="clearBoard()">
+      <mat-icon>delete_sweep</mat-icon> Borrar Board
+    </button>
+  }
+</div>
+
+<div class="kanban" cdkDropListGroup>
+  @for (col of columns(); track col.status) {
+    <section class="kanban-col">
+      <header class="col-header">
+        <span class="col-dot" [class]="'dot-' + col.status"></span>
+        <span class="col-title">{{ col.label }}</span>
+        <span class="col-count">{{ col.cards.length }}</span>
+      </header>
+
+      <div
+        class="col-cards"
+        cdkDropList
+        [cdkDropListData]="col.cards"
+        (cdkDropListDropped)="drop($event, col.status)"
+      >
+        @for (card of col.cards; track card.id) {
+          @let member = resolveMember(card.assignee);
+          @let cl = clientOf(card.client);
+          @let due = dueInfo(card.dueDate, card.status);
+
+          <mat-card
+            class="story-card"
+            [class]="'priority-' + card.priority"
+            [class.not-mine]="!canDrag(card)"
+            [class.overdue]="due.overdue"
+            [class.soon]="due.soon"
+            cdkDrag
+            [cdkDragData]="card"
+            [cdkDragDisabled]="!canDrag(card)"
+            (click)="openDetail(card)"
+          >
+            <div class="card-top">
+              <span class="card-ticket">#{{ card.ticket || '—' }}</span>
+              @if (cl) {
+                <span class="client-badge" [style.color]="$any(cl).color || 'inherit'">{{ cl.name }}</span>
+              }
+              <span class="grow"></span>
+              @if (puedeGestionarTodo()) {
+                <button
+                  mat-icon-button
+                  class="del-btn"
+                  matTooltip="Eliminar tarea"
+                  (click)="$event.stopPropagation(); deleteCard(card)"
+                >
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+            </div>
+
+            <div class="card-title">{{ card.title }}</div>
+
+            @if (due.soon) {
+              <div class="soon-badge">⚠ Próximo a vencer — {{ due.badge }}</div>
+            }
+
+            @switch (card.status) {
+              @case ('in_progress') {
+                <div class="prog" (click)="$event.stopPropagation()">
+                  <mat-progress-bar
+                    mode="determinate"
+                    [value]="card.progress"
+                    [style.--mdc-linear-progress-active-indicator-color]="progColor(card.progress)"
+                  ></mat-progress-bar>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="5"
+                    [value]="card.progress"
+                    (change)="onProgressChange(card, $any($event.target).value)"
+                  />
+                </div>
+
+                @let wd = waitingDays(card);
+                <button
+                  class="wait-btn"
+                  [class.active]="wd !== null && wd < 3"
+                  [class.alert]="wd !== null && wd >= 3"
+                  (click)="$event.stopPropagation(); toggleWaiting(card)"
+                >
+                  {{ wd !== null && wd >= 3 ? '⚠ Notificar al cliente' : '⏳ Esperando cliente' }}
+                </button>
+              }
+              @case ('review') {
+                <div class="card-check" (click)="$event.stopPropagation()">
+                  <mat-checkbox (change)="onCert(card, $event.checked)">Certificado</mat-checkbox>
+                </div>
+              }
+              @case ('done') {
+                <div class="card-check" (click)="$event.stopPropagation()">
+                  <mat-checkbox [checked]="card.approved" (change)="onApprove(card, $event.checked)">
+                    {{ card.approved ? 'Aprobado ✓' : 'Aprobado' }}
+                  </mat-checkbox>
+                </div>
+              }
+            }
+
+            <div class="card-bottom">
+              <span class="card-due" [class.overdue]="due.overdue" [class.soon]="due.soon">
+                <mat-icon>event</mat-icon>{{ due.str || '—' }}
+              </span>
+              @if (member) {
+                <span class="avatar" [style.background]="member.color" [matTooltip]="member.name">{{ member.label }}</span>
+              } @else {
+                <span class="avatar unassigned" matTooltip="Sin asignar"></span>
+              }
+            </div>
+          </mat-card>
+        } @empty {
+          <div class="empty-col"><span>○</span><span>Sin tareas</span></div>
+        }
+      </div>
+    </section>
+  }
+</div>

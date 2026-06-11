@@ -1,0 +1,332 @@
+:host {
+  display: block;
+  padding: 16px;
+}
+
+// ── Toolbar de filtros ─────────────────────────────────────────────
+.board-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+
+  .spacer {
+    flex: 1 1 auto;
+  }
+
+  .danger {
+    color: var(--mat-sys-error);
+  }
+}
+
+.assignee-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .filter-label {
+    font-size: 12px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.achip {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  min-height: 26px;
+  transition: opacity 0.15s;
+
+  &.inactive {
+    opacity: 0.35;
+  }
+}
+
+.todos-btn {
+  border: 1px solid var(--mat-sys-outline);
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant);
+  border-radius: 14px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+
+  &.active {
+    background: var(--mat-sys-primary);
+    color: var(--mat-sys-on-primary);
+    border-color: var(--mat-sys-primary);
+  }
+}
+
+.client-filter {
+  width: 200px;
+}
+
+// ── Kanban ─────────────────────────────────────────────────────────
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.kanban-col {
+  background: var(--mat-sys-surface-container-low);
+  border-radius: 10px;
+  padding: 10px;
+  min-height: 120px;
+}
+
+.col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 10px;
+
+  .col-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .col-count {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mat-sys-on-surface-variant);
+    background: var(--mat-sys-surface-container-high);
+    border-radius: 10px;
+    padding: 1px 8px;
+  }
+}
+
+.col-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  &.dot-todo { background: #8a8a9a; }
+  &.dot-in_progress { background: var(--brand); }
+  &.dot-review { background: var(--accent); }
+  &.dot-done { background: #27ae60; }
+}
+
+.col-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 60px;
+}
+
+.empty-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 24px 0;
+  color: var(--mat-sys-outline);
+  font-size: 12px;
+}
+
+// ── Cards ──────────────────────────────────────────────────────────
+.story-card {
+  padding: 10px 12px;
+  border-left: 4px solid var(--mat-sys-outline-variant);
+  cursor: pointer;
+  user-select: none;
+
+  &.priority-alta { border-left-color: #e74c3c; }
+  &.priority-media { border-left-color: var(--accent); }
+  &.priority-baja { border-left-color: #e0e0e0; }
+
+  &.overdue { border-left-color: #e74c3c; }
+  &.soon { box-shadow: 0 0 0 1px var(--accent) inset; }
+
+  &.not-mine {
+    cursor: default;
+    opacity: 0.82;
+  }
+
+  &.cdk-drag-dragging {
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  }
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+
+  .grow { flex: 1; }
+
+  .card-ticket {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mat-sys-primary);
+  }
+
+  .del-btn {
+    width: 26px;
+    height: 26px;
+    line-height: 26px;
+    color: var(--mat-sys-on-surface-variant);
+    mat-icon { font-size: 17px; width: 17px; height: 17px; }
+  }
+}
+
+.client-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--mat-sys-surface-container-high);
+}
+
+.card-title {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--mat-sys-on-surface);
+  margin-bottom: 8px;
+}
+
+.soon-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-dark);
+  margin-bottom: 8px;
+}
+
+.prog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+
+  mat-progress-bar {
+    flex: 1;
+    border-radius: 4px;
+  }
+
+  input {
+    width: 48px;
+    padding: 3px 5px;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 5px;
+    background: var(--mat-sys-surface);
+    color: var(--mat-sys-on-surface);
+    font: inherit;
+    font-size: 12px;
+    text-align: right;
+  }
+}
+
+.wait-btn {
+  width: 100%;
+  border: 1px solid var(--mat-sys-outline-variant);
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: 8px;
+
+  &.active {
+    background: #fef5e7;
+    border-color: var(--accent);
+    color: #b9770e;
+  }
+
+  &.alert {
+    background: #fdedec;
+    border-color: #e74c3c;
+    color: #c0392b;
+    font-weight: 600;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.card-check {
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.card-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+  }
+
+  &.overdue { color: #e74c3c; font-weight: 600; }
+  &.soon { color: var(--accent-dark); }
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+
+  &.unassigned {
+    background: transparent;
+    border: 1.5px dashed var(--mat-sys-outline);
+  }
+}
+
+// CDK drag placeholder / preview
+.cdk-drag-preview {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+}
+.cdk-drag-placeholder {
+  opacity: 0.35;
+}
+.col-cards.cdk-drop-list-dragging .story-card:not(.cdk-drag-placeholder) {
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+// ── Responsive ─────────────────────────────────────────────────────
+@media (max-width: 1024px) {
+  .kanban {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .kanban {
+    grid-template-columns: 1fr;
+  }
+  .client-filter {
+    width: 100%;
+  }
+}

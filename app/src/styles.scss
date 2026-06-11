@@ -1,0 +1,42 @@
+// Tema de Angular Material con la paleta de marca Fit-Daily / FitBank.
+// Las paletas tonales se generan en _theme-colors.scss a partir de los colores
+// de marca (primary #048ABF, secondary #30BAD9, tertiary #F2811D) con
+// `ng generate @angular/material:theme-color`.
+@use '@angular/material' as mat;
+@use './theme-colors' as brand;
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: brand.$primary-palette,
+        tertiary: brand.$tertiary-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+
+  // Colores de marca para los componentes propios (board, cards, etc.).
+  --brand: #048abf;
+  --brand-mid: #30bad9;
+  --brand-dark: #0390bc;
+  --accent: #f29e38;
+  --accent-dark: #f2811d;
+  --bg: #f2f2f2;
+}
+
+body {
+  color-scheme: light;
+
+  // Fondo gris claro de la paleta de marca (#F2F2F2).
+  background-color: var(--bg);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+  height: 100%;
+}
+/* You can add global styles to this file, and also import other style files */

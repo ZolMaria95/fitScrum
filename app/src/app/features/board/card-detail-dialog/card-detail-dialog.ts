@@ -1,0 +1,212 @@
+import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
+import { MatButtonModule } from '@angular/material/button';
+import { MatChipsModule } from '@angular/material/chips';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSelectModule } from '@angular/material/select';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AuthService } from '../../../core/services/auth.service';
+import { DataService, Story } from '../../../core/services/data.service';
+import { HdUser, HelpdeskService } from '../../../core/services/helpdesk.service';
+import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
+import {
+  PRIORITY_LABELS,
+  Priority,
+  STATUSES,
+  STATUS_LABELS,
+  Status,
+  canStartWork,
+  progColor,
+  resolveMember,
+  roundUp5,
+} from '../board-utils';
+
+export interface CardDetailData {
+  /** null → crear una tarea nueva. */
+  story: Story | null;
+}
+
+/** Modal de detalle/edición de una tarea (port de _openDetail en js/board.js). */
+@Component({
+  selector: 'app-card-detail-dialog',
+  imports: [
+    FormsModule,
+    MatDialogModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatAutocompleteModule,
+    MatChipsModule,
+    MatIconModule,
+    MatProgressBarModule,
+  ],
+  templateUrl: './card-detail-dialog.html',
+  styleUrl: './card-detail-dialog.scss',
+})
+export class CardDetailDialog {
+  private readonly data = inject(DataService);
+  private readonly auth = inject(AuthService);
+  private readonly helpdesk = inject(HelpdeskService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snack = inject(MatSnackBar);
+  private readonly ref = inject(MatDialogRef<CardDetailDialog>);
+  private readonly input = inject<CardDetailData>(MAT_DIALOG_DATA);
+
+  readonly story = this.input.story;
+  readonly isNew = !this.story;
+
+  readonly STATUSES = STATUSES;
+  readonly STATUS_LABELS = STATUS_LABELS;
+  readonly PRIORITIES: Priority[] = ['alta', 'media', 'baja'];
+  readonly PRIORITY_LABELS = PRIORITY_LABELS;
+
+  readonly clients = this.data.getClients();
+  readonly client = this.story ? this.data.getClient(this.story.client || '') : null;
+
+  // Empleados asignables: consulta independiente al API del Helpdesk (con cache).
+  // Arranca con el cache/semilla del servicio para respuesta inmediata.
+  readonly assignees = signal<HdUser[]>(this.ensureCurrent(this.helpdesk.hdUsers()));
+
+  // ── Buscador de asignado (MatAutocomplete) ──
+  readonly assigneeFilter = signal('');
+  /** Valor enlazado al input: HdUser cuando hay selección, string mientras se escribe. */
+  assigneeModel: HdUser | string | null = null;
+  private assigneeTouched = false;
+
+  readonly filteredAssignees = computed<HdUser[]>(() => {
+    const f = this.assigneeFilter().toLowerCase().trim();
+    const list = this.assignees();
+    if (!f) return list;
+    return list.filter((m) => m.name.toLowerCase().includes(f) || m.id.toLowerCase().includes(f));
+  });
+
+  constructor() {
+    this.syncAssigneeModel();
+    // Refresca desde el API y vuelve a garantizar que el asignado actual aparezca.
+    this.helpdesk.getHdUsers().then((users) => {
+      this.assignees.set(this.ensureCurrent(users));
+      if (!this.assigneeTouched) this.syncAssigneeModel();
+    });
+  }
+
+  /** Garantiza que el asignado actual esté en la lista aunque el API no lo traiga. */
+  private ensureCurrent(users: HdUser[]): HdUser[] {
+    const cur = this.story?.assignee;
+    if (!cur || users.some((u) => u.id === cur)) return users;
+    const m = resolveMember(cur, this.data.getTeam(), users);
+    return m ? [{ id: m.id, name: m.name, role: m.role }, ...users] : users;
+  }
+
+  /** Pinta en el input el asignado actual (resuelto a HdUser para mostrar el nombre). */
+  private syncAssigneeModel(): void {
+    const cur = this.assignee;
+    this.assigneeModel = cur ? (this.assignees().find((u) => u.id === cur) ?? { id: cur, name: cur, role: '' }) : null;
+  }
+
+  displayAssignee = (m: HdUser | string | null): string => {
+    if (!m) return '';
+    if (typeof m === 'string') return m;
+    return `${m.name}${m.id ? ' · ' + m.id : ''}`;
+  };
+
+  onAssigneeInput(val: HdUser | string | null): void {
+    this.assigneeTouched = true;
+    this.assigneeFilter.set(typeof val === 'string' ? val : '');
+  }
+
+  onAssigneePicked(val: HdUser | null): void {
+    this.assigneeTouched = true;
+    this.assignee = val?.id ?? '';
+    this.assigneeModel = val;
+    this.assigneeFilter.set('');
+  }
+
+  // ── Modelo del formulario ──
+  title = this.story?.title ?? '';
+  priority: Priority = (this.story?.priority as Priority) ?? 'media';
+  description = this.story?.description ?? '';
+  status: Status = (this.story?.status as Status) ?? 'todo';
+  dueDate = this.story?.dueDate ?? '';
+  assignee = this.story?.assignee ?? '';
+  ticket = this.story?.ticket ?? '';
+  clientId = this.story?.client ?? '';
+  readonly progress = signal<number>(this.story?.progress ?? 0);
+
+  // Prioridad editable solo en To Do / In Progress (estado original).
+  readonly editable = this.status === 'todo' || this.status === 'in_progress';
+
+  readonly progBarColor = computed(() => progColor(this.progress()));
+
+  onProgress(value: string): void {
+    this.progress.set(Math.min(100, Math.max(0, parseInt(value, 10) || 0)));
+  }
+
+  async save(): Promise<void> {
+    const title = this.title.trim();
+    if (!title) {
+      this.snack.open('El título no puede quedar vacío.', 'OK', { duration: 3000 });
+      return;
+    }
+    const pct = roundUp5(this.progress());
+    const assignee = this.assignee || null;
+
+    if (this.isNew) {
+      this.data.addStory({
+        title,
+        priority: this.priority,
+        description: this.description.trim(),
+        status: this.status,
+        dueDate: this.dueDate,
+        assignee,
+        client: this.clientId || null,
+        ticket: this.ticket.trim(),
+        progress: pct,
+      });
+      this.ref.close(true);
+      return;
+    }
+
+    const task = this.story!;
+    // Paso todo → in_progress exige validación (WIP + permisos + confirmación).
+    if (task.status === 'todo' && this.status === 'in_progress') {
+      const ok = await canStartWork(task, { data: this.data, auth: this.auth, dialog: this.dialog, snack: this.snack });
+      if (!ok) return; // el modal queda abierto sin guardar
+    }
+    this.data.updateStoryTitle(task.id, title);
+    this.data.updateStoryDescription(task.id, this.description.trim());
+    this.data.updateStoryProgress(task.id, pct);
+    this.data.updateStoryStatus(task.id, this.status);
+    this.data.updateStoryDueDate(task.id, this.dueDate);
+    this.data.updateStoryAssignee(task.id, assignee);
+    if (this.editable) this.data.updateStoryPriority(task.id, this.priority);
+    this.ref.close(true);
+  }
+
+  async remove(): Promise<void> {
+    if (!this.story) return;
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialog, {
+          data: {
+            title: 'Eliminar tarea',
+            message: `Vas a eliminar la tarea:\n\n"${this.story.title}"\n\nEsta acción NO se puede deshacer.`,
+            confirmText: 'Eliminar',
+            danger: true,
+            requireWord: 'BORRAR',
+          },
+        })
+        .afterClosed(),
+    );
+    if (ok) {
+      this.data.deleteStory(this.story.id);
+      this.ref.close(true);
+    }
+  }
+}
