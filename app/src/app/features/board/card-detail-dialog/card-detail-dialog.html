@@ -12,12 +12,23 @@
     <div class="row">
       <mat-form-field appearance="outline" class="grow">
         <mat-label>Cliente</mat-label>
-        <mat-select [(ngModel)]="clientId">
-          <mat-option [value]="''">— Sin cliente —</mat-option>
-          @for (c of clients; track c.id) {
-            <mat-option [value]="c.id">{{ c.name }}</mat-option>
+        <input
+          matInput
+          [matAutocomplete]="autoClient"
+          [ngModel]="clientModel"
+          (ngModelChange)="onClientInput($event)"
+          placeholder="Buscar cliente..."
+          autocomplete="off"
+        />
+        <mat-icon matSuffix>search</mat-icon>
+        <mat-autocomplete #autoClient="matAutocomplete" [displayWith]="displayClient" (optionSelected)="onClientPicked($event.option.value)">
+          <mat-option [value]="null">— Sin cliente —</mat-option>
+          @for (c of filteredClients(); track c.id) {
+            <mat-option [value]="c">{{ c.name }}</mat-option>
+          } @empty {
+            <mat-option [value]="null" disabled>Sin coincidencias</mat-option>
           }
-        </mat-select>
+        </mat-autocomplete>
       </mat-form-field>
       <mat-form-field appearance="outline" class="ticket">
         <mat-label>N° Ticket</mat-label>
@@ -79,7 +90,7 @@
       <mat-label>Estado</mat-label>
       <mat-select [(ngModel)]="status">
         @for (s of STATUSES; track s) {
-          <mat-option [value]="s">{{ STATUS_LABELS[s] }}</mat-option>
+          <mat-option [value]="s" [disabled]="s === 'todo' && salioDeTodo">{{ STATUS_LABELS[s] }}</mat-option>
         }
       </mat-select>
     </mat-form-field>

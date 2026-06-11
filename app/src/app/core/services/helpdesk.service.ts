@@ -25,6 +25,13 @@ export interface HdUser {
   role: string;
 }
 
+export interface HdClient {
+  id: string;
+  name: string;
+}
+
+const HD_CLIENTS_LS_KEY = 'fit-daily_hd_clients';
+
 /**
  * Cliente del API del Helpdesk (vía proxy). El Bearer y el manejo de 401/403 lo
  * añade helpdeskAuthInterceptor. El port completo de js/helpdesk-panel.js (sync,
@@ -43,6 +50,13 @@ export class HelpdeskService {
   readonly hdUsers = this._users.asReadonly();
 
   private loadPromise: Promise<HdUser[]> | null = null;
+
+  /** Clientes del Helpdesk (signal). Arranca con el cache de localStorage y se
+   *  llena con la consulta al API. Alimenta el campo Cliente del modal y resuelve
+   *  el nombre/color de cliente en las cards del board. */
+  private readonly _clients = signal<HdClient[]>(this.seedClients());
+  readonly clients = this._clients.asReadonly();
+  private clientsPromise: Promise<HdClient[]> | null = null;
 
   /** Perfil del usuario en sesión. */
   me() {
@@ -108,6 +122,50 @@ export class HelpdeskService {
     return this._users();
   }
 
+  /**
+   * Catálogo completo de clientes del Helpdesk. Consulta al API (por analogía con
+   * /users/catalog) y cachea en memoria + localStorage. Es la fuente del campo
+   * Cliente del modal; el legacy usaba un JSON local estático de 14 clientes.
+   */
+  getClients(): Promise<HdClient[]> {
+    return (this.clientsPromise ??= this.fetchAllClients());
+  }
+
+  private async fetchAllClients(): Promise<HdClient[]> {
+    const endpoints = ['/clients/catalog', '/clients', '/clients/', '/clients/list', '/clients/all', '/companies'];
+    for (const ep of endpoints) {
+      try {
+        const data = await firstValueFrom(
+          this.http.get<any>(`${this.base}${ep}`, { context: new HttpContext().set(HD_SAFE, true) }),
+        );
+        const items: any[] = Array.isArray(data) ? data : data?.items || data?.data || data?.clients || data?.results || [];
+        if (!items.length) continue;
+
+        const map = new Map<string, string>();
+        for (const c of items) {
+          const id = String(c.client_id ?? c.id ?? c.code ?? '').trim();
+          if (!id) continue;
+          if (c.client_status === false || c.status === false) continue; // inactivo
+          const name = String(
+            c.client_description || c.description || c.name || c.razon_social || c.business_name || id,
+          ).trim();
+          if (!map.has(id)) map.set(id, name);
+        }
+        if (!map.size) continue;
+
+        const clients = [...map.entries()]
+          .map(([id, name]) => ({ id, name }))
+          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        this._clients.set(clients);
+        this.saveClients(clients);
+        return clients;
+      } catch {
+        /* prueba el siguiente endpoint */
+      }
+    }
+    return this._clients();
+  }
+
   // ── Cache (localStorage) ──────────────────────────────────────────────
   private seedUsers(): HdUser[] {
     try {
@@ -119,6 +177,26 @@ export class HelpdeskService {
       /* cache corrupto */
     }
     return EMPLEADOS.map((id) => ({ id, name: id, role: this.roles[id] || '' })).sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  private seedClients(): HdClient[] {
+    try {
+      const cached = JSON.parse(localStorage.getItem(HD_CLIENTS_LS_KEY) || '[]');
+      if (Array.isArray(cached) && cached.length) {
+        return cached.map((c: any) => ({ id: String(c.id), name: c.name || String(c.id) }));
+      }
+    } catch {
+      /* cache corrupto */
+    }
+    return [];
+  }
+
+  private saveClients(clients: HdClient[]): void {
+    try {
+      localStorage.setItem(HD_CLIENTS_LS_KEY, JSON.stringify(clients));
+    } catch {
+      /* storage lleno / no disponible */
+    }
   }
 
   /** Heurística: el cache debe tener IDs en formato Helpdesk (XXX001), no IDs locales. */

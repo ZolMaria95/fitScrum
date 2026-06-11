@@ -13,7 +13,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AuthService } from '../../../core/services/auth.service';
 import { DataService, Story } from '../../../core/services/data.service';
-import { HdUser, HelpdeskService } from '../../../core/services/helpdesk.service';
+import { HdClient, HdUser, HelpdeskService } from '../../../core/services/helpdesk.service';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import {
   PRIORITY_LABELS,
@@ -67,8 +67,27 @@ export class CardDetailDialog {
   readonly PRIORITIES: Priority[] = ['alta', 'media', 'baja'];
   readonly PRIORITY_LABELS = PRIORITY_LABELS;
 
-  readonly clients = this.data.getClients();
-  readonly client = this.story ? this.data.getClient(this.story.client || '') : null;
+  // Cliente actual (modo edición), resuelto local → API para mostrar el chip.
+  get client(): { id: string; name: string; color?: string } | null {
+    const id = this.story?.client;
+    if (!id) return null;
+    const local = this.data.getClient(id) as { id: string; name: string; color?: string } | undefined;
+    if (local) return local;
+    const api = this.helpdesk.clients().find((c) => c.id === id);
+    return api ? { id: api.id, name: api.name } : { id, name: id };
+  }
+
+  // Clientes del API (consulta independiente + cache). Fallback a los locales
+  // mientras el API responde, para que el buscador tenga algo de inmediato.
+  readonly clientes = signal<HdClient[]>(this.initialClients());
+  readonly clientFilter = signal('');
+  clientModel: HdClient | string | null = null;
+  readonly filteredClients = computed<HdClient[]>(() => {
+    const f = this.clientFilter().toLowerCase().trim();
+    const list = this.clientes();
+    if (!f) return list;
+    return list.filter((c) => c.name.toLowerCase().includes(f) || c.id.toLowerCase().includes(f));
+  });
 
   // Empleados asignables: consulta independiente al API del Helpdesk (con cache).
   // Arranca con el cache/semilla del servicio para respuesta inmediata.
@@ -94,6 +113,28 @@ export class CardDetailDialog {
       this.assignees.set(this.ensureCurrent(users));
       if (!this.assigneeTouched) this.syncAssigneeModel();
     });
+    // Clientes del API para el buscador del modo nueva tarea.
+    this.helpdesk.getClients().then((cs) => {
+      if (cs.length) this.clientes.set(cs);
+    });
+  }
+
+  private initialClients(): HdClient[] {
+    const api = this.helpdesk.clients();
+    if (api.length) return api;
+    return this.data.getClients().map((c) => ({ id: c.id, name: c.name }));
+  }
+
+  displayClient = (c: HdClient | string | null): string => (!c ? '' : typeof c === 'string' ? c : c.name);
+
+  onClientInput(val: HdClient | string | null): void {
+    this.clientFilter.set(typeof val === 'string' ? val : '');
+  }
+
+  onClientPicked(val: HdClient | null): void {
+    this.clientId = val?.id ?? '';
+    this.clientModel = val;
+    this.clientFilter.set('');
   }
 
   /** Garantiza que el asignado actual esté en la lista aunque el API no lo traiga. */
@@ -142,6 +183,9 @@ export class CardDetailDialog {
   // Prioridad editable solo en To Do / In Progress (estado original).
   readonly editable = this.status === 'todo' || this.status === 'in_progress';
 
+  // Regla: una tarea que ya salió de To Do no puede volver a To Do.
+  readonly salioDeTodo = !this.isNew && this.story!.status !== 'todo';
+
   readonly progBarColor = computed(() => progColor(this.progress()));
 
   onProgress(value: string): void {
@@ -174,6 +218,11 @@ export class CardDetailDialog {
     }
 
     const task = this.story!;
+    // Regla: una tarea que ya salió de To Do no puede volver a To Do.
+    if (this.salioDeTodo && this.status === 'todo') {
+      this.snack.open('Una tarea que ya salió de To Do no puede volver.', 'OK', { duration: 3000 });
+      return;
+    }
     // Paso todo → in_progress exige validación (WIP + permisos + confirmación).
     if (task.status === 'todo' && this.status === 'in_progress') {
       const ok = await canStartWork(task, { data: this.data, auth: this.auth, dialog: this.dialog, snack: this.snack });

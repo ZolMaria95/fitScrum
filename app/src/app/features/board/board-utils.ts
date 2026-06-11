@@ -39,6 +39,51 @@ export function initialsFromName(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+// ── Estética de post-it: color por cliente + micro-rotación ──────────────
+const POSTIT_INK = '#2b2b3a'; // tinta oscura para legibilidad sobre pastel
+const POSTIT_BASE = '#fffdf2'; // crema base del post-it
+const NEUTRAL_ACCENT = '#9aa0a6'; // tareas sin cliente
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  const v = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(v, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Mezcla `hex` con `base` (0..1 = peso del color). Sin depender de color-mix CSS. */
+function blend(hex: string, base: string, weight: number): string {
+  const [r1, g1, b1] = hexToRgb(hex);
+  const [r2, g2, b2] = hexToRgb(base);
+  const mix = (a: number, b: number) => Math.round(a * weight + b * (1 - weight));
+  return `rgb(${mix(r1, r2)}, ${mix(g1, g2)}, ${mix(b1, b2)})`;
+}
+
+export interface ClientStyle {
+  bg: string;
+  accent: string;
+  ink: string;
+}
+
+/**
+ * Estilo del post-it derivado del cliente. Usa su `color` (clientes locales) o
+ * uno estable generado por id (clientes del API que no traen color). Sin cliente
+ * → crema neutro.
+ */
+export function clientStyle(client: { id?: string; color?: string } | undefined): ClientStyle {
+  if (!client) return { bg: blend(NEUTRAL_ACCENT, POSTIT_BASE, 0.14), accent: NEUTRAL_ACCENT, ink: POSTIT_INK };
+  const accent = client.color || colorFor(client.id || '');
+  return { bg: blend(accent, POSTIT_BASE, 0.14), accent, ink: POSTIT_INK };
+}
+
+/** Rotación estable -2°..2° a partir del id (efecto post-it desordenado). */
+export function cardTilt(id: string): string {
+  let h = 0;
+  const s = String(id || '');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return `${((h % 9) - 4) * 0.5}deg`; // -2, -1.5, … 0 … 2
+}
+
 export interface ResolvedMember {
   id: string;
   name: string;

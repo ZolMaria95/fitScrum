@@ -54,7 +54,7 @@
 <div class="kanban" cdkDropListGroup>
   @for (col of columns(); track col.status) {
     <section class="kanban-col">
-      <header class="col-header">
+      <header class="col-header" [class]="'head-' + col.status">
         <span class="col-dot" [class]="'dot-' + col.status"></span>
         <span class="col-title">{{ col.label }}</span>
         <span class="col-count">{{ col.cards.length }}</span>
@@ -69,14 +69,18 @@
         @for (card of col.cards; track card.id) {
           @let member = resolveMember(card.assignee);
           @let cl = clientOf(card.client);
+          @let cs = clientStyle(cl);
           @let due = dueInfo(card.dueDate, card.status);
 
           <mat-card
             class="story-card"
-            [class]="'priority-' + card.priority"
             [class.not-mine]="!canDrag(card)"
             [class.overdue]="due.overdue"
             [class.soon]="due.soon"
+            [style.background]="cs.bg"
+            [style.color]="cs.ink"
+            [style.--accent]="cs.accent"
+            [style.--tilt]="cardTilt(card.id)"
             cdkDrag
             [cdkDragData]="card"
             [cdkDragDisabled]="!canDrag(card)"
@@ -84,9 +88,7 @@
           >
             <div class="card-top">
               <span class="card-ticket">#{{ card.ticket || '—' }}</span>
-              @if (cl) {
-                <span class="client-badge" [style.color]="$any(cl).color || 'inherit'">{{ cl.name }}</span>
-              }
+              <span class="prio-badge" [class]="'prio-' + card.priority">{{ $any(PRIORITY_LABELS)[card.priority] }}</span>
               <span class="grow"></span>
               @if (puedeGestionarTodo()) {
                 <button
@@ -100,6 +102,9 @@
               }
             </div>
 
+            @if (cl) {
+              <span class="client-name">{{ cl.name }}</span>
+            }
             <div class="card-title">{{ card.title }}</div>
 
             @if (due.soon) {

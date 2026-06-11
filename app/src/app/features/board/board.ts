@@ -24,6 +24,8 @@ import {
   Status,
   WorkDeps,
   canStartWork,
+  cardTilt,
+  clientStyle,
   dueInfo,
   progColor,
   resolveMember,
@@ -68,9 +70,10 @@ export class Board {
   private readonly snack = inject(MatSnackBar);
 
   constructor() {
-    // Carga los empleados del Helpdesk (consulta independiente + cache) para que
-    // los avatares resuelvan nombre/rol de tareas asignadas a un user_id del API.
+    // Carga empleados y clientes del Helpdesk (consulta independiente + cache) para
+    // resolver nombre/rol del asignado y nombre/color del cliente en las cards.
     this.helpdesk.getHdUsers();
+    this.helpdesk.getClients();
   }
 
   // ── Helpers expuestos al template ──
@@ -78,6 +81,8 @@ export class Board {
     resolveMember(id, this.data.team(), this.helpdesk.hdUsers());
   readonly dueInfo = dueInfo;
   readonly progColor = progColor;
+  readonly clientStyle = clientStyle;
+  readonly cardTilt = cardTilt;
   readonly STATUS_LABELS = STATUS_LABELS;
   readonly PRIORITY_LABELS = PRIORITY_LABELS;
   readonly PRIORITY_FILTERS: PriorityFilter[] = ['all', 'alta', 'media', 'baja'];
@@ -152,8 +157,13 @@ export class Board {
   setClientFilter(id: string): void {
     this.clientFilter.set(id);
   }
-  clientOf(id: string | null): Client | undefined {
-    return id ? this.data.getClient(id) : undefined;
+  /** Resuelve el cliente: primero los locales (con color), luego el catálogo del API. */
+  clientOf(id: string | null): { id: string; name: string; color?: string } | undefined {
+    if (!id) return undefined;
+    const local = this.data.getClient(id) as (Client & { color?: string }) | undefined;
+    if (local) return { id: local.id, name: local.name, color: local.color };
+    const api = this.helpdesk.clients().find((c) => c.id === id);
+    return api ? { id: api.id, name: api.name } : { id, name: id };
   }
 
   // ── Drag & drop ──
@@ -166,9 +176,14 @@ export class Board {
   async drop(event: CdkDragDrop<Story[]>, target: Status): Promise<void> {
     const task = event.item.data as Story;
     if (!task || task.status === target) return;
+    // Regla: una tarea que ya salió de To Do no puede volver a To Do.
+    if (target === 'todo') {
+      this.snack.open('Una tarea que ya salió de To Do no puede volver.', 'OK', { duration: 3000 });
+      return;
+    }
     if (task.status === 'todo' && target === 'in_progress') {
       const ok = await canStartWork(task, this.workDeps);
-      if (!ok) return; // bloqueado/cancelado: el signal recompone y la card vuelve a To Do
+      if (!ok) return; // bloqueado/cancelado: el signal recompone y la card vuelve a su columna
     }
     this.data.updateStoryStatus(task.id, target);
   }
