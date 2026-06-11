@@ -1,0 +1,72 @@
+<div class="conv-head" mat-dialog-title>
+  <span class="ticket-id">#{{ ticket.ticket }}</span>
+  <span class="cliente">{{ ticket.clienteRaw }}</span>
+  <span class="estatus">{{ ticket.estatus }}</span>
+  <span class="spacer"></span>
+  <button mat-icon-button mat-dialog-close aria-label="Cerrar"><mat-icon>close</mat-icon></button>
+</div>
+
+<div class="asunto">{{ ticket.asunto }}</div>
+
+@if (ticketAttachments().length) {
+  <div class="ticket-attach">
+    @for (id of ticketAttachments(); track id; let i = $index) {
+      <button mat-stroked-button (click)="openAttachment(id, 'ticket_' + ticket.ticket + '_adjunto')">
+        <mat-icon>attach_file</mat-icon> Descargar adjunto{{ ticketAttachments().length > 1 ? ' ' + (i + 1) : '' }}
+      </button>
+    }
+  </div>
+}
+
+<mat-dialog-content class="conv-body" (click)="onConvClick($event)">
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    <div class="conv-loading">Cargando mensajes y adjuntos…</div>
+  } @else if (!messages().length) {
+    <div class="conv-empty">Sin mensajes registrados.</div>
+  } @else {
+    @for (m of messages(); track $index) {
+      <div class="conv-msg" [class]="'conv-' + m.tipo">
+        <div class="conv-meta">
+          <span class="conv-user">{{ m.autor }}</span>
+          <span class="conv-date">{{ m.fecha }}</span>
+        </div>
+        @if (m.html) {
+          <div class="conv-text" [innerHTML]="m.html"></div>
+        }
+        @if (m.adjuntos.length) {
+          <div class="conv-attach-row">
+            @for (a of m.adjuntos; track a.id) {
+              <button class="conv-attach" (click)="openAttachment(a.id, a.nombre)">
+                <mat-icon>attach_file</mat-icon> {{ a.nombre }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+    }
+  }
+</mat-dialog-content>
+
+<div class="composer">
+  <textarea [(ngModel)]="composerText" rows="2" placeholder="Escribir mensaje…" [disabled]="sending()"></textarea>
+  <div class="composer-actions">
+    <label class="attach-label" matTooltip="Adjuntar archivo">
+      <mat-icon>attach_file</mat-icon>
+      <input type="file" multiple hidden (change)="onFiles($event)" />
+    </label>
+    @if (composerFiles.length) {
+      <span class="files">{{ composerFiles.length }} archivo(s)</span>
+    }
+    <span class="spacer"></span>
+    <span class="send-status">{{ sendStatus() }}</span>
+    <button mat-flat-button color="primary" (click)="send()" [disabled]="sending()">Enviar</button>
+  </div>
+</div>
+
+@if (lightbox(); as url) {
+  <div class="lightbox" (click)="lightbox.set(null)">
+    <button class="lightbox-close" (click)="lightbox.set(null)">✕</button>
+    <img [src]="url" alt="" />
+  </div>
+}

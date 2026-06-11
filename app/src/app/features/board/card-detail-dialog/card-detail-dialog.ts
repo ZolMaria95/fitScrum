@@ -30,6 +30,8 @@ import {
 export interface CardDetailData {
   /** null → crear una tarea nueva. */
   story: Story | null;
+  /** Valores iniciales al crear desde un ticket (número, cliente, asunto). */
+  prefill?: { ticket?: string; client?: string; clientName?: string; title?: string };
 }
 
 /** Modal de detalle/edición de una tarea (port de _openDetail en js/board.js). */
@@ -82,6 +84,7 @@ export class CardDetailDialog {
   readonly clientes = signal<HdClient[]>(this.initialClients());
   readonly clientFilter = signal('');
   clientModel: HdClient | string | null = null;
+  private clientTouched = false;
   readonly filteredClients = computed<HdClient[]>(() => {
     const f = this.clientFilter().toLowerCase().trim();
     const list = this.clientes();
@@ -113,10 +116,21 @@ export class CardDetailDialog {
       this.assignees.set(this.ensureCurrent(users));
       if (!this.assigneeTouched) this.syncAssigneeModel();
     });
-    // Clientes del API para el buscador del modo nueva tarea.
+    // Clientes del API para el buscador; sincroniza el cliente pre-cargado (prefill).
+    this.syncClientModel();
     this.helpdesk.getClients().then((cs) => {
       if (cs.length) this.clientes.set(cs);
+      if (!this.clientTouched) this.syncClientModel();
     });
+  }
+
+  private syncClientModel(): void {
+    const id = this.clientId;
+    if (!id) {
+      this.clientModel = null;
+      return;
+    }
+    this.clientModel = this.clientes().find((c) => c.id === id) ?? { id, name: this.input.prefill?.clientName || id };
   }
 
   private initialClients(): HdClient[] {
@@ -128,10 +142,12 @@ export class CardDetailDialog {
   displayClient = (c: HdClient | string | null): string => (!c ? '' : typeof c === 'string' ? c : c.name);
 
   onClientInput(val: HdClient | string | null): void {
+    this.clientTouched = true;
     this.clientFilter.set(typeof val === 'string' ? val : '');
   }
 
   onClientPicked(val: HdClient | null): void {
+    this.clientTouched = true;
     this.clientId = val?.id ?? '';
     this.clientModel = val;
     this.clientFilter.set('');
@@ -170,14 +186,14 @@ export class CardDetailDialog {
   }
 
   // ── Modelo del formulario ──
-  title = this.story?.title ?? '';
+  title = this.story?.title ?? this.input.prefill?.title ?? '';
   priority: Priority = (this.story?.priority as Priority) ?? 'media';
   description = this.story?.description ?? '';
   status: Status = (this.story?.status as Status) ?? 'todo';
   dueDate = this.story?.dueDate ?? '';
   assignee = this.story?.assignee ?? '';
-  ticket = this.story?.ticket ?? '';
-  clientId = this.story?.client ?? '';
+  ticket = this.story?.ticket ?? this.input.prefill?.ticket ?? '';
+  clientId = this.story?.client ?? this.input.prefill?.client ?? '';
   readonly progress = signal<number>(this.story?.progress ?? 0);
 
   // Prioridad editable solo en To Do / In Progress (estado original).

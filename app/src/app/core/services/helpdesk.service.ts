@@ -3,6 +3,15 @@ import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { HD_SAFE } from '../interceptors/helpdesk-auth.interceptor';
+import { CLIENTES_VALIDOS } from '../../features/tickets/helpdesk.constants';
+import {
+  Ticket,
+  applyMessages,
+  clasificar,
+  evaluarFechas,
+  mapTicket,
+  ticketAttachIds,
+} from '../../features/tickets/ticket-utils';
 
 const HD_USERS_LS_KEY = 'fit-daily_hd_users';
 const HD_ROLES_LS_KEY = 'fit-daily_hd_roles';
@@ -57,6 +66,12 @@ export class HelpdeskService {
   private readonly _clients = signal<HdClient[]>(this.seedClients());
   readonly clients = this._clients.asReadonly();
   private clientsPromise: Promise<HdClient[]> | null = null;
+
+  // ── Tickets ──
+  private readonly _tickets = signal<Ticket[]>([]);
+  readonly tickets = this._tickets.asReadonly();
+  readonly syncStatus = signal<{ msg: string; type: 'idle' | 'loading' | 'ok' | 'error' }>({ msg: '', type: 'idle' });
+  readonly loading = signal(false);
 
   /** Perfil del usuario en sesión. */
   me() {
@@ -164,6 +179,174 @@ export class HelpdeskService {
       }
     }
     return this._clients();
+  }
+
+  // ── Tickets: sync, mensajes, adjuntos, envío ──────────────────────────
+  private setStatus(msg: string, type: 'idle' | 'loading' | 'ok' | 'error'): void {
+    this.syncStatus.set({ msg, type });
+  }
+
+  private async fetchPage(offset: number): Promise<any[]> {
+    try {
+      const data = await firstValueFrom(
+        this.http.get<any>(`${this.base}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`),
+      );
+      return data?.items || [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Sincroniza tickets: 6 páginas, filtra clientes válidos, clasifica y carga
+   *  el último mensaje de cada uno en lotes. Port de sync() de helpdesk-panel.js. */
+  async sync(): Promise<void> {
+    if (this.loading()) return;
+    this.loading.set(true);
+    this.setStatus('Cargando tickets (6 páginas)...', 'loading');
+    try {
+      const offsets = [0, 40, 80, 120, 160, 200];
+      const pages = await Promise.all(offsets.map((o) => this.fetchPage(o)));
+      const raw = pages.flat();
+
+      const filtrados = raw
+        .filter((t) => CLIENTES_VALIDOS.has(String(t.cliente || '').trim().toUpperCase()))
+        .filter((t) => {
+          const est = String(t.estado || '').toUpperCase();
+          return !est.includes('APROBADO') && !est.includes('CERRADO POR EL CLIENTE');
+        });
+
+      // Fase 1: sin mensajes, feedback inmediato.
+      const tickets = filtrados.map(mapTicket).map(evaluarFechas).map(clasificar);
+      this._tickets.set([...tickets]);
+      this.setStatus(`${tickets.length} tickets cargados. Obteniendo mensajes...`, 'loading');
+
+      // Fase 2: mensajes en lotes de 10.
+      const BATCH = 10;
+      for (let i = 0; i < tickets.length; i += BATCH) {
+        const lote = tickets.slice(i, i + BATCH);
+        await Promise.all(
+          lote.map(async (t) => {
+            const msgs = await this.fetchMessages(t.ticket);
+            applyMessages(t, msgs);
+            evaluarFechas(t);
+            clasificar(t);
+          }),
+        );
+        this._tickets.set([...tickets]);
+        this.setStatus(`Mensajes: ${Math.min(i + BATCH, tickets.length)} / ${tickets.length}...`, 'loading');
+      }
+
+      this.setStatus(`✓ ${tickets.length} tickets — ${new Date().toLocaleTimeString('es-ES')}`, 'ok');
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const esRed = /fetch|failed|load failed|network|0/i.test(msg);
+      this.setStatus(esRed ? 'No se pudo conectar al proxy. Ejecuta: python proxy.py' : `Error: ${msg}`, 'error');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  /** Mensajes crudos de un ticket. */
+  async fetchMessages(ticketId: string): Promise<any[]> {
+    try {
+      const data = await firstValueFrom(
+        this.http.get<any>(`${this.base}/tickets/${ticketId}/messages?limit=50`, {
+          context: new HttpContext().set(HD_SAFE, true),
+        }),
+      );
+      return Array.isArray(data)
+        ? data
+        : Array.isArray(data?.items)
+          ? data.items
+          : Array.isArray(data?.messages)
+            ? data.messages
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Ticket crudo completo (para adjuntos a nivel ticket que el listado no trae). */
+  async fetchTicketRaw(ticketId: string): Promise<any> {
+    try {
+      const raw = await firstValueFrom(
+        this.http.get<any>(`${this.base}/tickets/tickets/${ticketId}`, { context: new HttpContext().set(HD_SAFE, true) }),
+      );
+      return Array.isArray(raw) ? raw[0] : raw?.item || raw?.data || raw;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Busca un ticket por número directamente en el API (no estaba en memoria). */
+  async searchTicketRemote(ticketId: string): Promise<Ticket | null> {
+    try {
+      const raw = await firstValueFrom(
+        this.http.get<any>(`${this.base}/tickets/tickets/${ticketId}`, { context: new HttpContext().set(HD_SAFE, true) }),
+      );
+      const data = Array.isArray(raw) ? raw[0] : raw?.item || raw?.data || raw;
+      if (!data || !data.ticket_id) return null;
+      const t = clasificar(evaluarFechas(mapTicket(data)));
+      applyMessages(t, await this.fetchMessages(t.ticket));
+      evaluarFechas(t);
+      clasificar(t);
+      return t;
+    } catch {
+      return null;
+    }
+  }
+
+  /** URL blob (con auth) de un adjunto, para `<img>`/descarga. */
+  async attachmentUrl(attachId: string): Promise<string | null> {
+    try {
+      const blob = await firstValueFrom(
+        this.http.get(`${this.base}/attachments/${attachId}`, {
+          responseType: 'blob',
+          context: new HttpContext().set(HD_SAFE, true),
+        }),
+      );
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }
+
+  private async uploadAttachment(file: File): Promise<string> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const data = await firstValueFrom(
+      this.http.post<any>(`${this.base}/attachments`, fd, { context: new HttpContext().set(HD_SAFE, true) }),
+    );
+    return data.id || data.attach_id || data.attachment_id;
+  }
+
+  /** Envía un mensaje al ticket (sube adjuntos primero). Devuelve true si ok. */
+  async sendMessage(ticketId: string, detail: string, files: File[] = []): Promise<boolean> {
+    try {
+      const attach_ids: string[] = [];
+      for (const f of files) attach_ids.push(await this.uploadAttachment(f));
+      await firstValueFrom(
+        this.http.post(
+          `${this.base}/tickets/${ticketId}/messages`,
+          { detail, attach_ids },
+          { context: new HttpContext().set(HD_SAFE, true) },
+        ),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Ids de adjunto a nivel ticket (cachea en el ticket si hay que pedir el raw). */
+  async ticketAttachmentIds(t: Ticket): Promise<string[]> {
+    if (Array.isArray(t.adjuntosTicket) && t.adjuntosTicket.length) return t.adjuntosTicket;
+    const raw = await this.fetchTicketRaw(t.ticket);
+    const ids = ticketAttachIds(raw);
+    t.adjuntosTicket = ids;
+    return ids;
   }
 
   // ── Cache (localStorage) ──────────────────────────────────────────────

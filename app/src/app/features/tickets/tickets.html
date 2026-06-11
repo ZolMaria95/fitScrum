@@ -1,0 +1,201 @@
+<div class="hd-header">
+  <h2>Tickets Helpdesk</h2>
+  <button mat-flat-button color="primary" (click)="sync()" [disabled]="loading()">
+    <mat-icon>sync</mat-icon> Sincronizar
+  </button>
+</div>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+}
+@if (syncStatus().msg) {
+  <div class="hd-status" [class]="'st-' + syncStatus().type">{{ syncStatus().msg }}</div>
+}
+
+<div class="hd-tabs">
+  <button class="hd-tab" [class.active]="tab() === 'prioritarios'" (click)="setTab('prioritarios')">
+    Prioritarios <span class="hd-tab-count alert">{{ counts().prio }}</span>
+  </button>
+  <button class="hd-tab" [class.active]="tab() === 'todos'" (click)="setTab('todos')">
+    Todos los tickets <span class="hd-tab-count">{{ counts().all }}</span>
+  </button>
+  <button class="hd-tab" [class.active]="tab() === 'asignados'" (click)="setTab('asignados')">
+    Asignados a mí <span class="hd-tab-count">{{ counts().asignados }}</span>
+  </button>
+  <button class="hd-tab" [class.active]="tab() === 'estadisticas'" (click)="setTab('estadisticas')">Estadísticas</button>
+</div>
+
+@if (tab() === 'estadisticas') {
+  @let s = stats();
+  <div class="hd-stats-header">RESUMEN EJECUTIVO — Total tickets activos: <strong>{{ s.total }}</strong></div>
+  <div class="hd-stats-grid">
+    @for (block of [{ t: 'Por Clasificación', rows: s.porClasif }, { t: 'Por Cliente', rows: s.porCliente }, { t: 'Por Estatus', rows: s.porEstatus }]; track block.t) {
+      <div class="hd-stats-block">
+        <div class="hd-stats-title">{{ block.t }}</div>
+        <table class="hd-stats-tbl">
+          <thead><tr><th>{{ block.t.split(' ')[1] }}</th><th>Tickets</th><th>% Total</th></tr></thead>
+          <tbody>
+            @for (r of block.rows; track r.key) {
+              <tr><td [style.color]="r.color">{{ r.key }}</td><td class="num">{{ r.count }}</td><td class="num">{{ r.pct }}</td></tr>
+            }
+          </tbody>
+          <tfoot><tr><td>TOTAL</td><td class="num">{{ s.total }}</td><td class="num">100%</td></tr></tfoot>
+        </table>
+      </div>
+    }
+  </div>
+} @else {
+  <div class="hd-filters">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="f-search">
+      <mat-label>Buscar nº ticket</mat-label>
+      <input matInput [ngModel]="filterTicket()" (ngModelChange)="onSearchInput($event)" inputmode="numeric" />
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Cliente</mat-label>
+      <mat-select [value]="filterCliente()" (selectionChange)="filterCliente.set($event.value)">
+        <mat-option value="">Todos ({{ optClientes().length }})</mat-option>
+        @for (c of optClientes(); track c) { <mat-option [value]="c">{{ c }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Clasificación</mat-label>
+      <mat-select [value]="filterClasif()" (selectionChange)="filterClasif.set($event.value)">
+        <mat-option value="">Todas</mat-option>
+        @for (c of optClasifs(); track c) { <mat-option [value]="c" [style.color]="CLASIF_COLOR[c]">{{ c }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Acción</mat-label>
+      <mat-select [value]="filterAccion()" (selectionChange)="filterAccion.set($event.value)">
+        <mat-option value="">Todas</mat-option>
+        @for (a of optAcciones(); track a) { <mat-option [value]="a">{{ a }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Estatus</mat-label>
+      <mat-select [value]="filterEstatus()" (selectionChange)="filterEstatus.set($event.value)">
+        <mat-option value="">Todos</mat-option>
+        @for (e of optEstatus(); track e) { <mat-option [value]="e">{{ e }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+    <span class="grow"></span>
+    <span class="hd-results">{{ rows().length }} de {{ counts().all }}</span>
+    @if (hasFilters()) {
+      <button mat-stroked-button (click)="clearFilters()"><mat-icon>close</mat-icon> Limpiar</button>
+    }
+  </div>
+
+  <div class="hd-table-wrap">
+    <table mat-table [dataSource]="rows()" matSort (matSortChange)="onSort($event)"
+           [matSortActive]="sortCol()" [matSortDirection]="sortDir()" class="hd-table">
+
+      <ng-container matColumnDef="ticket">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Ticket</th>
+        <td mat-cell *matCellDef="let t">
+          <button class="hd-ticket-btn" (click)="openTicketTask(t)" matTooltip="Crear tarea con este ticket">#{{ t.ticket }}</button>
+          <button class="hd-mini" (click)="copyTicket(t)" matTooltip="Copiar número">⧉</button>
+          <button class="hd-mini" [class.on]="isPending(t)" (click)="togglePending(t)" [matTooltip]="isPending(t) ? 'Quitar de pendientes' : 'Marcar pendiente'">{{ isPending(t) ? '⏸' : '+' }}</button>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="nota">
+        <th mat-header-cell *matHeaderCellDef>Nota</th>
+        <td mat-cell *matCellDef="let t" class="cell-nota">
+          @if (editingNote() === t.ticket) {
+            <textarea class="hd-note-ta" [(ngModel)]="noteDraft" rows="2" (keydown.escape)="cancelNote()"></textarea>
+            <span class="hd-note-actions">
+              <button mat-icon-button (click)="saveNote(t)" matTooltip="Guardar"><mat-icon>check</mat-icon></button>
+              <button mat-icon-button (click)="cancelNote()" matTooltip="Cancelar"><mat-icon>close</mat-icon></button>
+            </span>
+          } @else {
+            <button class="hd-note-btn" (click)="startNote(t)">{{ noteOf(t) || '+ nota' }}</button>
+            <button class="hd-mini" [class.on]="isAction(t)" (click)="toggleAction(t)" matTooltip="Acción pendiente">⚑</button>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="cliente">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="clienteRaw">Cliente</th>
+        <td mat-cell *matCellDef="let t">{{ t.clienteRaw }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="asunto">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Asunto</th>
+        <td mat-cell *matCellDef="let t" class="cell-asunto" [matTooltip]="t.asunto">{{ trunc(t.asunto, 55) }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="fechaUltimoMensaje">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Fecha msg</th>
+        <td mat-cell *matCellDef="let t" [class.reciente]="t.recienteMensaje">{{ fmtDate(t.fechaUltimoMensaje) }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="ultimoMensaje">
+        <th mat-header-cell *matHeaderCellDef>Último mensaje</th>
+        <td mat-cell *matCellDef="let t" class="cell-msg">
+          @if (t.ultimoMensaje) {
+            <button class="hd-msg-btn" [class.tiene]="t.tieneMensaje" (click)="openConversation(t)">{{ trunc(t.ultimoMensaje, 60) }}</button>
+          } @else {
+            <span class="muted">—</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="tipo">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Tipo</th>
+        <td mat-cell *matCellDef="let t">{{ t.tipo }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="nombreAsignado">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Asignado</th>
+        <td mat-cell *matCellDef="let t">{{ t.nombreAsignado || '—' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="estatus">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Estatus</th>
+        <td mat-cell *matCellDef="let t">{{ t.estatus }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="modulo">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Módulo</th>
+        <td mat-cell *matCellDef="let t">{{ t.modulo }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="fechaIngreso">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Ingreso</th>
+        <td mat-cell *matCellDef="let t">{{ fmtDate(t.fechaIngreso) }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="diasSinMovimiento">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Días s/mov</th>
+        <td mat-cell *matCellDef="let t" class="num" [style.color]="diasColor(t.diasSinMovimiento)">{{ t.diasSinMovimiento }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="diasDesdeIngreso">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Días ing.</th>
+        <td mat-cell *matCellDef="let t" class="num" [style.color]="diasColor(t.diasDesdeIngreso)">{{ t.diasDesdeIngreso }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="clasificacion">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Clasificación</th>
+        <td mat-cell *matCellDef="let t" class="cell-clasif" [style.color]="CLASIF_COLOR[t.clasificacion] || '#757575'">{{ t.clasificacion }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="accion">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>Acción</th>
+        <td mat-cell *matCellDef="let t" class="cell-accion">{{ t.accion }}</td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns"
+          [class.row-action]="isAction(row)" [class.row-pending]="isPending(row)"></tr>
+    </table>
+
+    @if (!rows().length) {
+      <div class="hd-empty">
+        @if (tickets().length) { Sin tickets que coincidan con el filtro. }
+        @else { Pulsa <strong>↻ Sincronizar</strong> para cargar los tickets. }
+      </div>
+    }
+  </div>
+}
