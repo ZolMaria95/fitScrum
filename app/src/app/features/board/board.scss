@@ -12,6 +12,53 @@
   background-size: 24px 24px;
 }
 
+// ── Barra de sprint ────────────────────────────────────────────────
+.sprint-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(43, 43, 58, 0.08);
+  border-radius: 12px;
+  backdrop-filter: blur(2px);
+
+  .sprint-select {
+    width: 180px;
+  }
+}
+
+.sprint-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: 8px;
+  font-size: 13px;
+  color: #2b2b3a;
+
+  .sb-name { font-weight: 700; }
+  .sb-goal { color: var(--mat-sys-on-surface-variant); }
+  .sb-sep { color: var(--mat-sys-outline); }
+  .sb-dates,
+  .sb-cap { font-size: 12px; color: var(--mat-sys-on-surface-variant); }
+
+  .sb-status {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1px 8px;
+    border-radius: 9px;
+    color: #fff;
+
+    &.st-active { background: #27ae60; }
+    &.st-completed { background: #8a8a9a; }
+    &.st-planned { background: var(--brand); }
+  }
+}
+
 // ── Toolbar de filtros ─────────────────────────────────────────────
 .board-toolbar {
   display: flex;
@@ -355,16 +402,21 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   color: #fff;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
 
   &.unassigned {
+    width: 26px;
+    height: 26px;
+    padding: 0;
     background: transparent;
     border: 1.5px dashed rgba(43, 43, 58, 0.4);
     box-shadow: none;

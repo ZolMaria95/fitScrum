@@ -17,7 +17,10 @@ import { Client, DataService, Story } from '../../core/services/data.service';
 import { HelpdeskService } from '../../core/services/helpdesk.service';
 import { CardDetailDialog } from './card-detail-dialog/card-detail-dialog';
 import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
+import { SprintDialog } from './sprint-dialog/sprint-dialog';
 import {
+  HD_ESTADO_ESPERANDO,
+  HD_ESTADO_POR_STATUS,
   PRIORITY_LABELS,
   Priority,
   STATUS_LABELS,
@@ -74,6 +77,7 @@ export class Board {
     // resolver nombre/rol del asignado y nombre/color del cliente en las cards.
     this.helpdesk.getHdUsers();
     this.helpdesk.getClients();
+    this.helpdesk.getTicketStatuses();
   }
 
   // ── Helpers expuestos al template ──
@@ -97,6 +101,26 @@ export class Board {
   readonly puedeBorrarBoard = this.auth.puedeBorrarBoard;
   private get myId(): string {
     return String(this.auth.session()?.id || '').trim().toUpperCase();
+  }
+
+  // ── Sprints ──
+  readonly sprints = computed(() => this.data.sprints().sprints);
+  readonly activeSprintId = computed(() => this.data.sprints().active);
+  readonly activeSprint = computed(() => this.data.getActiveSprint());
+
+  setSprint(id: string): void {
+    this.data.setActiveSprint(id);
+  }
+  openNewSprint(): void {
+    this.dialog.open(SprintDialog, { data: { sprint: null }, width: '480px', maxWidth: '95vw' });
+  }
+  openEditSprint(): void {
+    const s = this.activeSprint();
+    if (s) this.dialog.open(SprintDialog, { data: { sprint: s }, width: '480px', maxWidth: '95vw' });
+  }
+  fmtSprintDate(iso?: string): string {
+    if (!iso) return '';
+    return new Date(iso + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   // ── Estado derivado ──
@@ -186,6 +210,16 @@ export class Board {
       if (!ok) return; // bloqueado/cancelado: el signal recompone y la card vuelve a su columna
     }
     this.data.updateStoryStatus(task.id, target);
+    this.pushHdEstado(task, HD_ESTADO_POR_STATUS[target]);
+  }
+
+  /** Sincroniza el estado del ticket asociado en el Helpdesk (best-effort). */
+  private pushHdEstado(card: Story, estado: string | undefined): void {
+    if (!card.ticket || !estado) return;
+    this.helpdesk.setTicketStatus(card.ticket, estado).then((ok) => {
+      if (ok) this.data.updateStoryHdEstatus(card.id, estado);
+      else this.snack.open(`No se pudo actualizar el estado del ticket #${card.ticket} en el Helpdesk.`, 'OK', { duration: 4000 });
+    });
   }
 
   // ── Acciones de card ──
@@ -205,11 +239,16 @@ export class Board {
     return Math.floor((Date.now() - new Date(card.waitingDate + 'T00:00:00').getTime()) / 864e5);
   }
   toggleWaiting(card: Story): void {
-    this.data.setWaitingClient(card.id, !card.waitingClient);
+    const willWait = !card.waitingClient;
+    this.data.setWaitingClient(card.id, willWait);
+    if (willWait) this.pushHdEstado(card, HD_ESTADO_ESPERANDO);
   }
 
   onCert(card: Story, checked: boolean): void {
-    if (checked) this.data.updateStoryStatus(card.id, 'done');
+    if (checked) {
+      this.data.updateStoryStatus(card.id, 'done');
+      this.pushHdEstado(card, HD_ESTADO_POR_STATUS['done']);
+    }
   }
   onApprove(card: Story, checked: boolean): void {
     if (checked) this.data.approveStory(card.id);

@@ -189,6 +189,39 @@
   .asig-name { vertical-align: middle; }
 }
 
+.cell-estatus {
+  white-space: nowrap;
+}
+
+.est-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid #bdd7ee;
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px 4px 3px 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f3864;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+
+  &:hover {
+    border-color: var(--mat-sys-primary);
+    background: #eef3fb;
+  }
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: var(--mat-sys-primary);
+  }
+}
+
 .hd-note-btn {
   border: 1px dashed #cfd8e3;
   background: #fff;

@@ -1,3 +1,34 @@
+<div class="sprint-bar">
+  <mat-form-field appearance="outline" class="sprint-select" subscriptSizing="dynamic">
+    <mat-label>Sprint</mat-label>
+    <mat-select [value]="activeSprintId()" (selectionChange)="setSprint($event.value)">
+      @for (s of sprints(); track s.id) {
+        <mat-option [value]="s.id">{{ s.name }}{{ s.status === 'completed' ? ' ✓' : '' }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <button mat-icon-button (click)="openEditSprint()" matTooltip="Editar sprint actual" [disabled]="!activeSprint()">
+    <mat-icon>edit</mat-icon>
+  </button>
+  <button mat-icon-button (click)="openNewSprint()" matTooltip="Nuevo sprint">
+    <mat-icon>add</mat-icon>
+  </button>
+
+  @if (activeSprint(); as sp) {
+    <div class="sprint-banner">
+      <span class="sb-name">{{ sp.name }}</span>
+      @if (sp.goal) { <span class="sb-goal">— {{ sp.goal }}</span> }
+      <span class="sb-sep">·</span>
+      @if (sp.start || sp.end) {
+        <span class="sb-dates">{{ fmtSprintDate(sp.start) }} → {{ fmtSprintDate(sp.end) }}</span>
+        <span class="sb-sep">·</span>
+      }
+      <span class="sb-cap">{{ sp.capacity }} pts</span>
+      <span class="sb-status" [class]="'st-' + sp.status">{{ sp.status }}</span>
+    </div>
+  }
+</div>
+
 <div class="board-toolbar">
   <mat-button-toggle-group
     class="prio-filter"
@@ -158,7 +189,7 @@
                 <mat-icon>event</mat-icon>{{ due.str || '—' }}
               </span>
               @if (member) {
-                <span class="avatar" [style.background]="member.color" [matTooltip]="member.name">{{ member.label }}</span>
+                <span class="avatar" [style.background]="member.color" [matTooltip]="member.name">{{ member.id }}</span>
               } @else {
                 <span class="avatar unassigned" matTooltip="Sin asignar"></span>
               }

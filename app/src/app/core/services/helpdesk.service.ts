@@ -40,6 +40,7 @@ export interface HdClient {
 }
 
 const HD_CLIENTS_LS_KEY = 'fit-daily_hd_clients';
+const HD_STATUS_LS_KEY = 'fit-daily_hd_statuses';
 
 /**
  * Cliente del API del Helpdesk (vía proxy). El Bearer y el manejo de 401/403 lo
@@ -322,17 +323,18 @@ export class HelpdeskService {
     return data.id || data.attach_id || data.attachment_id;
   }
 
-  /** Envía un mensaje al ticket (sube adjuntos primero). Devuelve true si ok. */
+  /** Envía un mensaje al ticket (sube adjuntos primero). Devuelve true si ok.
+   *  Form-urlencoded (igual que el resto de escrituras del API). */
   async sendMessage(ticketId: string, detail: string, files: File[] = []): Promise<boolean> {
     try {
       const attach_ids: string[] = [];
       for (const f of files) attach_ids.push(await this.uploadAttachment(f));
+      let body = new HttpParams().set('detail', detail);
+      for (const id of attach_ids) body = body.append('attach_ids', id);
       await firstValueFrom(
-        this.http.post(
-          `${this.base}/tickets/${ticketId}/messages`,
-          { detail, attach_ids },
-          { context: new HttpContext().set(HD_SAFE, true) },
-        ),
+        this.http.post(`${this.base}/tickets/${ticketId}/messages`, body, {
+          context: new HttpContext().set(HD_SAFE, true),
+        }),
       );
       return true;
     } catch {
@@ -365,6 +367,96 @@ export class HelpdeskService {
         }),
       );
       this.updateTicketAssignee(ticketId, want);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // ── Catálogo de estados (nombre → ticket_status_id) ──
+  private statusMap: Record<string, string> = this.readStatusCache();
+  private statusesPromise: Promise<Record<string, string>> | null = null;
+  /** Nombres de estado disponibles (para el menú de cambio de estado). */
+  readonly statusNames = signal<string[]>(Object.keys(this.statusMap));
+
+  /** Catálogo de estados del API: { 'EN PROCESO': '003', ... }. Consulta + cache. */
+  getTicketStatuses(): Promise<Record<string, string>> {
+    return (this.statusesPromise ??= this.fetchAllStatuses());
+  }
+
+  private async fetchAllStatuses(): Promise<Record<string, string>> {
+    const endpoints = ['/ticket-statuses/catalog', '/ticket-statuses'];
+    for (const ep of endpoints) {
+      try {
+        const data = await firstValueFrom(
+          this.http.get<any>(`${this.base}${ep}`, { context: new HttpContext().set(HD_SAFE, true) }),
+        );
+        const items: any[] = Array.isArray(data) ? data : data?.items || data?.data || data?.statuses || data?.results || [];
+        if (!items.length) continue;
+        const map: Record<string, string> = {};
+        for (const c of items) {
+          const id = String(c.ticket_status_id ?? c.id ?? c.status_id ?? c.code ?? '').trim();
+          const name = String(c.description || c.status_description || c.name || c.estado || c.status || '').trim().toUpperCase();
+          if (id && name) map[name] = id;
+        }
+        if (!Object.keys(map).length) continue;
+        this.statusMap = map;
+        this.statusNames.set(Object.keys(map));
+        this.saveStatusCache(map);
+        return map;
+      } catch {
+        /* prueba el siguiente endpoint */
+      }
+    }
+    return this.statusMap;
+  }
+
+  private readStatusCache(): Record<string, string> {
+    try {
+      return JSON.parse(localStorage.getItem(HD_STATUS_LS_KEY) || '{}') || {};
+    } catch {
+      return {};
+    }
+  }
+  private saveStatusCache(map: Record<string, string>): void {
+    try {
+      localStorage.setItem(HD_STATUS_LS_KEY, JSON.stringify(map));
+    } catch {
+      /* storage no disponible */
+    }
+  }
+
+  /**
+   * Cambia el estado del ticket en el API. El estado se escribe por código:
+   * PUT /tickets/tickets/:id con `ticket_status_id` form-urlencoded. Traduce el
+   * nombre del estado a su código vía el catálogo (getTicketStatuses). Best-effort.
+   */
+  async setTicketStatus(ticketId: string, estadoNombre: string): Promise<boolean> {
+    if (!ticketId || !estadoNombre) return false;
+    const map = await this.getTicketStatuses();
+    const id = map[estadoNombre.trim().toUpperCase()];
+    if (!id) {
+      console.warn('[HD status] sin código para', estadoNombre, '— catálogo:', map);
+      return false;
+    }
+    try {
+      const body = new HttpParams().set('ticket_status_id', id);
+      await firstValueFrom(
+        this.http.put(`${this.base}/tickets/tickets/${ticketId}`, body, {
+          context: new HttpContext().set(HD_SAFE, true),
+        }),
+      );
+      // Reflejar en el ticket en memoria (si está cargado en la tabla).
+      const arr = this.tickets();
+      const idx = arr.findIndex((t) => t.ticket === ticketId);
+      if (idx >= 0) {
+        const t: Ticket = { ...arr[idx], estatus: estadoNombre };
+        evaluarFechas(t);
+        clasificar(t);
+        const next = [...arr];
+        next[idx] = t;
+        this._tickets.set(next);
+      }
       return true;
     } catch {
       return false;

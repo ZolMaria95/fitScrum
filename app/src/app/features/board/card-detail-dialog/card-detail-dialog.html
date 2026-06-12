@@ -60,6 +60,12 @@
     </div>
   }
 
+  @if (ticket.trim()) {
+    <button mat-stroked-button type="button" class="conv-btn" (click)="openTicketConversation()">
+      <mat-icon>forum</mat-icon> Ver conversación del ticket
+    </button>
+  }
+
   <mat-form-field appearance="outline" class="full">
     <mat-label>Asignado a</mat-label>
     <input
@@ -121,7 +127,9 @@
 
   <mat-form-field appearance="outline" class="full">
     <mat-label>Fecha de entrega</mat-label>
-    <input matInput type="date" [(ngModel)]="dueDate" />
+    <input matInput [matDatepicker]="duePicker" [(ngModel)]="dueDateModel" />
+    <mat-datepicker-toggle matIconSuffix [for]="duePicker"></mat-datepicker-toggle>
+    <mat-datepicker #duePicker></mat-datepicker>
   </mat-form-field>
 </mat-dialog-content>
 

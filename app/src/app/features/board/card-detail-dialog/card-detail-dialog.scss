@@ -75,6 +75,11 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
+.conv-btn {
+  align-self: flex-start;
+  margin-bottom: 12px;
+}
+
 .spacer {
   flex: 1;
 }

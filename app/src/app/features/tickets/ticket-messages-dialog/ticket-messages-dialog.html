@@ -1,18 +1,19 @@
 <div class="conv-head" mat-dialog-title>
-  <span class="ticket-id">#{{ ticket.ticket }}</span>
-  <span class="cliente">{{ ticket.clienteRaw }}</span>
-  <span class="estatus">{{ ticket.estatus }}</span>
+  <span class="ticket-id">#{{ ticketId }}</span>
+  <span class="cliente">{{ header().cliente }}</span>
+  <span class="estatus">{{ header().estatus }}</span>
   <span class="spacer"></span>
   <button mat-icon-button mat-dialog-close aria-label="Cerrar"><mat-icon>close</mat-icon></button>
 </div>
 
-<div class="asunto">{{ ticket.asunto }}</div>
+<div class="asunto">{{ header().asunto }}</div>
 
 @if (ticketAttachments().length) {
   <div class="ticket-attach">
+    <span class="ticket-attach-label">Adjunto del ticket:</span>
     @for (id of ticketAttachments(); track id; let i = $index) {
-      <button mat-stroked-button (click)="openAttachment(id, 'ticket_' + ticket.ticket + '_adjunto')">
-        <mat-icon>attach_file</mat-icon> Descargar adjunto{{ ticketAttachments().length > 1 ? ' ' + (i + 1) : '' }}
+      <button mat-stroked-button (click)="openAttachment(id, 'ticket_' + ticketId + '_adjunto')">
+        <mat-icon>attach_file</mat-icon> Descargar{{ ticketAttachments().length > 1 ? ' ' + (i + 1) : '' }}
       </button>
     }
   </div>

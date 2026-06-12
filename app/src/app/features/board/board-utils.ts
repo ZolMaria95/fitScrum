@@ -19,6 +19,15 @@ export const STATUS_LABELS: Record<Status, string> = {
 export type Priority = 'alta' | 'media' | 'baja';
 export const PRIORITY_LABELS: Record<Priority, string> = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 
+// Estado del ticket en el Helpdesk según el estado de la tarea en el board.
+export const HD_ESTADO_POR_STATUS: Record<string, string> = {
+  in_progress: 'EN PROCESO',
+  review: 'INSTALADO PARA CERTIFICACIÓN',
+  done: 'ENTREGADO',
+};
+/** Estado del ticket al marcar "esperando cliente". */
+export const HD_ESTADO_ESPERANDO = 'INFO PENDIENTE CLIENTE';
+
 // ── Resolución de asignado y avatares (sin dependencias del Helpdesk) ────
 const AVATAR_PALETTE = [
   '#04BAF0', '#27AE60', '#F29E3B', '#9B59B6', '#E74C3C',

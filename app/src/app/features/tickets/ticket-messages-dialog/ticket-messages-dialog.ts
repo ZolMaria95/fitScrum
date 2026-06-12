@@ -8,7 +8,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HelpdeskService } from '../../../core/services/helpdesk.service';
 import { EMPLEADOS } from '../helpdesk.constants';
-import { Ticket, safeHtml, stripHtml } from '../ticket-utils';
+import { Ticket, mapTicket, safeHtml, stripHtml } from '../ticket-utils';
 
 interface ConvMsg {
   autor: string;
@@ -19,7 +19,10 @@ interface ConvMsg {
 }
 
 export interface TicketMessagesData {
-  ticket: Ticket;
+  /** Número de ticket. Alternativa a pasar el objeto Ticket completo. */
+  ticketId?: string;
+  /** Ticket completo (si el llamador lo tiene, evita una consulta para el header). */
+  ticket?: Ticket;
 }
 
 /** Conversación completa de un ticket: mensajes, adjuntos, lightbox y composer. */
@@ -35,7 +38,13 @@ export class TicketMessagesDialog {
   private readonly snack = inject(MatSnackBar);
   private readonly data = inject<TicketMessagesData>(MAT_DIALOG_DATA);
 
-  readonly ticket = this.data.ticket;
+  readonly ticketId = this.data.ticketId || this.data.ticket?.ticket || '';
+  private ticketObj: Ticket | null = this.data.ticket ?? null;
+  readonly header = signal({
+    cliente: this.data.ticket?.clienteRaw || '',
+    estatus: this.data.ticket?.estatus || '',
+    asunto: this.data.ticket?.asunto || '',
+  });
   readonly loading = signal(true);
   readonly messages = signal<ConvMsg[]>([]);
   readonly ticketAttachments = signal<string[]>([]);
@@ -52,14 +61,23 @@ export class TicketMessagesDialog {
 
   private async load(): Promise<void> {
     this.loading.set(true);
-    const msgs = await this.hd.fetchMessages(this.ticket.ticket);
+    // Si no vino el ticket completo (p. ej. abierto desde la card), trae el header.
+    if (!this.ticketObj && this.ticketId) {
+      const raw = await this.hd.fetchTicketRaw(this.ticketId);
+      if (raw) {
+        this.ticketObj = mapTicket(raw);
+        this.header.set({ cliente: this.ticketObj.clienteRaw, estatus: this.ticketObj.estatus, asunto: this.ticketObj.asunto });
+      }
+    }
+    const msgs = await this.hd.fetchMessages(this.ticketId);
     const sorted = [...msgs].sort(
       (a, b) => new Date(a.entry_date || 0).getTime() - new Date(b.entry_date || 0).getTime(),
     );
     const procesados = await Promise.all(sorted.map((m) => this.procesar(m)));
     this.messages.set(procesados.filter((m): m is ConvMsg => !!m));
     this.loading.set(false);
-    this.hd.ticketAttachmentIds(this.ticket).then((ids) => this.ticketAttachments.set(ids));
+    // Adjunto a nivel ticket (no de un mensaje) → botón de descarga.
+    if (this.ticketObj) this.hd.ticketAttachmentIds(this.ticketObj).then((ids) => this.ticketAttachments.set(ids));
   }
 
   private esEmpleado(m: any): boolean {
@@ -149,7 +167,7 @@ export class TicketMessagesDialog {
     }
     this.sending.set(true);
     this.sendStatus.set('Enviando...');
-    const ok = await this.hd.sendMessage(this.ticket.ticket, detail, this.composerFiles);
+    const ok = await this.hd.sendMessage(this.ticketId, detail, this.composerFiles);
     this.sending.set(false);
     if (ok) {
       this.composerText = '';

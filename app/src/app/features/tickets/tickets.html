@@ -156,7 +156,13 @@
 
       <ng-container matColumnDef="estatus">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>Estatus</th>
-        <td mat-cell *matCellDef="let t">{{ t.estatus }}</td>
+        <td mat-cell *matCellDef="let t" class="cell-estatus">
+          <button class="est-btn" [matMenuTriggerFor]="stMenu" [matMenuTriggerData]="{ t: t }"
+                  matTooltip="Cambiar estado" (click)="$event.stopPropagation()">
+            <span class="est-name">{{ t.estatus || '— sin estado —' }}</span>
+            <mat-icon>expand_more</mat-icon>
+          </button>
+        </td>
       </ng-container>
 
       <ng-container matColumnDef="modulo">
@@ -201,4 +207,16 @@
       </div>
     }
   </div>
+
+  <mat-menu #stMenu="matMenu">
+    <ng-template matMenuContent let-t="t">
+      @if (statusNames().length) {
+        @for (s of statusNames(); track s) {
+          <button mat-menu-item [disabled]="s === t.estatus" (click)="changeStatus(t, s)">{{ s }}</button>
+        }
+      } @else {
+        <button mat-menu-item disabled>Catálogo de estados no disponible</button>
+      }
+    </ng-template>
+  </mat-menu>
 }

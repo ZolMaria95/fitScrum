@@ -5,6 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -43,6 +44,7 @@ interface StatRow {
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatMenuModule,
     MatProgressBarModule,
     MatTooltipModule,
   ],
@@ -59,6 +61,7 @@ export class Tickets {
   readonly tickets = this.hd.tickets;
   readonly syncStatus = this.hd.syncStatus;
   readonly loading = this.hd.loading;
+  readonly statusNames = this.hd.statusNames;
   readonly CLASIF_COLOR = CLASIF_COLOR;
 
   readonly displayedColumns = [
@@ -85,6 +88,11 @@ export class Tickets {
   readonly pendientes = signal(this.data.getHdPendientes());
   readonly editingNote = signal<string | null>(null);
   noteDraft = '';
+
+  constructor() {
+    // Catálogo de estados (para el menú de cambio de estado de la tabla).
+    this.hd.getTicketStatuses();
+  }
 
   private get myId(): string {
     return String(this.auth.session()?.id || '').trim().toUpperCase();
@@ -241,6 +249,16 @@ export class Tickets {
 
   openAssign(t: Ticket): void {
     this.dialog.open(AssignTicketDialog, { data: { ticket: t }, width: '440px', maxWidth: '95vw' });
+  }
+
+  async changeStatus(t: Ticket, estado: string): Promise<void> {
+    if (estado === t.estatus) return;
+    const ok = await this.hd.setTicketStatus(t.ticket, estado);
+    this.snack.open(
+      ok ? `Ticket #${t.ticket} → ${estado}` : `No se pudo cambiar el estado del ticket #${t.ticket}.`,
+      ok ? '' : 'OK',
+      { duration: ok ? 2500 : 4000 },
+    );
   }
 
   copyTicket(t: Ticket): void {

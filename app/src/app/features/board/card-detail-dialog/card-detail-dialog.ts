@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -15,8 +16,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AuthService } from '../../../core/services/auth.service';
 import { DataService, Story } from '../../../core/services/data.service';
 import { HdClient, HdUser, HelpdeskService } from '../../../core/services/helpdesk.service';
+import { TicketMessagesDialog } from '../../tickets/ticket-messages-dialog/ticket-messages-dialog';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import {
+  HD_ESTADO_POR_STATUS,
   PRIORITY_LABELS,
   Priority,
   STATUSES,
@@ -57,6 +60,7 @@ export interface CardDetailData {
     MatIconModule,
     MatProgressBarModule,
     MatProgressSpinnerModule,
+    MatDatepickerModule,
   ],
   templateUrl: './card-detail-dialog.html',
   styleUrl: './card-detail-dialog.scss',
@@ -232,7 +236,7 @@ export class CardDetailDialog {
   priority: Priority = (this.story?.priority as Priority) ?? 'media';
   description = this.story?.description ?? '';
   status: Status = (this.story?.status as Status) ?? 'todo';
-  dueDate = this.story?.dueDate ?? '';
+  dueDateModel: Date | null = this.story?.dueDate ? new Date(this.story.dueDate + 'T00:00:00') : null;
   assignee = this.story?.assignee ?? this.input.prefill?.assignee ?? '';
   ticket = this.story?.ticket ?? this.input.prefill?.ticket ?? '';
   clientId = this.story?.client ?? this.input.prefill?.client ?? '';
@@ -248,6 +252,21 @@ export class CardDetailDialog {
 
   onProgress(value: string): void {
     this.progress.set(Math.min(100, Math.max(0, parseInt(value, 10) || 0)));
+  }
+
+  /** Fecha del datepicker (Date) → 'YYYY-MM-DD' (local, sin corrimiento de zona). */
+  private dueDateStr(): string {
+    const d = this.dueDateModel;
+    if (!d) return '';
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+
+  /** Abre la conversación del ticket asociado (mensajes, adjuntos, imágenes, lightbox). */
+  openTicketConversation(): void {
+    const id = this.ticket.trim();
+    if (!id) return;
+    this.dialog.open(TicketMessagesDialog, { data: { ticketId: id }, width: '720px', maxWidth: '96vw' });
   }
 
   async save(): Promise<void> {
@@ -266,7 +285,7 @@ export class CardDetailDialog {
         priority: this.priority,
         description: this.description.trim(),
         status: this.status,
-        dueDate: this.dueDate,
+        dueDate: this.dueDateStr(),
         assignee,
         client: this.clientId || null,
         ticket,
@@ -292,11 +311,18 @@ export class CardDetailDialog {
     this.data.updateStoryDescription(task.id, this.description.trim());
     this.data.updateStoryProgress(task.id, pct);
     this.data.updateStoryStatus(task.id, this.status);
-    this.data.updateStoryDueDate(task.id, this.dueDate);
+    this.data.updateStoryDueDate(task.id, this.dueDateStr());
     this.data.updateStoryAssignee(task.id, assignee);
     if (this.editable) this.data.updateStoryPriority(task.id, this.priority);
     // Si la tarea tiene ticket y cambió el asignado → reflejar en el Helpdesk.
     this.maybeAssignHd(task.ticket, assignee, task.assignee);
+    // Si cambió el estado y tiene ticket → sincronizar el estado del ticket en el Helpdesk.
+    const hdEstado = HD_ESTADO_POR_STATUS[this.status];
+    if (task.ticket && this.status !== task.status && hdEstado) {
+      this.helpdesk.setTicketStatus(task.ticket, hdEstado).then((ok) => {
+        if (ok) this.data.updateStoryHdEstatus(task.id, hdEstado);
+      });
+    }
     this.ref.close(true);
   }
 
