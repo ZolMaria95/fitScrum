@@ -129,6 +129,20 @@
   .muted { color: #9e9e9e; }
 }
 
+// Flechas de ordenamiento blancas sobre el header azul oscuro.
+// Solo el tallo y las puntas (líneas), no el contenedor → no aparece un cuadrado.
+.hd-table ::ng-deep {
+  .mat-sort-header-arrow {
+    color: #fff;
+  }
+  .mat-sort-header-stem,
+  .mat-sort-header-pointer-left,
+  .mat-sort-header-pointer-right,
+  .mat-sort-header-pointer-middle {
+    background-color: #fff;
+  }
+}
+
 // Botones dentro de la tabla
 .hd-ticket-btn {
   font-family: 'JetBrains Mono', monospace;
