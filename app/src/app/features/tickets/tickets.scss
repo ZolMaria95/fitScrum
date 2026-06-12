@@ -184,6 +184,11 @@
 
 .cell-nota { min-width: 150px; }
 
+.cell-asignado {
+  white-space: nowrap;
+  .asig-name { vertical-align: middle; }
+}
+
 .hd-note-btn {
   border: 1px dashed #cfd8e3;
   background: #fff;

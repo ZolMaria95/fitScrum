@@ -1,4 +1,4 @@
-import { HttpClient, HttpContext } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -347,6 +347,42 @@ export class HelpdeskService {
     const ids = ticketAttachIds(raw);
     t.adjuntosTicket = ids;
     return ids;
+  }
+
+  /**
+   * Asigna un ticket a un empleado en el API. Igual que el Helpdesk web:
+   * PUT /tickets/tickets/:id con el form-urlencoded `assigned_user_id`. Devuelve
+   * true si el PUT respondió OK.
+   */
+  async assignTicket(ticketId: string, userId: string): Promise<boolean> {
+    if (!ticketId || !userId) return false;
+    const want = String(userId).trim().toUpperCase();
+    try {
+      const body = new HttpParams().set('assigned_user_id', want);
+      await firstValueFrom(
+        this.http.put(`${this.base}/tickets/tickets/${ticketId}`, body, {
+          context: new HttpContext().set(HD_SAFE, true),
+        }),
+      );
+      this.updateTicketAssignee(ticketId, want);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Refleja la asignación en el ticket en memoria (nombre + re-clasificación). */
+  private updateTicketAssignee(ticketId: string, userId: string): void {
+    const arr = this.tickets();
+    const idx = arr.findIndex((t) => t.ticket === ticketId);
+    if (idx < 0) return;
+    const u = this._users().find((x) => x.id === userId);
+    const t: Ticket = { ...arr[idx], usuarioAsignado: userId, nombreAsignado: u?.name || userId };
+    evaluarFechas(t);
+    clasificar(t);
+    const next = [...arr];
+    next[idx] = t;
+    this._tickets.set(next);
   }
 
   // ── Cache (localStorage) ──────────────────────────────────────────────

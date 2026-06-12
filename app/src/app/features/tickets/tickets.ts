@@ -17,6 +17,7 @@ import { DataService } from '../../core/services/data.service';
 import { HelpdeskService } from '../../core/services/helpdesk.service';
 import { CardDetailDialog } from '../board/card-detail-dialog/card-detail-dialog';
 import { TicketMessagesDialog } from './ticket-messages-dialog/ticket-messages-dialog';
+import { AssignTicketDialog } from './assign-ticket-dialog/assign-ticket-dialog';
 import { CLASIF_COLOR, CLASIF_ORDER, PRIORITY_ACTIONS } from './helpdesk.constants';
 import { Ticket } from './ticket-utils';
 
@@ -218,7 +219,17 @@ export class Tickets {
   // ── Crear tarea desde el ticket (mismo modal del board) ──
   openTicketTask(t: Ticket): void {
     this.dialog.open(CardDetailDialog, {
-      data: { story: null, prefill: { ticket: t.ticket, client: t.clientId, clientName: t.clienteRaw, title: t.asunto } },
+      data: {
+        story: null,
+        prefill: {
+          ticket: t.ticket,
+          client: t.clientId,
+          clientName: t.clienteRaw,
+          title: t.asunto,
+          assignee: t.usuarioAsignado,
+          assigneeName: t.nombreAsignado,
+        },
+      },
       width: '560px',
       maxWidth: '95vw',
     });
@@ -226,6 +237,10 @@ export class Tickets {
 
   openConversation(t: Ticket): void {
     this.dialog.open(TicketMessagesDialog, { data: { ticket: t }, width: '720px', maxWidth: '96vw' });
+  }
+
+  openAssign(t: Ticket): void {
+    this.dialog.open(AssignTicketDialog, { data: { ticket: t }, width: '440px', maxWidth: '95vw' });
   }
 
   copyTicket(t: Ticket): void {

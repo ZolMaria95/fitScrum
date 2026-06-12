@@ -148,7 +148,10 @@
 
       <ng-container matColumnDef="nombreAsignado">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>Asignado</th>
-        <td mat-cell *matCellDef="let t">{{ t.nombreAsignado || '—' }}</td>
+        <td mat-cell *matCellDef="let t" class="cell-asignado">
+          <span class="asig-name">{{ t.nombreAsignado || '—' }}</span>
+          <button class="hd-mini" (click)="openAssign(t)" matTooltip="Asignar / reasignar">✎</button>
+        </td>
       </ng-container>
 
       <ng-container matColumnDef="estatus">

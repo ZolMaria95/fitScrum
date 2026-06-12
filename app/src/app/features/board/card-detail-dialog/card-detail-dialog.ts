@@ -9,6 +9,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AuthService } from '../../../core/services/auth.service';
@@ -30,8 +31,15 @@ import {
 export interface CardDetailData {
   /** null → crear una tarea nueva. */
   story: Story | null;
-  /** Valores iniciales al crear desde un ticket (número, cliente, asunto). */
-  prefill?: { ticket?: string; client?: string; clientName?: string; title?: string };
+  /** Valores iniciales al crear desde un ticket (número, cliente, asunto, asignado). */
+  prefill?: {
+    ticket?: string;
+    client?: string;
+    clientName?: string;
+    title?: string;
+    assignee?: string;
+    assigneeName?: string;
+  };
 }
 
 /** Modal de detalle/edición de una tarea (port de _openDetail en js/board.js). */
@@ -48,6 +56,7 @@ export interface CardDetailData {
     MatChipsModule,
     MatIconModule,
     MatProgressBarModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './card-detail-dialog.html',
   styleUrl: './card-detail-dialog.scss',
@@ -153,6 +162,37 @@ export class CardDetailDialog {
     this.clientFilter.set('');
   }
 
+  // ── Consulta del ticket → autocompleta el modal (solo nueva tarea) ──
+  readonly ticketLoading = signal(false);
+  private lastLookup = '';
+
+  async lookupTicket(): Promise<void> {
+    const num = this.ticket.trim();
+    if (!num || !/^\d+$/.test(num) || num === this.lastLookup) return;
+    this.lastLookup = num;
+    this.ticketLoading.set(true);
+    const t = await this.helpdesk.searchTicketRemote(num);
+    this.ticketLoading.set(false);
+    if (!t) {
+      this.snack.open(`No se encontró el ticket #${num}.`, 'OK', { duration: 3000 });
+      return;
+    }
+    // Título = asunto del ticket
+    if (t.asunto) this.title = t.asunto;
+    // Cliente
+    this.clientTouched = true;
+    this.clientId = t.clientId || '';
+    this.clientModel = this.clientId
+      ? (this.clientes().find((c) => c.id === this.clientId) ?? { id: this.clientId, name: t.clienteRaw || this.clientId })
+      : null;
+    // Asignado
+    this.assigneeTouched = true;
+    this.assignee = t.usuarioAsignado || '';
+    this.assigneeModel = this.assignee
+      ? (this.assignees().find((u) => u.id === this.assignee) ?? { id: this.assignee, name: t.nombreAsignado || this.assignee, role: '' })
+      : null;
+  }
+
   /** Garantiza que el asignado actual esté en la lista aunque el API no lo traiga. */
   private ensureCurrent(users: HdUser[]): HdUser[] {
     const cur = this.story?.assignee;
@@ -164,7 +204,9 @@ export class CardDetailDialog {
   /** Pinta en el input el asignado actual (resuelto a HdUser para mostrar el nombre). */
   private syncAssigneeModel(): void {
     const cur = this.assignee;
-    this.assigneeModel = cur ? (this.assignees().find((u) => u.id === cur) ?? { id: cur, name: cur, role: '' }) : null;
+    this.assigneeModel = cur
+      ? (this.assignees().find((u) => u.id === cur) ?? { id: cur, name: this.input.prefill?.assigneeName || cur, role: '' })
+      : null;
   }
 
   displayAssignee = (m: HdUser | string | null): string => {
@@ -191,7 +233,7 @@ export class CardDetailDialog {
   description = this.story?.description ?? '';
   status: Status = (this.story?.status as Status) ?? 'todo';
   dueDate = this.story?.dueDate ?? '';
-  assignee = this.story?.assignee ?? '';
+  assignee = this.story?.assignee ?? this.input.prefill?.assignee ?? '';
   ticket = this.story?.ticket ?? this.input.prefill?.ticket ?? '';
   clientId = this.story?.client ?? this.input.prefill?.client ?? '';
   readonly progress = signal<number>(this.story?.progress ?? 0);
@@ -218,6 +260,7 @@ export class CardDetailDialog {
     const assignee = this.assignee || null;
 
     if (this.isNew) {
+      const ticket = this.ticket.trim();
       this.data.addStory({
         title,
         priority: this.priority,
@@ -226,9 +269,10 @@ export class CardDetailDialog {
         dueDate: this.dueDate,
         assignee,
         client: this.clientId || null,
-        ticket: this.ticket.trim(),
+        ticket,
         progress: pct,
       });
+      this.maybeAssignHd(ticket, assignee, this.input.prefill?.assignee ?? null);
       this.ref.close(true);
       return;
     }
@@ -251,7 +295,18 @@ export class CardDetailDialog {
     this.data.updateStoryDueDate(task.id, this.dueDate);
     this.data.updateStoryAssignee(task.id, assignee);
     if (this.editable) this.data.updateStoryPriority(task.id, this.priority);
+    // Si la tarea tiene ticket y cambió el asignado → reflejar en el Helpdesk.
+    this.maybeAssignHd(task.ticket, assignee, task.assignee);
     this.ref.close(true);
+  }
+
+  /** Asigna el ticket asociado al empleado en el API (si hay ticket y cambió el asignado). */
+  private maybeAssignHd(ticket: string, assignee: string | null, prev?: string | null): void {
+    if (!ticket || !assignee || assignee === prev) return;
+    this.helpdesk.assignTicket(ticket, assignee).then((ok) => {
+      if (ok) this.snack.open(`Ticket #${ticket} asignado a ${assignee} en el Helpdesk.`, '', { duration: 2500 });
+      else this.snack.open(`No se pudo asignar el ticket #${ticket} en el Helpdesk.`, 'OK', { duration: 4000 });
+    });
   }
 
   async remove(): Promise<void> {
