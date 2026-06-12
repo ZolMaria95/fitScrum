@@ -25,7 +25,7 @@ export interface Story {
   [k: string]: unknown;
 }
 
-export interface Sprint { id: string; name: string; status: string; capacity: number; [k: string]: unknown; }
+export interface Sprint { id: string; name: string; status: string; capacity: number; goal?: string; start?: string; end?: string; [k: string]: unknown; }
 export interface TeamMember { id: string; name: string; role?: string; color?: string; [k: string]: unknown; }
 export interface Client { id: string; name: string; [k: string]: unknown; }
 
@@ -214,6 +214,59 @@ export class DataService {
   getSprints() { return this.sprints(); }
   getActiveSprint(): Sprint | undefined { const s = this.sprints(); return s.sprints.find((x) => x.id === s.active); }
   setActiveSprint(id: string): void { const s = { ...this.sprints(), active: id }; this.sprints.set(s); this.persist('sprints', s); }
+
+  /** Crea un sprint nuevo: cierra el activo y migra las tareas no aprobadas. Port de data.js. */
+  addSprint(data: Partial<Sprint>): Sprint {
+    const cur = this.sprints();
+    const nums = cur.sprints.map((s) => parseInt(String(s.id).replace('SP-', ''), 10)).filter((n) => !isNaN(n));
+    const nextNum = Math.max(0, ...nums) + 1;
+    const nextId = 'SP-' + String(nextNum).padStart(2, '0');
+    const prevId = cur.active;
+
+    const sprint: Sprint = { id: nextId, name: `Sprint ${nextNum}`, status: 'active', capacity: 0, ...data };
+    const sprints = cur.sprints.map((s) => (s.status === 'active' ? { ...s, status: 'completed' } : s));
+    sprints.push(sprint);
+    const next = { active: nextId, sprints };
+    this.sprints.set(next);
+    this.persist('sprints', next);
+
+    // Migrar tareas del sprint anterior que NO estén done-aprobadas.
+    const migrated = this.stories().map((t) =>
+      t.sprint === prevId && !(t.status === 'done' && t.approved) ? { ...t, sprint: nextId } : t,
+    );
+    this.stories.set(migrated);
+    this.persistMigratedStories(migrated, prevId, nextId);
+    return sprint;
+  }
+
+  updateSprint(id: string, data: Partial<Sprint>): void {
+    const cur = this.sprints();
+    const sprints = cur.sprints.map((s) => (s.id === id ? { ...s, ...data } : s));
+    const next = { ...cur, sprints };
+    this.sprints.set(next);
+    this.persist('sprints', next);
+  }
+
+  /** Borra un sprint (no si es el único). Reasigna el activo. Las tareas NO se eliminan. */
+  deleteSprint(id: string): void {
+    const cur = this.sprints();
+    if (cur.sprints.length <= 1) return;
+    const sprints = cur.sprints.filter((s) => s.id !== id);
+    const active = cur.active === id ? sprints[sprints.length - 1].id : cur.active;
+    const next = { active, sprints };
+    this.sprints.set(next);
+    this.persist('sprints', next);
+  }
+
+  private persistMigratedStories(all: Story[], prevId: string, nextId: string): void {
+    if (this.fbReady()) {
+      const patch: Record<string, string> = {};
+      all.forEach((t) => { if (t.sprint === nextId) patch[`${t.id}/sprint`] = nextId; });
+      if (Object.keys(patch).length) this.fbPatch('stories/stories', patch);
+    } else {
+      this.lsPut('stories', { stories: all });
+    }
+  }
 
   // ── Tasks (stories) ──
   getAllStories(): Story[] { return this.stories(); }
