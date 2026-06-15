@@ -83,6 +83,27 @@ export class AuthService {
     this._session.set(null);
   }
 
+  /**
+   * Verifica que la sesión siga válida contra el API (GET /users/me). Si el token
+   * expiró/no existe (401/403) limpia la sesión y devuelve false. Ante errores de
+   * red devuelve true (no podemos afirmar que expiró). Útil antes de abrir vistas
+   * que dependen del API (p. ej. la conversación de un ticket).
+   */
+  async verifySession(): Promise<boolean> {
+    const t = this.token;
+    if (!t) return false;
+    try {
+      const r = await fetch(`${this.base}/users/me`, { headers: { Authorization: `Bearer ${t}` } });
+      if (r.status === 401 || r.status === 403) {
+        this.clearSession();
+        return false;
+      }
+      return true;
+    } catch {
+      return true; // sin red: no forzar logout
+    }
+  }
+
   // Enriquecimiento con el equipo local (data/users.json) — color/rol del proyecto.
   private async lookupTeam(userId: string): Promise<TeamMember | null> {
     try {

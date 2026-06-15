@@ -76,6 +76,8 @@ Estado como **signals**: `sprints`, `stories`, `team`, `clients`.
 ### `AuthService` ([auth.service.ts](src/app/core/services/auth.service.ts))
 Sesión en `localStorage` (`fit-daily_session`). Login `POST /auth/login` → `GET /users/me`.
 Permisos: `esMSC001`, `esSupervisor`, `puedeVerMiPanel`, `puedeBorrarBoard`, `puedeGestionarTodo`.
+`verifySession()`: valida el token contra `GET /users/me`; si 401/403 limpia la sesión y devuelve false
+(la conversación lo usa antes de cargar, para pedir re-login en vez de mostrar "Sin mensajes").
 
 ### `HelpdeskService` ([helpdesk.service.ts](src/app/core/services/helpdesk.service.ts))
 Cliente del API del Helpdesk. **Regla clave: todas las ESCRITURAS del API son
@@ -189,12 +191,13 @@ tabs (Prioritarios / Todos / Asignados a mí / **Generales** / Estadísticas) co
   scrollable); los **filtros** viven en el **drawer** del shell (ver §5, `ShellService` + `<ng-template #filtersTpl>`).
 - **`TicketCard`** ([ticket-card/](src/app/features/tickets/ticket-card/)) presentacional (inputs + outputs,
   sin servicios):
-  - **Cabecera**: `#número` + botón **"Crear tarea"** (→ `CardDetailDialog` precargado) + badge de **estado**.
-    Si el ticket **ya tiene tarea en el board** (`ticketsEnBoard`, derivado de `data.stories()`), el botón
-    se reemplaza por una etiqueta **"en board"**.
-  - **Cuerpo**: asunto a **2 líneas** (`-webkit-line-clamp`), cliente, badge de **tipo**, subsección de
-    fechas (📅 ingreso "10 jun 2025" · 🔄 modificación "Hoy 9:42" / "13 jun 16:05") y **área de nota
-    editable** (clic → textarea inline, no en el menú).
+  - **Cabecera** (coloreada por **cliente**, vía `clientStyle` de board-utils — cada cliente su tinte+acento):
+    `#número` + botón **"Crear tarea"** (→ `CardDetailDialog` precargado; si el ticket **ya tiene tarea en
+    el board** —`ticketsEnBoard`, de `data.stories()`— se reemplaza por la etiqueta **"en board"**) + nombre
+    del **cliente**.
+  - **Cuerpo**: asunto a **2 líneas** (`-webkit-line-clamp`), badges de **estado** (`estadoStyle`) y **tipo**,
+    subsección de fechas (📅 ingreso "10 jun 2025" · 🔄 modificación "Hoy 9:42" / "13 jun 16:05") y **área de
+    nota editable** (clic → textarea inline, no en el menú).
   - **Pie**: avatar (iniciales+color, `colorFor`/`initialsFromName` de board-utils) + **"Ver conversación"**
     + **menú ⋮** (asignar / cambiar estado / marcar acción ⚑ / pendiente ⏸). La card entera abre la
     conversación; Crear tarea, área de nota y ⋮ hacen `stopPropagation`.
@@ -221,7 +224,8 @@ tabs (Prioritarios / Todos / Asignados a mí / **Generales** / Estadísticas) co
   adjuntos por mensaje, **imágenes embebidas hidratadas con auth** + **lightbox** (popup, no pestaña),
   adjunto a nivel ticket, y **composer** para responder (texto + adjuntos). Reutilizado por el board.
   Los mensajes se **paginan** (bloque de 15 más recientes + **"Ver mensajes anteriores"**): solo se
-  procesa/hidrata el bloque visible, no todos de golpe.
+  procesa/hidrata el bloque visible, no todos de golpe. **Al abrir verifica la sesión** (`verifySession`):
+  si expiró, muestra un estado **"Iniciar sesión"** (→ login) en vez de cargar vacío.
 
 ---
 

@@ -1,11 +1,13 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AuthService } from '../../../core/services/auth.service';
 import { HelpdeskService } from '../../../core/services/helpdesk.service';
 import { EMPLEADOS } from '../helpdesk.constants';
 import { Ticket, mapTicket, safeHtml, stripHtml } from '../ticket-utils';
@@ -34,6 +36,9 @@ export interface TicketMessagesData {
 })
 export class TicketMessagesDialog {
   private readonly hd = inject(HelpdeskService);
+  private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly dialogRef = inject(MatDialogRef<TicketMessagesDialog>);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly snack = inject(MatSnackBar);
   private readonly data = inject<TicketMessagesData>(MAT_DIALOG_DATA);
@@ -46,6 +51,7 @@ export class TicketMessagesDialog {
     asunto: this.data.ticket?.asunto || '',
   });
   readonly loading = signal(true);
+  readonly sessionExpired = signal(false);
   readonly messages = signal<ConvMsg[]>([]);
   readonly ticketAttachments = signal<string[]>([]);
   readonly lightbox = signal<string | null>(null);
@@ -70,6 +76,13 @@ export class TicketMessagesDialog {
 
   private async load(): Promise<void> {
     this.loading.set(true);
+    // Verifica la sesión antes de pedir nada: si expiró, las llamadas HD_SAFE
+    // devolverían vacío ("Sin mensajes") en vez de avisar. Mejor pedir re-login.
+    if (!(await this.auth.verifySession())) {
+      this.sessionExpired.set(true);
+      this.loading.set(false);
+      return;
+    }
     // Si no vino el ticket completo (p. ej. abierto desde la card), trae el header.
     if (!this.ticketObj && this.ticketId) {
       const raw = await this.hd.fetchTicketRaw(this.ticketId);
@@ -104,6 +117,12 @@ export class TicketMessagesDialog {
     this.cursor = start;
     this.hasOlder.set(this.cursor > 0);
     this.loadingOlder.set(false);
+  }
+
+  /** Cierra la conversación y va al login (sesión expirada). */
+  goToLogin(): void {
+    this.dialogRef.close();
+    this.router.navigate(['/login']);
   }
 
   private esEmpleado(m: any): boolean {
