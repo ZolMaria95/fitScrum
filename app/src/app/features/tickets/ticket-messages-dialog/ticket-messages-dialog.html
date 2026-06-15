@@ -26,6 +26,13 @@
   } @else if (!messages().length) {
     <div class="conv-empty">Sin mensajes registrados.</div>
   } @else {
+    @if (hasOlder()) {
+      <div class="conv-older">
+        <button mat-stroked-button (click)="loadOlder()" [disabled]="loadingOlder()">
+          <mat-icon>expand_less</mat-icon> Ver mensajes anteriores
+        </button>
+      </div>
+    }
     @for (m of messages(); track $index) {
       <div class="conv-msg" [class]="'conv-' + m.tipo">
         <div class="conv-meta">

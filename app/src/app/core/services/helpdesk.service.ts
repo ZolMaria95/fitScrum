@@ -76,6 +76,17 @@ export class HelpdeskService {
   readonly syncStatus = signal<{ msg: string; type: 'idle' | 'loading' | 'ok' | 'error' }>({ msg: '', type: 'idle' });
   readonly loading = signal(false);
 
+  // ── Tickets "Generales" (todos los clientes, sin filtro) ──
+  // Set aparte y PEREZOSO: se carga por página bajo demanda y NO trae mensajes
+  // (los mensajes se piden solo al abrir la conversación). No toca el sync operativo.
+  private static readonly PAGE_SIZE = 12;
+  private readonly _allTickets = signal<Ticket[]>([]);
+  readonly allTickets = this._allTickets.asReadonly();
+  readonly loadingGenerales = signal(false);
+  readonly hasMoreGenerales = signal(false);
+  readonly generalesStatus = signal<{ msg: string; type: 'idle' | 'loading' | 'ok' | 'error' }>({ msg: '', type: 'idle' });
+  private generalesOffset = 0;
+
   /** Perfil del usuario en sesión. */
   me() {
     return this.http.get(`${this.base}/users/me`);
@@ -189,10 +200,10 @@ export class HelpdeskService {
     this.syncStatus.set({ msg, type });
   }
 
-  private async fetchPage(offset: number): Promise<any[]> {
+  private async fetchPage(offset: number, limit = 40): Promise<any[]> {
     try {
       const data = await firstValueFrom(
-        this.http.get<any>(`${this.base}/tickets/tickets?limit=40&offset=${offset}&modified_date_order=desc`),
+        this.http.get<any>(`${this.base}/tickets/tickets?limit=${limit}&offset=${offset}&modified_date_order=desc`),
       );
       return data?.items || [];
     } catch {
@@ -201,7 +212,8 @@ export class HelpdeskService {
   }
 
   /** Sincroniza tickets: 6 páginas, filtra clientes válidos, clasifica y carga
-   *  el último mensaje de cada uno en lotes. Port de sync() de helpdesk-panel.js. */
+   *  el último mensaje de cada uno en lotes. Powerea las tabs operativas
+   *  (Prioritarios/Todos/Asignados/Estadísticas). Port de sync() de helpdesk-panel.js. */
   async sync(): Promise<void> {
     if (this.loading()) return;
     this.loading.set(true);
@@ -246,6 +258,43 @@ export class HelpdeskService {
       this.setStatus(esRed ? 'No se pudo conectar al proxy. Ejecuta: python proxy.py' : `Error: ${msg}`, 'error');
     } finally {
       this.loading.set(false);
+    }
+  }
+
+  /** (Re)inicia la carga de "Generales": limpia y trae la primera página. */
+  async syncGenerales(): Promise<void> {
+    this._allTickets.set([]);
+    this.generalesOffset = 0;
+    this.hasMoreGenerales.set(false);
+    await this.loadMoreGenerales();
+  }
+
+  /** Carga la siguiente página de "Generales" (PAGE_SIZE tickets, SIN mensajes) y
+   *  la agrega. Todos los clientes, incluidos aprobados/cerrados. */
+  async loadMoreGenerales(): Promise<void> {
+    if (this.loadingGenerales()) return;
+    this.loadingGenerales.set(true);
+    const offset = this.generalesOffset;
+    const pagina = Math.floor(offset / HelpdeskService.PAGE_SIZE) + 1;
+    this.generalesStatus.set({ msg: `Cargando página ${pagina}...`, type: 'loading' });
+    try {
+      const raw = await this.fetchPage(offset, HelpdeskService.PAGE_SIZE);
+      // Sin mensajes: evaluarFechas/clasificar funcionan con las señales no-mensaje.
+      const nuevos = raw.map(mapTicket).map(evaluarFechas).map(clasificar);
+      this._allTickets.set([...this._allTickets(), ...nuevos]);
+      this.generalesOffset = offset + HelpdeskService.PAGE_SIZE;
+      this.hasMoreGenerales.set(raw.length === HelpdeskService.PAGE_SIZE);
+      const total = this._allTickets().length;
+      this.generalesStatus.set({
+        msg: this.hasMoreGenerales() ? `${total} tickets — página ${pagina} lista` : `✓ ${total} tickets (todo cargado)`,
+        type: 'ok',
+      });
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const esRed = /fetch|failed|load failed|network|0/i.test(msg);
+      this.generalesStatus.set({ msg: esRed ? 'No se pudo conectar al proxy.' : `Error: ${msg}`, type: 'error' });
+    } finally {
+      this.loadingGenerales.set(false);
     }
   }
 
@@ -449,17 +498,8 @@ export class HelpdeskService {
           context: new HttpContext().set(HD_SAFE, true),
         }),
       );
-      // Reflejar en el ticket en memoria (si está cargado en la tabla).
-      const arr = this.tickets();
-      const idx = arr.findIndex((t) => t.ticket === ticketId);
-      if (idx >= 0) {
-        const t: Ticket = { ...arr[idx], estatus: estadoNombre };
-        evaluarFechas(t);
-        clasificar(t);
-        const next = [...arr];
-        next[idx] = t;
-        this._tickets.set(next);
-      }
+      // Reflejar en el ticket en memoria (en ambas listas, si está cargado).
+      this.patchTicket(ticketId, { estatus: estadoNombre });
       return true;
     } catch {
       return false;
@@ -468,16 +508,23 @@ export class HelpdeskService {
 
   /** Refleja la asignación en el ticket en memoria (nombre + re-clasificación). */
   private updateTicketAssignee(ticketId: string, userId: string): void {
-    const arr = this.tickets();
-    const idx = arr.findIndex((t) => t.ticket === ticketId);
-    if (idx < 0) return;
     const u = this._users().find((x) => x.id === userId);
-    const t: Ticket = { ...arr[idx], usuarioAsignado: userId, nombreAsignado: u?.name || userId };
-    evaluarFechas(t);
-    clasificar(t);
-    const next = [...arr];
-    next[idx] = t;
-    this._tickets.set(next);
+    this.patchTicket(ticketId, { usuarioAsignado: userId, nombreAsignado: u?.name || userId });
+  }
+
+  /** Aplica un patch a un ticket (por nº) en AMBAS listas: operativa y generales. */
+  private patchTicket(ticketId: string, patch: Partial<Ticket>): void {
+    for (const sig of [this._tickets, this._allTickets]) {
+      const arr = sig();
+      const idx = arr.findIndex((t) => t.ticket === ticketId);
+      if (idx < 0) continue;
+      const t: Ticket = { ...arr[idx], ...patch };
+      evaluarFechas(t);
+      clasificar(t);
+      const next = [...arr];
+      next[idx] = t;
+      sig.set(next);
+    }
   }
 
   // ── Cache (localStorage) ──────────────────────────────────────────────

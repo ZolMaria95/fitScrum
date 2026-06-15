@@ -50,6 +50,15 @@ export class TicketMessagesDialog {
   readonly ticketAttachments = signal<string[]>([]);
   readonly lightbox = signal<string | null>(null);
 
+  // Paginación de mensajes: se procesa/hidrata solo el bloque más reciente y los
+  // anteriores se cargan bajo demanda (no todo junto). `cursor` = índice del más
+  // viejo ya mostrado dentro de `sortedRaw` (orden ascendente por fecha).
+  private static readonly CHUNK = 15;
+  readonly hasOlder = signal(false);
+  readonly loadingOlder = signal(false);
+  private sortedRaw: any[] = [];
+  private cursor = 0;
+
   composerText = '';
   composerFiles: File[] = [];
   readonly sending = signal(false);
@@ -70,14 +79,31 @@ export class TicketMessagesDialog {
       }
     }
     const msgs = await this.hd.fetchMessages(this.ticketId);
-    const sorted = [...msgs].sort(
+    this.sortedRaw = [...msgs].sort(
       (a, b) => new Date(a.entry_date || 0).getTime() - new Date(b.entry_date || 0).getTime(),
     );
-    const procesados = await Promise.all(sorted.map((m) => this.procesar(m)));
-    this.messages.set(procesados.filter((m): m is ConvMsg => !!m));
+    this.cursor = this.sortedRaw.length;
+    this.messages.set([]);
     this.loading.set(false);
+    // Muestra el bloque más reciente; los anteriores se cargan bajo demanda.
+    await this.loadOlder();
     // Adjunto a nivel ticket (no de un mensaje) → botón de descarga.
     if (this.ticketObj) this.hd.ticketAttachmentIds(this.ticketObj).then((ids) => this.ticketAttachments.set(ids));
+  }
+
+  /** Procesa (e hidrata imágenes de) el bloque inmediatamente anterior y lo antepone. */
+  async loadOlder(): Promise<void> {
+    if (this.loadingOlder() || this.cursor <= 0) return;
+    this.loadingOlder.set(true);
+    const start = Math.max(0, this.cursor - TicketMessagesDialog.CHUNK);
+    const slice = this.sortedRaw.slice(start, this.cursor);
+    const procesados = (await Promise.all(slice.map((m) => this.procesar(m)))).filter(
+      (m): m is ConvMsg => !!m,
+    );
+    this.messages.set([...procesados, ...this.messages()]);
+    this.cursor = start;
+    this.hasOlder.set(this.cursor > 0);
+    this.loadingOlder.set(false);
   }
 
   private esEmpleado(m: any): boolean {
