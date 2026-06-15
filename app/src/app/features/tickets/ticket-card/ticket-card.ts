@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { colorFor, initialsFromName } from '../../board/board-utils';
+import { clientStyle, colorFor, initialsFromName } from '../../board/board-utils';
 import { Ticket } from '../ticket-utils';
 import { estadoStyle, fmtIngreso, fmtMod, tipoStyle } from '../tickets-card-utils';
 
@@ -37,6 +37,8 @@ export class TicketCard {
 
   readonly estado = computed(() => estadoStyle(this.ticket().estatus));
   readonly tipo = computed(() => tipoStyle(this.ticket().tipo));
+  // Color por cliente (mismo criterio que el board: tinte claro + acento).
+  readonly cliente = computed(() => clientStyle({ id: this.ticket().clientId || this.ticket().clienteRaw }));
   readonly fIngreso = computed(() => fmtIngreso(this.ticket().fechaIngreso));
   readonly fMod = computed(() => fmtMod(this.ticket().fechaMod));
   readonly avatar = computed(() => {

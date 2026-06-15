@@ -4,31 +4,33 @@
   [class.is-pendiente]="esPendiente()"
   (click)="verConversacion.emit()">
 
-  <div class="tc-head" [style.background]="estado().headerBg">
-    <span class="tc-id">#{{ ticket().ticket }}</span>
-    @if (yaEnBoard()) {
-      <span class="tc-en-board" matTooltip="Este ticket ya tiene una tarea en el board"><mat-icon>task_alt</mat-icon> en board</span>
-    } @else {
-      <button class="tc-crear" (click)="$event.stopPropagation(); crearTarea.emit()" matTooltip="Crear tarea con este ticket">
-        <mat-icon>add_task</mat-icon><span class="tc-crear-txt">Crear tarea</span>
-      </button>
-    }
-    <span class="tc-spacer"></span>
-    <span class="tc-estado" [style.background]="estado().badgeBg" [style.color]="estado().badgeText">{{ ticket().estatus || '—' }}</span>
+  <div class="tc-head" [style.background]="cliente().bg" [style.borderLeftColor]="cliente().accent">
+    <div class="tc-head-top">
+      <span class="tc-id">#{{ ticket().ticket }}</span>
+      <span class="tc-spacer"></span>
+      @if (yaEnBoard()) {
+        <span class="tc-en-board" matTooltip="Este ticket ya tiene una tarea en el board"><mat-icon>task_alt</mat-icon> en board</span>
+      } @else {
+        <button class="tc-crear" (click)="$event.stopPropagation(); crearTarea.emit()" matTooltip="Crear tarea con este ticket">
+          <mat-icon>add_task</mat-icon><span class="tc-crear-txt">Crear tarea</span>
+        </button>
+      }
+    </div>
+    <div class="tc-cliente-name" [style.color]="cliente().ink" [title]="ticket().clienteRaw">
+      <span class="tc-cliente-dot" [style.background]="cliente().accent"></span>
+      <span class="tc-cliente-txt">{{ ticket().clienteRaw || 'Sin cliente' }}</span>
+    </div>
   </div>
 
   <div class="tc-body">
     <div class="tc-subject" [title]="ticket().asunto">{{ ticket().asunto }}</div>
 
-    <div class="tc-cliente" [title]="ticket().clienteRaw">
-      <mat-icon>business</mat-icon><span>{{ ticket().clienteRaw || '—' }}</span>
-    </div>
-
-    @if (ticket().tipo) {
-      <div class="tc-tipo">
+    <div class="tc-badges">
+      <span class="tc-badge" [style.background]="estado().badgeBg" [style.color]="estado().badgeText">{{ ticket().estatus || '— sin estado —' }}</span>
+      @if (ticket().tipo) {
         <span class="tc-badge" [style.background]="tipo().badgeBg" [style.color]="tipo().badgeText">{{ ticket().tipo }}</span>
-      </div>
-    }
+      }
+    </div>
 
     <div class="tc-fechas">
       <div><mat-icon>event</mat-icon> {{ fIngreso() || '—' }}</div>
