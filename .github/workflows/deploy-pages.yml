@@ -1,0 +1,49 @@
+name: Deploy Angular to GitHub Pages
+
+# Disparo MANUAL por ahora: no interfiere con el deploy actual (pages-build-deployment
+# desde la rama). En el cutover: cambiar la fuente de Pages a "GitHub Actions" y, si se
+# quiere deploy automático, añadir el trigger `push` a main bajo `on:`.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      # base-href = ruta de la URL de prod (https://zolmaria95.github.io/fitScrum/)
+      - run: npx ng build --configuration production --base-href /fitScrum/
+      # SPA en Pages: 404.html arranca la app en rutas profundas (deep links)
+      - run: cp dist/app/browser/index.html dist/app/browser/404.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app/dist/app/browser
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
