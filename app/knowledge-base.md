@@ -44,14 +44,20 @@ app/src/app/
 ## 3. Arranque / desarrollo
 
 ```bash
-cd app && npm start          # ng serve → http://localhost:4200
-python3 proxy.py             # (raíz del repo) proxy del Helpdesk en :3001 — necesario para el API
+cd app && npm start                       # ng serve → http://localhost:4200
+cd app && npm start -- --host 0.0.0.0     # accesible en la LAN → http://<IP>:4200
 ```
 
-- **Dev usa `localStorage`** (firebaseDbUrl con placeholder `TU-PROYECTO` → fallback; no toca prod).
+- **Solo Angular, sin `proxy.py`:** el dev server reenvía `/api` al Helpdesk vía el proxy integrado
+  ([app/proxy.conf.json](proxy.conf.json) → `https://helpdesk-api.fit-bank.com`, configurado en
+  `angular.json` serve `proxyConfig`). El API bloquea por CORS cualquier origen ≠ `helpdesk.fit-bank.com`,
+  por eso el navegador **no** puede llamarlo directo; el reenvío server-side lo resuelve.
+- **Las URLs del API son relativas** en dev (`helpdeskProxyUrl: ''` → base `/api/v1`); en prod es la
+  URL del Cloudflare Worker.
+- **Dev apunta a la Firebase real** (`fit-daily-ab113`) → el board (tareas/sprints/notas) se
+  **comparte** entre todas las máquinas de la LAN. `DataService.init()` solo siembra nodos vacíos
+  (no pisa datos). Backup de prod: `GET …/fit-daily.json` (solo lectura).
 - **Login real** (necesario para el API): desde `login`, con credenciales del Helpdesk.
-- **Sesión de prueba sin login** (consola): `localStorage.setItem('fit-daily_session', JSON.stringify({id:'MSC001',name:'Sol',role:'Scrum Master',apiRole:'',color:'#F2811D',email:'',token:'x'}))`.
-  Útil para ver UI, pero sin token válido el API no responde.
 
 ---
 
@@ -93,7 +99,8 @@ Todas las llamadas usan el contexto **`HD_SAFE`** (no desloguea en 401/403).
 **Escrituras (form-urlencoded):**
 - `assignTicket(id, userId)` → `PUT /tickets/tickets/:id` con `assigned_user_id`.
 - `setTicketStatus(id, nombre)` → `PUT /tickets/tickets/:id` con `ticket_status_id` (traduce el
-  nombre a código vía el catálogo). El estado se escribe **por código, no por texto**.
+  nombre a código vía el catálogo). El estado se escribe **por código, no por texto**. Nunca permite
+  cambiar a **ABIERTO**.
 - `sendMessage(id, detail, files)` → sube adjuntos (`POST /attachments` multipart) y
   `POST /tickets/:id/messages` con `detail` (+ `attach_ids`).
 
@@ -132,17 +139,25 @@ badge, avatar = **código de usuario** (igual que los filtros).
 - **`confirm-dialog/`** — confirmación reutilizable (variante "escribí BORRAR").
 
 **Funciona:** drag&drop (CDK) con permisos + WIP, filtros (prioridad/asignado/cliente), progreso,
-certificar, aprobar, esperando cliente, borrar card / Borrar Board, ocultar done-aprobadas.
-**Regla:** una tarea que salió de To Do **no puede volver** (drag y modal).
+certificar, esperando cliente, borrar card / Borrar Board. **Regla:** una tarea que salió de To Do
+**no puede volver** (drag y modal). Las done-finalizadas **salen del board a los 2 días**.
 
 **Barra de sprint (encima del board):** selector + **✏ editar** + **＋ nuevo** + banner
 (nombre/objetivo/fechas/capacidad/estado).
 
-**Integración Helpdesk (para tareas con ticket):**
-- **Estado del ticket** sincronizado con el API: `in_progress→EN PROCESO`,
-  esperando cliente`→INFO PENDIENTE CLIENTE`, `review→INSTALADO PARA CERTIFICACIÓN`,
-  `done→ENTREGADO` (en drag, certificar, botón esperando, y al guardar el modal). Mapa en
-  `board-utils.ts` (`HD_ESTADO_POR_STATUS`, `HD_ESTADO_ESPERANDO`).
+**Integración Helpdesk (para tareas con ticket):** 4 columnas (no hay Devuelto/Otros).
+- **Al abrir** el board, `syncTicketStatuses()` consulta el estado del ticket de cada tarea y la
+  **ubica según `statusFromTicketEstado`** (`board-utils.ts`):
+  `EN PROCESO→In Progress`, `INFO PENDIENTE CLIENTE→In Progress`+esperando,
+  `INSTALADO PARA CERTIFICACIÓN→En Certificación`, `ENTREGADO→Done`,
+  `APROBADO`/`CERRADO POR EL CLIENTE→Done` con el **check marcado**, **cualquier otro → To Do**
+  (sin tocar el ticket). El estado del ticket se guarda en `story.hdEstatus` y se muestra como
+  **badge** en la card.
+- **Check "Finalizado"** (antes "Aprobado") = **read-only**: lo define siempre el ticket
+  (APROBADO/CERRADO lo marcan, el resto lo desmarcan).
+- **Escritura del estado** (drag manual / botón esperando / modal): `in_progress→EN PROCESO`,
+  `review→INSTALADO PARA CERTIFICACIÓN`, `done→ENTREGADO`, esperando`→INFO PENDIENTE CLIENTE`
+  (`HD_ESTADO_POR_STATUS`/`HD_ESTADO_ESPERANDO`) — consistente con la lectura.
 - **Asignación** del ticket al asignar en el modal.
 - **"Ver conversación del ticket"** → abre el `TicketMessagesDialog` (ver §7).
 
@@ -170,12 +185,15 @@ colores.
 
 - **Tema** ([styles.scss](src/styles.scss) + [_theme-colors.scss](src/_theme-colors.scss)): paleta
   de marca FitBank (primary `#048ABF`, secondary `#30BAD9`, tertiary `#F2811D`); vars `--brand`,
-  `--accent`, `--bg` (`#F2F2F2`). Regenerar: `ng generate @angular/material:theme-color`.
-- **Seeds:** [public/data/](public/data/). **Claves `localStorage`:** `fit-daily_v1`,
-  `fit-daily_session`, `fit-daily_hd_users`/`_roles`/`_clients`/`_statuses`, `fit-daily_hd_*`
-  (notas/acciones/pendientes).
-- **Entornos:** dev → localStorage + `proxy.py:3001`; prod → Firebase + Cloudflare Worker
-  (`fileReplacements`). **`proxy.py` soporta GET/POST/PUT/PATCH** (PUT se agregó para asignación/estado).
+  `--accent`, `--bg` (`#F2F2F2`). Diálogos con `surface` sólido forzado en `styles.scss`. Datepicker
+  con date adapter nativo (locale `es-ES`).
+- **Seeds:** [public/data/](public/data/). **Claves `localStorage`:** `fit-daily_session` y caches HD
+  (`fit-daily_hd_users`/`_roles`/`_clients`/`_statuses`); los **datos del board van a Firebase** (ya
+  no a `fit-daily_v1`, salvo que se vuelva al placeholder).
+- **Entornos:** dev → **Firebase real** + API por **proxy del dev server** (`proxy.conf.json`,
+  URLs relativas); prod → Firebase + Cloudflare Worker (`fileReplacements`).
+- **`proxy.py`** (raíz) quedó como alternativa; el flujo actual usa el proxy integrado de `ng serve`
+  (no requiere Python). Soporta GET/POST/PUT/PATCH si se usa.
 
 ---
 

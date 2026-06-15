@@ -16,6 +16,26 @@ export const STATUS_LABELS: Record<Status, string> = {
   done: 'Finalizado',
 };
 
+/**
+ * Mapea el estado del ticket del API a la columna del board (+ flags).
+ * - APROBADO / CERRADO POR EL CLIENTE → Done con el check "Finalizado" marcado.
+ * - ENTREGADO → Done con el check desmarcado.
+ * - INSTALADO PARA CERTIFICACIÓN → En Certificación.
+ * - INFO PENDIENTE CLIENTE → In Progress + "esperando cliente".
+ * - EN PROCESO → In Progress.
+ * - cualquier otro estado → To Do (sin tocar el estado del ticket).
+ * El check lo define SIEMPRE el ticket (approved true/false), no el usuario.
+ */
+export function statusFromTicketEstado(estado: string): { status: Status; waiting?: boolean; approved?: boolean } {
+  const e = (estado || '').toUpperCase();
+  if (e.includes('APROBADO') || e.includes('CERRADO POR EL CLIENTE')) return { status: 'done', approved: true };
+  if (e.includes('ENTREGADO')) return { status: 'done', approved: false };
+  if (e.includes('INSTALADO') || e.includes('CERTIFICAC')) return { status: 'review' };
+  if (e.includes('INFO PENDIENTE')) return { status: 'in_progress', waiting: true };
+  if (e.includes('EN PROCESO')) return { status: 'in_progress' };
+  return { status: 'todo' };
+}
+
 export type Priority = 'alta' | 'media' | 'baja';
 export const PRIORITY_LABELS: Record<Priority, string> = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 

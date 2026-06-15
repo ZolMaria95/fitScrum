@@ -50,6 +50,8 @@ const HD_STATUS_LS_KEY = 'fit-daily_hd_statuses';
 @Injectable({ providedIn: 'root' })
 export class HelpdeskService {
   private readonly http = inject(HttpClient);
+  // Dev: helpdeskProxyUrl vacío → base relativa `/api/v1` (la reenvía el proxy del
+  // dev server). Prod: URL del Cloudflare Worker.
   readonly base = `${environment.helpdeskProxyUrl}/api/v1`;
 
   private roles: Record<string, string> = this.readRoles();
@@ -433,6 +435,7 @@ export class HelpdeskService {
    */
   async setTicketStatus(ticketId: string, estadoNombre: string): Promise<boolean> {
     if (!ticketId || !estadoNombre) return false;
+    if (estadoNombre.trim().toUpperCase() === 'ABIERTO') return false; // nunca se permite ABIERTO
     const map = await this.getTicketStatuses();
     const id = map[estadoNombre.trim().toUpperCase()];
     if (!id) {

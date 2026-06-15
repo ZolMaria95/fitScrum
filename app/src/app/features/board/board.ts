@@ -23,6 +23,7 @@ import {
   HD_ESTADO_POR_STATUS,
   PRIORITY_LABELS,
   Priority,
+  STATUSES,
   STATUS_LABELS,
   Status,
   WorkDeps,
@@ -33,6 +34,7 @@ import {
   progColor,
   resolveMember,
   roundUp5,
+  statusFromTicketEstado,
 } from './board-utils';
 
 type PriorityFilter = 'all' | Priority;
@@ -72,12 +74,40 @@ export class Board {
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
 
+  readonly syncing = signal(false);
+
   constructor() {
     // Carga empleados y clientes del Helpdesk (consulta independiente + cache) para
     // resolver nombre/rol del asignado y nombre/color del cliente en las cards.
     this.helpdesk.getHdUsers();
     this.helpdesk.getClients();
     this.helpdesk.getTicketStatuses();
+    // Al abrir: ubica cada tarea con ticket según el estado real del ticket en el API.
+    this.data.ensureInit().then(() => this.syncTicketStatuses());
+  }
+
+  /** Consulta el estado del ticket de cada tarea con ticket y la ubica en su columna. */
+  private async syncTicketStatuses(): Promise<void> {
+    const active = this.data.sprints().active;
+    const conTicket = this.data.getStoriesBySprint(active).filter((s) => s.ticket);
+    if (!conTicket.length) return;
+    this.syncing.set(true);
+    await Promise.all(
+      conTicket.map(async (s) => {
+        const raw = await this.helpdesk.fetchTicketRaw(s.ticket);
+        if (!raw) return;
+        const estado = String(raw.estado || '');
+        if (estado && s.hdEstatus !== estado) this.data.updateStoryHdEstatus(s.id, estado);
+        const m = statusFromTicketEstado(estado);
+        if (s.status !== m.status) this.data.updateStoryStatus(s.id, m.status);
+        // El check "Finalizado" lo define siempre el ticket (marca o desmarca).
+        if (m.approved !== undefined && !!s.approved !== m.approved) {
+          m.approved ? this.data.approveStory(s.id) : this.data.unapproveStory(s.id);
+        }
+        if (m.waiting && !s.waitingClient) this.data.setWaitingClient(s.id, true);
+      }),
+    );
+    this.syncing.set(false);
   }
 
   // ── Helpers expuestos al template ──
@@ -130,7 +160,7 @@ export class Board {
   readonly visibleStories = computed<Story[]>(() => {
     const active = this.data.sprints().active;
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 1);
+    cutoff.setDate(cutoff.getDate() - 2); // done-finalizadas salen del board tras 2 días
     const cutoffStr = cutoff.toISOString().split('T')[0];
     return this.data
       .stories()
@@ -154,7 +184,7 @@ export class Board {
       if (assignees.size > 0 && !(!s.assignee || assignees.has(s.assignee))) return false;
       return true;
     });
-    return (Object.keys(STATUS_LABELS) as Status[]).map((status) => ({
+    return STATUSES.map((status) => ({
       status,
       label: STATUS_LABELS[status],
       cards: filtered.filter((s) => s.status === status),
@@ -250,10 +280,7 @@ export class Board {
       this.pushHdEstado(card, HD_ESTADO_POR_STATUS['done']);
     }
   }
-  onApprove(card: Story, checked: boolean): void {
-    if (checked) this.data.approveStory(card.id);
-    else this.data.unapproveStory(card.id);
-  }
+  // El check "Finalizado" no es editable: lo define el estado del ticket (ver syncTicketStatuses).
 
   async deleteCard(card: Story): Promise<void> {
     const ok = await firstValueFrom(

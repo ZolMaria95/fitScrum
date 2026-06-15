@@ -96,8 +96,9 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(str(e).encode())
 
 if __name__ == '__main__':
-    server = ThreadingHTTPServer(('localhost', PORT), Handler)
-    print(f'✓ Servidor corriendo en http://localhost:{PORT}')
+    # 0.0.0.0 → accesible desde otras máquinas de la LAN (no solo localhost).
+    server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
+    print(f'✓ Servidor corriendo en http://0.0.0.0:{PORT} (accesible en la LAN)')
     print(f'  Archivos estáticos: {ROOT}')
     print(f'  Proxy API hacia:    {TARGET}')
     print('  Ctrl+C para detener\n')

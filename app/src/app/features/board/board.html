@@ -138,6 +138,10 @@
             }
             <div class="card-title">{{ card.title }}</div>
 
+            @if (card.ticket && card.hdEstatus) {
+              <span class="hd-estatus">{{ card.hdEstatus }}</span>
+            }
+
             @if (due.soon) {
               <div class="soon-badge">⚠ Próximo a vencer — {{ due.badge }}</div>
             }
@@ -172,13 +176,14 @@
               }
               @case ('review') {
                 <div class="card-check" (click)="$event.stopPropagation()">
-                  <mat-checkbox (change)="onCert(card, $event.checked)">Certificado</mat-checkbox>
+                  <mat-checkbox (change)="onCert(card, $event.checked)" aria-label="Certificado"></mat-checkbox>
+                  <span class="check-text">Certificado</span>
                 </div>
               }
               @case ('done') {
                 <div class="card-check" (click)="$event.stopPropagation()">
-                  <mat-checkbox [checked]="card.approved" (change)="onApprove(card, $event.checked)">
-                    {{ card.approved ? 'Aprobado ✓' : 'Aprobado' }}
+                  <mat-checkbox [checked]="card.approved" disabled>
+                    {{ card.approved ? 'Finalizado ✓' : 'Finalizado' }}
                   </mat-checkbox>
                 </div>
               }

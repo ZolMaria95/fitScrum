@@ -13,6 +13,8 @@ interface TeamMember { id: string; name?: string; role?: string; color?: string;
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  // Dev: helpdeskProxyUrl vacío → base relativa `/api/v1` (la reenvía el proxy del
+  // dev server). Prod: URL del Cloudflare Worker.
   private readonly base = `${environment.helpdeskProxyUrl}/api/v1`;
 
   private readonly _session = signal<Session | null>(this.readSession());

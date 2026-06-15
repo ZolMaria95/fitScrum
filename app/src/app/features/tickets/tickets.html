@@ -47,36 +47,52 @@
 } @else {
   <div class="hd-filters">
     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="f-search">
-      <mat-label>Buscar nº ticket</mat-label>
+      <mat-label>N° ticket</mat-label>
       <input matInput [ngModel]="filterTicket()" (ngModelChange)="onSearchInput($event)" inputmode="numeric" />
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Cliente</mat-label>
-      <mat-select [value]="filterCliente()" (selectionChange)="filterCliente.set($event.value)">
+      <mat-select [value]="filterCliente()" (selectionChange)="filterCliente.set($event.value)" (closed)="buscarCliente.set('')">
+        <div class="sel-search" (click)="$event.stopPropagation()">
+          <mat-icon class="sel-search-icon">search</mat-icon>
+          <input matInput placeholder="Buscar cliente…" [ngModel]="buscarCliente()" (ngModelChange)="buscarCliente.set($event)" (keydown)="$event.stopPropagation()" />
+        </div>
         <mat-option value="">Todos ({{ optClientes().length }})</mat-option>
-        @for (c of optClientes(); track c) { <mat-option [value]="c">{{ c }}</mat-option> }
+        @for (c of optClientesF(); track c) { <mat-option [value]="c">{{ c }}</mat-option> }
       </mat-select>
     </mat-form-field>
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Clasificación</mat-label>
-      <mat-select [value]="filterClasif()" (selectionChange)="filterClasif.set($event.value)">
+      <mat-select [value]="filterClasif()" (selectionChange)="filterClasif.set($event.value)" (closed)="buscarClasif.set('')">
+        <div class="sel-search" (click)="$event.stopPropagation()">
+          <mat-icon class="sel-search-icon">search</mat-icon>
+          <input matInput placeholder="Buscar…" [ngModel]="buscarClasif()" (ngModelChange)="buscarClasif.set($event)" (keydown)="$event.stopPropagation()" />
+        </div>
         <mat-option value="">Todas</mat-option>
-        @for (c of optClasifs(); track c) { <mat-option [value]="c" [style.color]="CLASIF_COLOR[c]">{{ c }}</mat-option> }
+        @for (c of optClasifsF(); track c) { <mat-option [value]="c" [style.color]="CLASIF_COLOR[c]">{{ c }}</mat-option> }
       </mat-select>
     </mat-form-field>
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Acción</mat-label>
-      <mat-select [value]="filterAccion()" (selectionChange)="filterAccion.set($event.value)">
+      <mat-select [value]="filterAccion()" (selectionChange)="filterAccion.set($event.value)" (closed)="buscarAccion.set('')">
+        <div class="sel-search" (click)="$event.stopPropagation()">
+          <mat-icon class="sel-search-icon">search</mat-icon>
+          <input matInput placeholder="Buscar acción…" [ngModel]="buscarAccion()" (ngModelChange)="buscarAccion.set($event)" (keydown)="$event.stopPropagation()" />
+        </div>
         <mat-option value="">Todas</mat-option>
-        @for (a of optAcciones(); track a) { <mat-option [value]="a">{{ a }}</mat-option> }
+        @for (a of optAccionesF(); track a) { <mat-option [value]="a">{{ a }}</mat-option> }
       </mat-select>
     </mat-form-field>
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Estatus</mat-label>
-      <mat-select [value]="filterEstatus()" (selectionChange)="filterEstatus.set($event.value)">
+      <mat-select [value]="filterEstatus()" (selectionChange)="filterEstatus.set($event.value)" (closed)="buscarEstatus.set('')">
+        <div class="sel-search" (click)="$event.stopPropagation()">
+          <mat-icon class="sel-search-icon">search</mat-icon>
+          <input matInput placeholder="Buscar estatus…" [ngModel]="buscarEstatus()" (ngModelChange)="buscarEstatus.set($event)" (keydown)="$event.stopPropagation()" />
+        </div>
         <mat-option value="">Todos</mat-option>
-        @for (e of optEstatus(); track e) { <mat-option [value]="e">{{ e }}</mat-option> }
+        @for (e of optEstatusF(); track e) { <mat-option [value]="e">{{ e }}</mat-option> }
       </mat-select>
     </mat-form-field>
     <span class="grow"></span>
@@ -210,8 +226,8 @@
 
   <mat-menu #stMenu="matMenu">
     <ng-template matMenuContent let-t="t">
-      @if (statusNames().length) {
-        @for (s of statusNames(); track s) {
+      @if (statusOptions().length) {
+        @for (s of statusOptions(); track s) {
           <button mat-menu-item [disabled]="s === t.estatus" (click)="changeStatus(t, s)">{{ s }}</button>
         }
       } @else {

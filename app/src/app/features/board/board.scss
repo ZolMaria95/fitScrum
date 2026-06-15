@@ -313,6 +313,21 @@
   margin-bottom: 8px;
 }
 
+// Estado del ticket en el Helpdesk (badge informativo en la card).
+.hd-estatus {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #2b2b3a;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  padding: 1px 8px;
+  margin-bottom: 8px;
+}
+
 .prog {
   display: flex;
   align-items: center;
@@ -369,9 +384,18 @@
 }
 
 .card-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-bottom: 6px;
   font-size: 13px;
   color: #2b2b3a;
+}
+
+// El texto va fuera del mat-checkbox: clickear "Certificado" NO marca el check
+// (solo el cuadro), para evitar certificaciones accidentales.
+.check-text {
+  cursor: default;
 }
 
 .card-bottom {

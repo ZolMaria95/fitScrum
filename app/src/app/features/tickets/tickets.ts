@@ -62,6 +62,8 @@ export class Tickets {
   readonly syncStatus = this.hd.syncStatus;
   readonly loading = this.hd.loading;
   readonly statusNames = this.hd.statusNames;
+  /** Estados elegibles en el menú: nunca se permite cambiar a ABIERTO. */
+  readonly statusOptions = computed(() => this.statusNames().filter((s) => s.trim().toUpperCase() !== 'ABIERTO'));
   readonly CLASIF_COLOR = CLASIF_COLOR;
 
   readonly displayedColumns = [
@@ -124,6 +126,20 @@ export class Tickets {
   readonly optAcciones = computed(() => [...new Set(this.base().map((t) => t.accion))].sort());
   readonly optClasifs = computed(() => CLASIF_ORDER.filter((c) => this.base().some((t) => t.clasificacion === c)));
   readonly optEstatus = computed(() => [...new Set(this.base().map((t) => t.estatus).filter(Boolean))].sort());
+
+  // Búsqueda dentro de cada filtro (selects con muchas opciones).
+  readonly buscarCliente = signal('');
+  readonly buscarAccion = signal('');
+  readonly buscarClasif = signal('');
+  readonly buscarEstatus = signal('');
+  private fOpt(list: string[], term: string): string[] {
+    const t = term.trim().toLowerCase();
+    return t ? list.filter((x) => x.toLowerCase().includes(t)) : list;
+  }
+  readonly optClientesF = computed(() => this.fOpt(this.optClientes(), this.buscarCliente()));
+  readonly optAccionesF = computed(() => this.fOpt(this.optAcciones(), this.buscarAccion()));
+  readonly optClasifsF = computed(() => this.fOpt(this.optClasifs(), this.buscarClasif()));
+  readonly optEstatusF = computed(() => this.fOpt(this.optEstatus(), this.buscarEstatus()));
 
   readonly rows = computed<Ticket[]>(() => {
     let base = this.base();
@@ -209,6 +225,10 @@ export class Tickets {
     this.filterEstatus.set('');
     this.filterTicket.set('');
     this.remoteResult.set(null);
+    this.buscarCliente.set('');
+    this.buscarAccion.set('');
+    this.buscarClasif.set('');
+    this.buscarEstatus.set('');
   }
 
   onSearchInput(value: string): void {
