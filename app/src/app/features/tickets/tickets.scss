@@ -1,18 +1,24 @@
 :host {
   display: block;
-  padding: 16px;
 }
 
 .hd-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
 
   h2 {
     margin: 0;
     font-size: 20px;
     color: var(--mat-sys-on-surface);
+  }
+
+  .hd-results {
+    font-size: 12px;
+    color: var(--mat-sys-on-surface-variant);
+    white-space: nowrap;
   }
 }
 
@@ -32,14 +38,15 @@
   display: flex;
   gap: 4px;
   border-bottom: 2px solid var(--mat-sys-outline-variant);
-  margin-bottom: 12px;
-  flex-wrap: wrap;
+  margin-bottom: 14px;
+  overflow-x: auto; // scroll de las tabs en móvil, no de la página
+  -webkit-overflow-scrolling: touch;
 }
 
 .hd-tab {
   border: none;
   background: transparent;
-  padding: 8px 14px;
+  padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
   color: var(--mat-sys-on-surface-variant);
@@ -49,6 +56,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 
   &.active {
     color: var(--mat-sys-primary);
@@ -66,191 +74,36 @@
   &.alert { background: #fdecea; color: #c0392b; }
 }
 
-// ── Filtros ──
-.hd-filters {
+// ── Panel de filtros (vive en el drawer del shell) ──
+.hd-filters-panel {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 10px;
+  flex-direction: column;
+  gap: 8px;
 
-  mat-form-field { width: 170px; }
-  .f-search { width: 190px; }
-  .grow { flex: 1 1 auto; }
+  mat-form-field { width: 100%; }
+  .f-sync { width: 100%; }
+}
 
-  .hd-results {
-    font-size: 12px;
-    color: var(--mat-sys-on-surface-variant);
+// ── Grid de cards (responsive, sin scroll horizontal) ──
+.ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+@media (min-width: 540px) {
+  .ticket-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
   }
 }
 
-// ── Tabla (estilo Excel) ──
-.hd-table-wrap {
-  overflow-x: auto;
-  border: 1px solid #bdd7ee;
-  border-radius: 8px;
-}
-
-.hd-table {
-  width: 100%;
-  font-size: 12px;
-
-  th.mat-mdc-header-cell {
-    background: #1f3864;
-    color: #fff;
-    font-weight: 700;
-    font-size: 11px;
-    letter-spacing: 0.02em;
-    padding: 6px 8px;
-    white-space: nowrap;
-    border-right: 1px solid #2a4a7f;
+@media (min-width: 900px) {
+  .ticket-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
   }
-
-  td.mat-mdc-cell {
-    padding: 4px 8px;
-    border-right: 1px solid #e3edf7;
-    border-bottom: 1px solid #e3edf7;
-    color: #222;
-    white-space: nowrap;
-  }
-
-  tr.mat-mdc-row:nth-child(even) { background: #ebf3fb; }
-  tr.mat-mdc-row:hover { background: #d6e8f5; }
-
-  tr.row-action td.mat-mdc-cell { box-shadow: inset 3px 0 0 #c0392b; }
-  tr.row-pending { background: #fff8e1 !important; }
-
-  // celdas
-  .num { text-align: center; font-variant-numeric: tabular-nums; }
-  .cell-asunto { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
-  .cell-msg { max-width: 260px; }
-  .cell-clasif, .cell-accion { font-weight: 600; font-size: 11px; }
-  .reciente { background: #fff3e0; color: #e65100; font-weight: 600; }
-  .muted { color: #9e9e9e; }
-}
-
-// Flechas de ordenamiento blancas sobre el header azul oscuro.
-// Solo el tallo y las puntas (líneas), no el contenedor → no aparece un cuadrado.
-.hd-table ::ng-deep {
-  .mat-sort-header-arrow {
-    color: #fff;
-  }
-  .mat-sort-header-stem,
-  .mat-sort-header-pointer-left,
-  .mat-sort-header-pointer-right,
-  .mat-sort-header-pointer-middle {
-    background-color: #fff;
-  }
-}
-
-// Botones dentro de la tabla
-.hd-ticket-btn {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  color: var(--mat-sys-primary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 2px 4px;
-  &:hover { text-decoration: underline; }
-}
-
-.hd-mini {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: #888;
-  font-size: 12px;
-  padding: 2px 3px;
-  border-radius: 4px;
-  &:hover { background: #00000010; }
-  &.on { color: #c0392b; }
-}
-
-.hd-msg-btn {
-  text-align: left;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: #9e9e9e;
-  font-size: 12px;
-  padding: 2px 4px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  &.tiene { color: #1a237e; font-weight: 600; }
-  &:hover { text-decoration: underline; }
-}
-
-.cell-nota { min-width: 150px; }
-
-.cell-asignado {
-  white-space: nowrap;
-  .asig-name { vertical-align: middle; }
-}
-
-.cell-estatus {
-  white-space: nowrap;
-}
-
-.est-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  border: 1px solid #bdd7ee;
-  background: #fff;
-  border-radius: 6px;
-  padding: 3px 4px 3px 9px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: #1f3864;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s;
-
-  &:hover {
-    border-color: var(--mat-sys-primary);
-    background: #eef3fb;
-  }
-
-  mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-    color: var(--mat-sys-primary);
-  }
-}
-
-.hd-note-btn {
-  border: 1px dashed #cfd8e3;
-  background: #fff;
-  border-radius: 5px;
-  padding: 2px 8px;
-  font-size: 11px;
-  color: #555;
-  cursor: pointer;
-  max-width: 130px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  &:hover { border-color: var(--mat-sys-primary); }
-}
-
-.hd-note-ta {
-  width: 150px;
-  font: inherit;
-  font-size: 12px;
-  border: 1px solid var(--mat-sys-primary);
-  border-radius: 5px;
-  padding: 4px;
-  resize: vertical;
-}
-.hd-note-actions button {
-  width: 26px;
-  height: 26px;
-  line-height: 26px;
-  mat-icon { font-size: 16px; width: 16px; height: 16px; }
 }
 
 .hd-empty {
@@ -258,6 +111,10 @@
   text-align: center;
   color: var(--mat-sys-on-surface-variant);
   font-size: 13px;
+}
+
+mat-paginator {
+  background: transparent;
 }
 
 // ── Estadísticas ──
@@ -272,7 +129,7 @@
 
 .hd-stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 16px;
 }
 
@@ -300,8 +157,4 @@
   tbody tr:nth-child(even) { background: #ebf3fb; }
   tfoot td { background: #1f3864; color: #fff; font-weight: 700; text-align: center; }
   tfoot td:first-child { text-align: left; }
-}
-
-@media (max-width: 700px) {
-  .hd-filters mat-form-field, .hd-filters .f-search { width: 100%; }
 }

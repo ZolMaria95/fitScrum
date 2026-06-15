@@ -1,28 +1,26 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, TemplateRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatMenuModule } from '@angular/material/menu';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Sort, MatSortModule } from '@angular/material/sort';
-import { MatTableModule } from '@angular/material/table';
-import { MatTabsModule } from '@angular/material/tabs';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../core/services/auth.service';
 import { DataService } from '../../core/services/data.service';
 import { HelpdeskService } from '../../core/services/helpdesk.service';
+import { ShellService } from '../../core/services/shell.service';
 import { CardDetailDialog } from '../board/card-detail-dialog/card-detail-dialog';
 import { TicketMessagesDialog } from './ticket-messages-dialog/ticket-messages-dialog';
 import { AssignTicketDialog } from './assign-ticket-dialog/assign-ticket-dialog';
+import { TicketCard } from './ticket-card/ticket-card';
 import { CLASIF_COLOR, CLASIF_ORDER, PRIORITY_ACTIONS } from './helpdesk.constants';
 import { Ticket } from './ticket-utils';
 
-type Tab = 'prioritarios' | 'todos' | 'asignados' | 'estadisticas';
+type Tab = 'prioritarios' | 'todos' | 'asignados' | 'generales' | 'estadisticas';
 
 interface StatRow {
   key: string;
@@ -31,46 +29,46 @@ interface StatRow {
   color: string;
 }
 
-/** Vista Tickets (tabla del Helpdesk). Port de js/helpdesk-panel.js. */
+/** Vista Tickets (grid de cards del Helpdesk). Port de js/helpdesk-panel.js. */
 @Component({
   selector: 'app-tickets',
   imports: [
     FormsModule,
-    MatTableModule,
-    MatSortModule,
-    MatTabsModule,
     MatButtonModule,
     MatIconModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
-    MatMenuModule,
+    MatPaginatorModule,
     MatProgressBarModule,
-    MatTooltipModule,
+    TicketCard,
   ],
   templateUrl: './tickets.html',
   styleUrl: './tickets.scss',
 })
-export class Tickets {
+export class Tickets implements OnDestroy {
   private readonly hd = inject(HelpdeskService);
   private readonly data = inject(DataService);
   private readonly auth = inject(AuthService);
   private readonly dialog = inject(MatDialog);
   private readonly snack = inject(MatSnackBar);
+  private readonly shell = inject(ShellService);
+
+  /** Panel de filtros que se publica al drawer del shell. */
+  readonly filtersTpl = viewChild<TemplateRef<unknown>>('filtersTpl');
 
   readonly tickets = this.hd.tickets;
   readonly syncStatus = this.hd.syncStatus;
   readonly loading = this.hd.loading;
   readonly statusNames = this.hd.statusNames;
+  // Tab "Generales" (set completo, perezoso y paginado, sin mensajes).
+  readonly allTickets = this.hd.allTickets;
+  readonly loadingGenerales = this.hd.loadingGenerales;
+  readonly hasMoreGenerales = this.hd.hasMoreGenerales;
+  readonly generalesStatus = this.hd.generalesStatus;
   /** Estados elegibles en el menú: nunca se permite cambiar a ABIERTO. */
   readonly statusOptions = computed(() => this.statusNames().filter((s) => s.trim().toUpperCase() !== 'ABIERTO'));
   readonly CLASIF_COLOR = CLASIF_COLOR;
-
-  readonly displayedColumns = [
-    'ticket', 'nota', 'cliente', 'asunto', 'fechaUltimoMensaje', 'ultimoMensaje',
-    'tipo', 'nombreAsignado', 'estatus', 'modulo', 'fechaIngreso',
-    'diasSinMovimiento', 'diasDesdeIngreso', 'clasificacion', 'accion',
-  ];
 
   // ── Estado de la vista ──
   readonly tab = signal<Tab>('prioritarios');
@@ -84,16 +82,24 @@ export class Tickets {
   readonly sortDir = signal<'asc' | 'desc' | ''>('desc');
   private searchTimer: any = null;
 
+  // Paginación por páginas: se renderiza SOLO la página actual (reduce scroll/DOM).
+  readonly pageIndex = signal(0);
+  readonly pageSize = signal(12);
+
   // Notas / acciones / pendientes (se leen reactivamente del DataService).
   readonly notes = signal(this.data.getHdNotes());
   readonly actions = signal(this.data.getHdActions());
   readonly pendientes = signal(this.data.getHdPendientes());
-  readonly editingNote = signal<string | null>(null);
-  noteDraft = '';
 
   constructor() {
-    // Catálogo de estados (para el menú de cambio de estado de la tabla).
+    // Catálogo de estados (para el menú de cambio de estado de cada card).
     this.hd.getTicketStatuses();
+    // Publica los filtros de esta vista en el drawer del shell.
+    effect(() => this.shell.setFilters(this.filtersTpl() ?? null));
+  }
+
+  ngOnDestroy(): void {
+    this.shell.clear();
   }
 
   private get myId(): string {
@@ -104,6 +110,8 @@ export class Tickets {
   private readonly base = computed<Ticket[]>(() => {
     const remote = this.remoteResult();
     if (remote) return [remote];
+    // Generales: set completo perezoso (el filtro por nº lo aplica rows()).
+    if (this.tab() === 'generales') return this.allTickets();
     const all = this.tickets();
     if (this.filterTicket()) return all; // búsqueda por nº: ignora la tab
     if (this.tab() === 'asignados') return all.filter((t) => t.usuarioAsignado === this.myId);
@@ -118,8 +126,14 @@ export class Tickets {
       prio: all.filter((t) => PRIORITY_ACTIONS.has(t.accion)).length,
       all: all.length,
       asignados: uid ? all.filter((t) => t.usuarioAsignado === uid).length : 0,
+      generales: this.allTickets().length,
     };
   });
+
+  /** Total del universo de la tab actual (denominador de "X de Y"). */
+  readonly tabTotal = computed(() => (this.tab() === 'generales' ? this.allTickets().length : this.counts().all));
+  /** ¿La tab actual ya tiene datos cargados? (para el estado vacío). */
+  readonly tabHasData = computed(() => (this.tab() === 'generales' ? this.allTickets().length > 0 : this.tickets().length > 0));
 
   // Opciones de los filtros (sobre el universo de la tab, sin filtrar).
   readonly optClientes = computed(() => [...new Set(this.base().map((t) => t.clienteRaw))].sort());
@@ -160,6 +174,25 @@ export class Tickets {
 
   readonly hasFilters = computed(
     () => !!(this.filterCliente() || this.filterAccion() || this.filterClasif() || this.filterEstatus() || this.filterTicket() || this.remoteResult()),
+  );
+
+  // ── Paginación ──
+  /** Página actual acotada al rango válido del set filtrado. */
+  readonly clampedPageIndex = computed(() => {
+    const pages = Math.max(1, Math.ceil(this.rows().length / this.pageSize()));
+    return Math.min(this.pageIndex(), pages - 1);
+  });
+  /** Solo las filas de la página actual (lo único que se renderiza en la tabla). */
+  readonly pagedRows = computed<Ticket[]>(() => {
+    const start = this.clampedPageIndex() * this.pageSize();
+    return this.rows().slice(start, start + this.pageSize());
+  });
+  /** Longitud para el paginador. En Generales (carga perezosa) se suma una página
+   *  extra mientras haya más, para mantener habilitado "Siguiente". */
+  readonly paginatorLength = computed(() =>
+    this.tab() === 'generales'
+      ? this.rows().length + (this.hasMoreGenerales() ? this.pageSize() : 0)
+      : this.rows().length,
   );
 
   readonly stats = computed(() => {
@@ -209,13 +242,25 @@ export class Tickets {
     this.hd.sync();
   }
 
-  onSort(s: Sort): void {
-    this.sortCol.set(s.active);
-    this.sortDir.set(s.direction);
-  }
-
   setTab(t: Tab): void {
     this.tab.set(t);
+    this.pageIndex.set(0);
+    // Generales se carga perezoso al entrar la primera vez.
+    if (t === 'generales' && !this.allTickets().length && !this.loadingGenerales()) {
+      this.hd.syncGenerales();
+    }
+  }
+
+  /** Navegación del paginador. En Generales pide al API la página que falte. */
+  onPage(e: PageEvent): void {
+    this.pageSize.set(e.pageSize);
+    this.pageIndex.set(e.pageIndex);
+    if (this.tab() === 'generales') {
+      const need = (e.pageIndex + 1) * e.pageSize;
+      if (this.allTickets().length < need && this.hasMoreGenerales() && !this.loadingGenerales()) {
+        this.hd.loadMoreGenerales();
+      }
+    }
   }
 
   clearFilters(): void {
@@ -229,16 +274,20 @@ export class Tickets {
     this.buscarAccion.set('');
     this.buscarClasif.set('');
     this.buscarEstatus.set('');
+    this.pageIndex.set(0);
   }
 
   onSearchInput(value: string): void {
     const v = value.trim();
     this.filterTicket.set(v);
     this.remoteResult.set(null);
+    this.pageIndex.set(0);
     clearTimeout(this.searchTimer);
     if (!v || !/^\d+$/.test(v)) return;
     this.searchTimer = setTimeout(async () => {
-      if (this.tickets().some((t) => String(t.ticket).includes(v))) return; // ya está en memoria
+      // Ya está en memoria (en cualquiera de los dos sets) → no consultar al API.
+      if (this.tickets().some((t) => String(t.ticket).includes(v))) return;
+      if (this.allTickets().some((t) => String(t.ticket).includes(v))) return;
       const t = await this.hd.searchTicketRemote(v);
       if (t) this.remoteResult.set(t);
     }, 450);
@@ -281,13 +330,6 @@ export class Tickets {
     );
   }
 
-  copyTicket(t: Ticket): void {
-    navigator.clipboard?.writeText(String(t.ticket)).then(
-      () => this.snack.open(`Copiado #${t.ticket}`, '', { duration: 1500 }),
-      () => {},
-    );
-  }
-
   // ── Interacciones inline ──
   isAction(t: Ticket): boolean {
     return !!this.actions()[t.ticket];
@@ -307,29 +349,8 @@ export class Tickets {
   noteOf(t: Ticket): string {
     return this.notes()[t.ticket] || '';
   }
-  startNote(t: Ticket): void {
-    this.noteDraft = this.noteOf(t);
-    this.editingNote.set(t.ticket);
-  }
-  saveNote(t: Ticket): void {
-    this.data.setHdNote(t.ticket, this.noteDraft);
+  onGuardarNota(t: Ticket, texto: string): void {
+    this.data.setHdNote(t.ticket, texto);
     this.notes.set({ ...this.data.getHdNotes() });
-    this.editingNote.set(null);
-  }
-  cancelNote(): void {
-    this.editingNote.set(null);
-  }
-
-  // ── Formato ──
-  fmtDate(iso: string): string {
-    if (!iso) return '';
-    const [d, h = ''] = iso.split('T');
-    return h ? `${d} ${h.slice(0, 5)}` : d;
-  }
-  diasColor(n: number): string {
-    return n > 7 ? '#C00000' : n > 3 ? '#FF8C00' : '#2E7D32';
-  }
-  trunc(s: string, n: number): string {
-    return s && s.length > n ? s.slice(0, n) + '…' : s || '';
   }
 }

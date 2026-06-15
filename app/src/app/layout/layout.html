@@ -1,35 +1,63 @@
-<mat-toolbar color="primary" class="topbar">
-  <span class="brand">Fit-Daily</span>
+<mat-sidenav-container class="shell">
+  <mat-sidenav
+    class="drawer"
+    [mode]="mode()"
+    [opened]="opened()"
+    (openedChange)="opened.set($event)"
+    [disableClose]="fixed()">
+    <div class="drawer-brand">Fit-Daily</div>
 
-  <button mat-button [matMenuTriggerFor]="scrumMenu">Scrum</button>
-  <mat-menu #scrumMenu="matMenu">
-    <a mat-menu-item routerLink="/board" routerLinkActive="active">Board</a>
-    <a mat-menu-item routerLink="/burndown" routerLinkActive="active">Burndown</a>
-    <a mat-menu-item routerLink="/progreso" routerLinkActive="active">Progreso</a>
-    <a mat-menu-item routerLink="/consultas" routerLinkActive="active">Consultas</a>
-  </mat-menu>
-
-  <button mat-button [matMenuTriggerFor]="hdMenu">Helpdesk</button>
-  <mat-menu #hdMenu="matMenu">
-    <a mat-menu-item routerLink="/tickets" routerLinkActive="active">Tickets</a>
-    <a mat-menu-item routerLink="/semanal" routerLinkActive="active">HelpDesk Semanal</a>
-    @if (puedeVerMiPanel()) {
-      <a mat-menu-item routerLink="/mi-panel" routerLinkActive="active">Mi Panel</a>
+    @if (shell.filters(); as tpl) {
+      <div class="drawer-filters">
+        <ng-container *ngTemplateOutlet="tpl"></ng-container>
+      </div>
     }
-    <a mat-menu-item routerLink="/pendientes" routerLinkActive="active">Pendientes</a>
-  </mat-menu>
 
-  <span class="spacer"></span>
+    <mat-nav-list class="drawer-nav">
+      <h3 matSubheader>Scrum</h3>
+      <a mat-list-item routerLink="/board" routerLinkActive="active">Board</a>
+      <a mat-list-item routerLink="/burndown" routerLinkActive="active">Burndown</a>
+      <a mat-list-item routerLink="/progreso" routerLinkActive="active">Progreso</a>
+      <a mat-list-item routerLink="/consultas" routerLinkActive="active">Consultas</a>
 
-  @if (session(); as s) {
-    <span class="user-chip" [style.background]="s.color">{{ s.id }}</span>
-    <span class="user-name">{{ s.name }}</span>
-  }
-  <button mat-icon-button (click)="logout()" title="Cerrar sesión" aria-label="Cerrar sesión">
-    <mat-icon>logout</mat-icon>
-  </button>
-</mat-toolbar>
+      <h3 matSubheader>Helpdesk</h3>
+      <a mat-list-item routerLink="/tickets" routerLinkActive="active">Tickets</a>
+      <a mat-list-item routerLink="/semanal" routerLinkActive="active">HelpDesk Semanal</a>
+      @if (puedeVerMiPanel()) {
+        <a mat-list-item routerLink="/mi-panel" routerLinkActive="active">Mi Panel</a>
+      }
+      <a mat-list-item routerLink="/pendientes" routerLinkActive="active">Pendientes</a>
+    </mat-nav-list>
 
-<main class="content">
-  <router-outlet />
-</main>
+    <span class="drawer-spacer"></span>
+
+    @if (session(); as s) {
+      <div class="drawer-user">
+        <span class="user-chip" [style.background]="s.color">{{ s.id }}</span>
+        <span class="user-name">{{ s.name }}</span>
+        <button mat-icon-button (click)="logout()" title="Cerrar sesión" aria-label="Cerrar sesión">
+          <mat-icon>logout</mat-icon>
+        </button>
+      </div>
+    }
+  </mat-sidenav>
+
+  <mat-sidenav-content class="shell-content">
+    @if (!fixed()) {
+      <mat-toolbar color="primary" class="topbar">
+        <button mat-icon-button (click)="opened.set(!opened())" aria-label="Abrir menú">
+          <mat-icon>menu</mat-icon>
+        </button>
+        <span class="brand">Fit-Daily</span>
+        <span class="spacer"></span>
+        @if (session(); as s) {
+          <span class="user-chip" [style.background]="s.color">{{ s.id }}</span>
+        }
+      </mat-toolbar>
+    }
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

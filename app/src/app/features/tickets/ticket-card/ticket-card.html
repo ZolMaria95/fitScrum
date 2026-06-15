@@ -1,0 +1,72 @@
+<div
+  class="ticket-card"
+  [class.is-accion]="esAccion()"
+  [class.is-pendiente]="esPendiente()"
+  (click)="verConversacion.emit()">
+
+  <div class="tc-head" [style.background]="estado().headerBg">
+    <span class="tc-id">#{{ ticket().ticket }}</span>
+    <button class="tc-crear" (click)="$event.stopPropagation(); crearTarea.emit()" matTooltip="Crear tarea con este ticket">
+      <mat-icon>add_task</mat-icon><span class="tc-crear-txt">Crear tarea</span>
+    </button>
+    <span class="tc-spacer"></span>
+    <span class="tc-estado" [style.background]="estado().badgeBg" [style.color]="estado().badgeText">{{ ticket().estatus || '—' }}</span>
+  </div>
+
+  <div class="tc-body">
+    <div class="tc-subject" [title]="ticket().asunto">{{ ticket().asunto }}</div>
+
+    <div class="tc-cliente" [title]="ticket().clienteRaw">
+      <mat-icon>business</mat-icon><span>{{ ticket().clienteRaw || '—' }}</span>
+    </div>
+
+    @if (ticket().tipo) {
+      <div class="tc-tipo">
+        <span class="tc-badge" [style.background]="tipo().badgeBg" [style.color]="tipo().badgeText">{{ ticket().tipo }}</span>
+      </div>
+    }
+
+    <div class="tc-fechas">
+      <div><mat-icon>event</mat-icon> {{ fIngreso() || '—' }}</div>
+      <div><mat-icon>update</mat-icon> {{ fMod() || '—' }}</div>
+    </div>
+
+    @if (editingNota()) {
+      <div class="tc-nota-edit" (click)="$event.stopPropagation()">
+        <textarea [(ngModel)]="draft" rows="2" placeholder="Nota…" (keydown.escape)="cancelNota()"></textarea>
+        <div class="tc-nota-actions">
+          <button mat-icon-button (click)="saveNota()" matTooltip="Guardar"><mat-icon>check</mat-icon></button>
+          <button mat-icon-button (click)="cancelNota()" matTooltip="Cancelar"><mat-icon>close</mat-icon></button>
+        </div>
+      </div>
+    } @else if (nota()) {
+      <div class="tc-nota" [title]="nota()"><mat-icon>sticky_note_2</mat-icon> {{ nota() }}</div>
+    }
+  </div>
+
+  <div class="tc-foot">
+    <span class="tc-avatar" [style.background]="avatar().color" [matTooltip]="asignadoLabel()">{{ avatar().initials }}</span>
+    <button class="tc-ver" (click)="$event.stopPropagation(); verConversacion.emit()">
+      <mat-icon>chat</mat-icon><span class="tc-ver-txt">Ver conversación</span>
+    </button>
+    <button mat-icon-button class="tc-menu" [matMenuTriggerFor]="menu" (click)="$event.stopPropagation()" aria-label="Más acciones">
+      <mat-icon>more_vert</mat-icon>
+    </button>
+  </div>
+</div>
+
+<mat-menu #menu="matMenu">
+  <button mat-menu-item (click)="asignar.emit()"><mat-icon>person_add</mat-icon> Asignar / reasignar</button>
+  <button mat-menu-item [matMenuTriggerFor]="estadoMenu"><mat-icon>swap_horiz</mat-icon> Cambiar estado</button>
+  <button mat-menu-item (click)="startNota()"><mat-icon>edit_note</mat-icon> {{ nota() ? 'Editar nota' : 'Agregar nota' }}</button>
+  <button mat-menu-item (click)="toggleAccion.emit()"><mat-icon>flag</mat-icon> {{ esAccion() ? 'Quitar acción' : 'Marcar acción' }}</button>
+  <button mat-menu-item (click)="togglePendiente.emit()"><mat-icon>pause_circle</mat-icon> {{ esPendiente() ? 'Quitar pendiente' : 'Marcar pendiente' }}</button>
+</mat-menu>
+
+<mat-menu #estadoMenu="matMenu">
+  @for (s of statusOptions(); track s) {
+    <button mat-menu-item [disabled]="s === ticket().estatus" (click)="cambiarEstado.emit(s)">{{ s }}</button>
+  } @empty {
+    <button mat-menu-item disabled>Catálogo no disponible</button>
+  }
+</mat-menu>

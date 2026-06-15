@@ -27,15 +27,16 @@ El legacy sigue siendo la referencia funcional/modelo de datos — ver
 
 ```
 app/src/app/
-├─ app.config.ts / app.routes.ts / layout/
+├─ app.config.ts / app.routes.ts / layout/   # shell responsive (sidenav hamburguesa)
 ├─ core/
-│  ├─ services/      # data, auth, helpdesk
+│  ├─ services/      # data, auth, helpdesk, shell (host de filtros del drawer)
 │  ├─ interceptors/  # helpdesk-auth (Bearer + HD_SAFE)
 │  ├─ guards/        # auth, sol, msc001
 │  └─ models/        # session
 └─ features/
    ├─ board/         # ✅ Kanban + sprints + dialogs
-   ├─ tickets/       # ✅ tabla Helpdesk + conversación + asignación + estados
+   ├─ tickets/       # ✅ grid de cards Helpdesk + conversación + asignación + estados
+   │  └─ ticket-card/  # card presentacional (header/cuerpo/pie + menú ⋮)
    └─ burndown, progreso, consultas, semanal, mi-panel, pendientes, login
 ```
 
@@ -124,6 +125,19 @@ Lazy-loaded bajo `Layout` (`authGuard`); `/` → `/board`.
 | `login`, `board`, `tickets` | **Hecho** |
 | `burndown`, `progreso`, `consultas`, `semanal`, `mi-panel`, `pendientes` | placeholders |
 
+### Shell responsive ([layout/](src/app/layout/)) — menú hamburguesa lateral
+
+Diseño **mobile-first**. El `Layout` es un `mat-sidenav-container`:
+- **Drawer** = (arriba) **host de filtros dinámicos** + (debajo) **submenús** de navegación
+  (`mat-nav-list`: grupo Scrum y grupo Helpdesk) + pie con usuario/logout.
+- **Responsive** con CDK `BreakpointObserver('(min-width: 900px)')` → `isDesktop`, más un flag por ruta
+  `data.collapsibleNav`. `fixed = isDesktop && !collapsibleNav`: si es fijo → `mode="side"` siempre abierto,
+  sin ☰; si no (móvil/tablet **o Board en escritorio**) → `mode="over"`, ☰ en topbar slim, se cierra al navegar.
+- **Board** lleva `data: { collapsibleNav: true }` → oculta el menú aun en escritorio (Kanban a ancho completo).
+- **`ShellService`** ([shell.service.ts](src/app/core/services/shell.service.ts)): `filters` (signal de
+  `TemplateRef`), `setFilters`/`clear`. Cada vista publica su panel de filtros como `<ng-template>` y el drawer
+  lo renderiza con `ngTemplateOutlet`. Hoy **solo Tickets** lo usa (Board mantiene sus filtros internos).
+
 ---
 
 ## 6. Board ([features/board/](src/app/features/board/))
@@ -165,19 +179,46 @@ certificar, esperando cliente, borrar card / Borrar Board. **Regla:** una tarea 
 
 ## 7. Tickets ([features/tickets/](src/app/features/tickets/))
 
-Port de `js/helpdesk-panel.js`. Tabla **`mat-table`** (15 columnas, sort), **↻ Sincronizar**,
-tabs (Prioritarios / Todos / Asignados a mí / Estadísticas) con contadores, filtros
-(cliente/clasificación/acción/estatus) y búsqueda por número (local + remota). Clasificación con
-colores.
+Port de `js/helpdesk-panel.js`. **Grid de cards responsive** (no tabla), **↻ Sincronizar**,
+tabs (Prioritarios / Todos / Asignados a mí / **Generales** / Estadísticas) con contadores, filtros
+(cliente/clasificación/acción/estatus) y búsqueda por número (local en ambos sets + remota).
 
-- **Interacciones inline:** nota editable, acción (⚑), pendiente (⏸), copiar (⧉).
-- **Asignar:** botón **✎** → `AssignTicketDialog` (lista buscable de empleados; asigna en el API).
-- **Cambiar estado:** botón **▾** en la columna Estatus → menú con todos los estados del catálogo.
-- **Crear tarea:** clic en el **#número** → `CardDetailDialog` con el ticket pre-cargado (mismo
-  buscador de asignado del board).
+- **Grid de cards** (`.ticket-grid`, [tickets.html](src/app/features/tickets/tickets.html)): **2 col
+  <540px / 4 col 540–899px / 5 col ≥900px** con `minmax(0, 1fr)`, **sin scroll horizontal** en ningún
+  contenedor. Estadísticas conserva su tabla-resumen. Las **tabs** quedan en el contenido (segmento
+  scrollable); los **filtros** viven en el **drawer** del shell (ver §5, `ShellService` + `<ng-template #filtersTpl>`).
+- **`TicketCard`** ([ticket-card/](src/app/features/tickets/ticket-card/)) presentacional (inputs + outputs,
+  sin servicios):
+  - **Cabecera**: `#número` + botón **"Crear tarea"** (→ `CardDetailDialog` precargado) + badge de **estado**.
+  - **Cuerpo**: asunto a **2 líneas** (`-webkit-line-clamp`), cliente, badge de **tipo**, y subsección de
+    fechas (📅 ingreso "10 jun 2025" · 🔄 modificación "Hoy 9:42" / "13 jun 16:05").
+  - **Pie**: avatar (iniciales+color, `colorFor`/`initialsFromName` de board-utils) + **"Ver conversación"**
+    + **menú ⋮** (asignar / cambiar estado / nota / marcar acción ⚑ / pendiente ⏸). La card entera abre la
+    conversación; Crear tarea y ⋮ hacen `stopPropagation`.
+  - Colores en [tickets-card-utils.ts](src/app/features/tickets/tickets-card-utils.ts): `estadoStyle`
+    (**color por estado real** del catálogo, ≈7 tonos), `tipoStyle` (INCIDENCIA/REQUERIMIENTO/CONSULTA),
+    `fmtIngreso`/`fmtMod`. **Solo modo claro** (la app es light-only por el bug de Safari/M3 en `styles.scss`).
+- **Paginación por páginas** (`mat-paginator`, **12 por página**): renderiza **solo la página actual**
+  (menos scroll/DOM) en **todas** las tabs. `pagedRows` = slice de `rows()`; `clampedPageIndex` acota el
+  índice. Cambiar tab/filtros/búsqueda resetea a la página 1.
+- **Dos sets de tickets** (en `HelpdeskService`):
+  - `tickets` (sync `↻`): **operativo** — solo `CLIENTES_VALIDOS`, sin aprobados/cerrados, **con
+    mensajes**. Powerea Prioritarios/Todos/Asignados/Estadísticas (sin cambios).
+  - `allTickets` (tab **Generales**): **todos** los clientes, incluidos aprobados/cerrados, carga
+    **perezosa** y **SIN mensajes** — los mensajes se piden solo al abrir la conversación. Cada
+    "Siguiente" del paginador trae del API la página que falte (offset, `fetchPage(offset, 12)`);
+    `paginatorLength` suma una página extra mientras `hasMoreGenerales`. `syncGenerales`/`loadMoreGenerales`.
+  - Asignar / cambiar estado refrescan **ambos** sets (`patchTicket`). En Generales (sin último
+    mensaje) la celda muestra un botón **💬 Ver conversación**.
+
+- **Diálogos desde la card:** **Asignar** → `AssignTicketDialog` (lista buscable; asigna en el API);
+  **Cambiar estado** → `setTicketStatus` con la lista del catálogo (`statusOptions`, nunca ABIERTO);
+  **Crear tarea** → `CardDetailDialog` precargado; **Nota/acción/pendiente** → `DataService` (local).
 - **Conversación** (`ticket-messages-dialog/`): mensajes clasificados (empleado/cliente/sistema),
   adjuntos por mensaje, **imágenes embebidas hidratadas con auth** + **lightbox** (popup, no pestaña),
   adjunto a nivel ticket, y **composer** para responder (texto + adjuntos). Reutilizado por el board.
+  Los mensajes se **paginan** (bloque de 15 más recientes + **"Ver mensajes anteriores"**): solo se
+  procesa/hidrata el bloque visible, no todos de golpe.
 
 ---
 
@@ -210,9 +251,10 @@ componente: 8 kB / 16 kB en `angular.json`.
 | Área | Estado |
 |---|---|
 | Infra (core, auth, guards, interceptor, theming) | ✅ |
+| Shell responsive (sidenav hamburguesa + host de filtros) | ✅ |
 | Login | ✅ |
 | Board (Kanban + sprints + integración Helpdesk) | ✅ |
-| Tickets (tabla + conversación + asignación + estados + mensajes) | ✅ |
+| Tickets (grid de cards responsive + conversación + asignación + estados + mensajes) | ✅ |
 | Catálogos del API (usuarios, clientes, estados) | ✅ |
 | Burndown, Progreso, Consultas, Mi Panel, Semanal, Pendientes | ⏳ placeholders |
 | TUsuariosPizza | ❌ se elimina |

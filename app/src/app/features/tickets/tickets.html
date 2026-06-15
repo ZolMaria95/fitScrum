@@ -1,14 +1,84 @@
+<!-- Panel de filtros: se publica al drawer del shell (ShellService). -->
+<ng-template #filtersTpl>
+  <div class="hd-filters-panel">
+    <button mat-flat-button color="primary" class="f-sync" (click)="sync()" [disabled]="loading()">
+      <mat-icon>sync</mat-icon> Sincronizar
+    </button>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="f-search">
+      <mat-label>N° ticket</mat-label>
+      <input matInput [ngModel]="filterTicket()" (ngModelChange)="onSearchInput($event)" inputmode="numeric" />
+      <mat-icon matSuffix>search</mat-icon>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Cliente</mat-label>
+      <mat-select [value]="filterCliente()" (selectionChange)="filterCliente.set($event.value); pageIndex.set(0)" (closed)="buscarCliente.set('')">
+        <div class="sel-search" (click)="$event.stopPropagation()">
+          <mat-icon class="sel-search-icon">search</mat-icon>
+          <input matInput placeholder="Buscar cliente…" [ngModel]="buscarCliente()" (ngModelChange)="buscarCliente.set($event)" (keydown)="$event.stopPropagation()" />
+        </div>
+        <mat-option value="">Todos ({{ optClientes().length }})</mat-option>
+        @for (c of optClientesF(); track c) { <mat-option [value]="c">{{ c }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Clasificación</mat-label>
+      <mat-select [value]="filterClasif()" (selectionChange)="filterClasif.set($event.value); pageIndex.set(0)" (closed)="buscarClasif.set('')">
+        <div class="sel-search" (click)="$event.stopPropagation()">
+          <mat-icon class="sel-search-icon">search</mat-icon>
+          <input matInput placeholder="Buscar…" [ngModel]="buscarClasif()" (ngModelChange)="buscarClasif.set($event)" (keydown)="$event.stopPropagation()" />
+        </div>
+        <mat-option value="">Todas</mat-option>
+        @for (c of optClasifsF(); track c) { <mat-option [value]="c" [style.color]="CLASIF_COLOR[c]">{{ c }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Acción</mat-label>
+      <mat-select [value]="filterAccion()" (selectionChange)="filterAccion.set($event.value); pageIndex.set(0)" (closed)="buscarAccion.set('')">
+        <div class="sel-search" (click)="$event.stopPropagation()">
+          <mat-icon class="sel-search-icon">search</mat-icon>
+          <input matInput placeholder="Buscar acción…" [ngModel]="buscarAccion()" (ngModelChange)="buscarAccion.set($event)" (keydown)="$event.stopPropagation()" />
+        </div>
+        <mat-option value="">Todas</mat-option>
+        @for (a of optAccionesF(); track a) { <mat-option [value]="a">{{ a }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Estatus</mat-label>
+      <mat-select [value]="filterEstatus()" (selectionChange)="filterEstatus.set($event.value); pageIndex.set(0)" (closed)="buscarEstatus.set('')">
+        <div class="sel-search" (click)="$event.stopPropagation()">
+          <mat-icon class="sel-search-icon">search</mat-icon>
+          <input matInput placeholder="Buscar estatus…" [ngModel]="buscarEstatus()" (ngModelChange)="buscarEstatus.set($event)" (keydown)="$event.stopPropagation()" />
+        </div>
+        <mat-option value="">Todos</mat-option>
+        @for (e of optEstatusF(); track e) { <mat-option [value]="e">{{ e }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+
+    @if (hasFilters()) {
+      <button mat-stroked-button (click)="clearFilters()"><mat-icon>close</mat-icon> Limpiar filtros</button>
+    }
+  </div>
+</ng-template>
+
+<!-- Contenido -->
 <div class="hd-header">
   <h2>Tickets Helpdesk</h2>
-  <button mat-flat-button color="primary" (click)="sync()" [disabled]="loading()">
-    <mat-icon>sync</mat-icon> Sincronizar
-  </button>
+  <span class="hd-results">{{ rows().length }} de {{ tabTotal() }}</span>
 </div>
 
-@if (loading()) {
+@if (loading() || (tab() === 'generales' && loadingGenerales())) {
   <mat-progress-bar mode="indeterminate"></mat-progress-bar>
 }
-@if (syncStatus().msg) {
+@if (tab() === 'generales') {
+  @if (generalesStatus().msg) {
+    <div class="hd-status" [class]="'st-' + generalesStatus().type">{{ generalesStatus().msg }}</div>
+  }
+} @else if (syncStatus().msg) {
   <div class="hd-status" [class]="'st-' + syncStatus().type">{{ syncStatus().msg }}</div>
 }
 
@@ -17,10 +87,13 @@
     Prioritarios <span class="hd-tab-count alert">{{ counts().prio }}</span>
   </button>
   <button class="hd-tab" [class.active]="tab() === 'todos'" (click)="setTab('todos')">
-    Todos los tickets <span class="hd-tab-count">{{ counts().all }}</span>
+    Todos <span class="hd-tab-count">{{ counts().all }}</span>
   </button>
   <button class="hd-tab" [class.active]="tab() === 'asignados'" (click)="setTab('asignados')">
     Asignados a mí <span class="hd-tab-count">{{ counts().asignados }}</span>
+  </button>
+  <button class="hd-tab" [class.active]="tab() === 'generales'" (click)="setTab('generales')">
+    Generales <span class="hd-tab-count">{{ counts().generales }}</span>
   </button>
   <button class="hd-tab" [class.active]="tab() === 'estadisticas'" (click)="setTab('estadisticas')">Estadísticas</button>
 </div>
@@ -45,194 +118,39 @@
     }
   </div>
 } @else {
-  <div class="hd-filters">
-    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="f-search">
-      <mat-label>N° ticket</mat-label>
-      <input matInput [ngModel]="filterTicket()" (ngModelChange)="onSearchInput($event)" inputmode="numeric" />
-      <mat-icon matSuffix>search</mat-icon>
-    </mat-form-field>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Cliente</mat-label>
-      <mat-select [value]="filterCliente()" (selectionChange)="filterCliente.set($event.value)" (closed)="buscarCliente.set('')">
-        <div class="sel-search" (click)="$event.stopPropagation()">
-          <mat-icon class="sel-search-icon">search</mat-icon>
-          <input matInput placeholder="Buscar cliente…" [ngModel]="buscarCliente()" (ngModelChange)="buscarCliente.set($event)" (keydown)="$event.stopPropagation()" />
-        </div>
-        <mat-option value="">Todos ({{ optClientes().length }})</mat-option>
-        @for (c of optClientesF(); track c) { <mat-option [value]="c">{{ c }}</mat-option> }
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Clasificación</mat-label>
-      <mat-select [value]="filterClasif()" (selectionChange)="filterClasif.set($event.value)" (closed)="buscarClasif.set('')">
-        <div class="sel-search" (click)="$event.stopPropagation()">
-          <mat-icon class="sel-search-icon">search</mat-icon>
-          <input matInput placeholder="Buscar…" [ngModel]="buscarClasif()" (ngModelChange)="buscarClasif.set($event)" (keydown)="$event.stopPropagation()" />
-        </div>
-        <mat-option value="">Todas</mat-option>
-        @for (c of optClasifsF(); track c) { <mat-option [value]="c" [style.color]="CLASIF_COLOR[c]">{{ c }}</mat-option> }
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Acción</mat-label>
-      <mat-select [value]="filterAccion()" (selectionChange)="filterAccion.set($event.value)" (closed)="buscarAccion.set('')">
-        <div class="sel-search" (click)="$event.stopPropagation()">
-          <mat-icon class="sel-search-icon">search</mat-icon>
-          <input matInput placeholder="Buscar acción…" [ngModel]="buscarAccion()" (ngModelChange)="buscarAccion.set($event)" (keydown)="$event.stopPropagation()" />
-        </div>
-        <mat-option value="">Todas</mat-option>
-        @for (a of optAccionesF(); track a) { <mat-option [value]="a">{{ a }}</mat-option> }
-      </mat-select>
-    </mat-form-field>
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Estatus</mat-label>
-      <mat-select [value]="filterEstatus()" (selectionChange)="filterEstatus.set($event.value)" (closed)="buscarEstatus.set('')">
-        <div class="sel-search" (click)="$event.stopPropagation()">
-          <mat-icon class="sel-search-icon">search</mat-icon>
-          <input matInput placeholder="Buscar estatus…" [ngModel]="buscarEstatus()" (ngModelChange)="buscarEstatus.set($event)" (keydown)="$event.stopPropagation()" />
-        </div>
-        <mat-option value="">Todos</mat-option>
-        @for (e of optEstatusF(); track e) { <mat-option [value]="e">{{ e }}</mat-option> }
-      </mat-select>
-    </mat-form-field>
-    <span class="grow"></span>
-    <span class="hd-results">{{ rows().length }} de {{ counts().all }}</span>
-    @if (hasFilters()) {
-      <button mat-stroked-button (click)="clearFilters()"><mat-icon>close</mat-icon> Limpiar</button>
-    }
-  </div>
-
-  <div class="hd-table-wrap">
-    <table mat-table [dataSource]="rows()" matSort (matSortChange)="onSort($event)"
-           [matSortActive]="sortCol()" [matSortDirection]="sortDir()" class="hd-table">
-
-      <ng-container matColumnDef="ticket">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Ticket</th>
-        <td mat-cell *matCellDef="let t">
-          <button class="hd-ticket-btn" (click)="openTicketTask(t)" matTooltip="Crear tarea con este ticket">#{{ t.ticket }}</button>
-          <button class="hd-mini" (click)="copyTicket(t)" matTooltip="Copiar número">⧉</button>
-          <button class="hd-mini" [class.on]="isPending(t)" (click)="togglePending(t)" [matTooltip]="isPending(t) ? 'Quitar de pendientes' : 'Marcar pendiente'">{{ isPending(t) ? '⏸' : '+' }}</button>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="nota">
-        <th mat-header-cell *matHeaderCellDef>Nota</th>
-        <td mat-cell *matCellDef="let t" class="cell-nota">
-          @if (editingNote() === t.ticket) {
-            <textarea class="hd-note-ta" [(ngModel)]="noteDraft" rows="2" (keydown.escape)="cancelNote()"></textarea>
-            <span class="hd-note-actions">
-              <button mat-icon-button (click)="saveNote(t)" matTooltip="Guardar"><mat-icon>check</mat-icon></button>
-              <button mat-icon-button (click)="cancelNote()" matTooltip="Cancelar"><mat-icon>close</mat-icon></button>
-            </span>
-          } @else {
-            <button class="hd-note-btn" (click)="startNote(t)">{{ noteOf(t) || '+ nota' }}</button>
-            <button class="hd-mini" [class.on]="isAction(t)" (click)="toggleAction(t)" matTooltip="Acción pendiente">⚑</button>
-          }
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="cliente">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header="clienteRaw">Cliente</th>
-        <td mat-cell *matCellDef="let t">{{ t.clienteRaw }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="asunto">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Asunto</th>
-        <td mat-cell *matCellDef="let t" class="cell-asunto" [matTooltip]="t.asunto">{{ trunc(t.asunto, 55) }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="fechaUltimoMensaje">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Fecha msg</th>
-        <td mat-cell *matCellDef="let t" [class.reciente]="t.recienteMensaje">{{ fmtDate(t.fechaUltimoMensaje) }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="ultimoMensaje">
-        <th mat-header-cell *matHeaderCellDef>Último mensaje</th>
-        <td mat-cell *matCellDef="let t" class="cell-msg">
-          @if (t.ultimoMensaje) {
-            <button class="hd-msg-btn" [class.tiene]="t.tieneMensaje" (click)="openConversation(t)">{{ trunc(t.ultimoMensaje, 60) }}</button>
-          } @else {
-            <span class="muted">—</span>
-          }
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="tipo">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Tipo</th>
-        <td mat-cell *matCellDef="let t">{{ t.tipo }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="nombreAsignado">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Asignado</th>
-        <td mat-cell *matCellDef="let t" class="cell-asignado">
-          <span class="asig-name">{{ t.nombreAsignado || '—' }}</span>
-          <button class="hd-mini" (click)="openAssign(t)" matTooltip="Asignar / reasignar">✎</button>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="estatus">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Estatus</th>
-        <td mat-cell *matCellDef="let t" class="cell-estatus">
-          <button class="est-btn" [matMenuTriggerFor]="stMenu" [matMenuTriggerData]="{ t: t }"
-                  matTooltip="Cambiar estado" (click)="$event.stopPropagation()">
-            <span class="est-name">{{ t.estatus || '— sin estado —' }}</span>
-            <mat-icon>expand_more</mat-icon>
-          </button>
-        </td>
-      </ng-container>
-
-      <ng-container matColumnDef="modulo">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Módulo</th>
-        <td mat-cell *matCellDef="let t">{{ t.modulo }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="fechaIngreso">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Ingreso</th>
-        <td mat-cell *matCellDef="let t">{{ fmtDate(t.fechaIngreso) }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="diasSinMovimiento">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Días s/mov</th>
-        <td mat-cell *matCellDef="let t" class="num" [style.color]="diasColor(t.diasSinMovimiento)">{{ t.diasSinMovimiento }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="diasDesdeIngreso">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Días ing.</th>
-        <td mat-cell *matCellDef="let t" class="num" [style.color]="diasColor(t.diasDesdeIngreso)">{{ t.diasDesdeIngreso }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="clasificacion">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Clasificación</th>
-        <td mat-cell *matCellDef="let t" class="cell-clasif" [style.color]="CLASIF_COLOR[t.clasificacion] || '#757575'">{{ t.clasificacion }}</td>
-      </ng-container>
-
-      <ng-container matColumnDef="accion">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header>Acción</th>
-        <td mat-cell *matCellDef="let t" class="cell-accion">{{ t.accion }}</td>
-      </ng-container>
-
-      <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
-      <tr mat-row *matRowDef="let row; columns: displayedColumns"
-          [class.row-action]="isAction(row)" [class.row-pending]="isPending(row)"></tr>
-    </table>
-
-    @if (!rows().length) {
-      <div class="hd-empty">
-        @if (tickets().length) { Sin tickets que coincidan con el filtro. }
-        @else { Pulsa <strong>↻ Sincronizar</strong> para cargar los tickets. }
-      </div>
-    }
-  </div>
-
-  <mat-menu #stMenu="matMenu">
-    <ng-template matMenuContent let-t="t">
-      @if (statusOptions().length) {
-        @for (s of statusOptions(); track s) {
-          <button mat-menu-item [disabled]="s === t.estatus" (click)="changeStatus(t, s)">{{ s }}</button>
-        }
-      } @else {
-        <button mat-menu-item disabled>Catálogo de estados no disponible</button>
+  @if (!rows().length) {
+    <div class="hd-empty">
+      @if (tabHasData()) { Sin tickets que coincidan con el filtro. }
+      @else if (tab() === 'generales') { Cargando tickets generales… }
+      @else { Pulsa <strong>↻ Sincronizar</strong> (en los filtros) para cargar los tickets. }
+    </div>
+  } @else {
+    <div class="ticket-grid">
+      @for (t of pagedRows(); track t.ticket) {
+        <app-ticket-card
+          [ticket]="t"
+          [statusOptions]="statusOptions()"
+          [nota]="noteOf(t)"
+          [esAccion]="isAction(t)"
+          [esPendiente]="isPending(t)"
+          (verConversacion)="openConversation(t)"
+          (crearTarea)="openTicketTask(t)"
+          (asignar)="openAssign(t)"
+          (cambiarEstado)="changeStatus(t, $event)"
+          (guardarNota)="onGuardarNota(t, $event)"
+          (toggleAccion)="toggleAction(t)"
+          (togglePendiente)="togglePending(t)" />
       }
-    </ng-template>
-  </mat-menu>
+    </div>
+
+    <mat-paginator
+      [length]="paginatorLength()"
+      [pageIndex]="clampedPageIndex()"
+      [pageSize]="pageSize()"
+      [hidePageSize]="true"
+      [showFirstLastButtons]="tab() !== 'generales'"
+      (page)="onPage($event)"
+      aria-label="Páginas de tickets">
+    </mat-paginator>
+  }
 }
