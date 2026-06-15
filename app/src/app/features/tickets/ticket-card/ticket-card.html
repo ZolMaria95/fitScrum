@@ -6,9 +6,13 @@
 
   <div class="tc-head" [style.background]="estado().headerBg">
     <span class="tc-id">#{{ ticket().ticket }}</span>
-    <button class="tc-crear" (click)="$event.stopPropagation(); crearTarea.emit()" matTooltip="Crear tarea con este ticket">
-      <mat-icon>add_task</mat-icon><span class="tc-crear-txt">Crear tarea</span>
-    </button>
+    @if (yaEnBoard()) {
+      <span class="tc-en-board" matTooltip="Este ticket ya tiene una tarea en el board"><mat-icon>task_alt</mat-icon> en board</span>
+    } @else {
+      <button class="tc-crear" (click)="$event.stopPropagation(); crearTarea.emit()" matTooltip="Crear tarea con este ticket">
+        <mat-icon>add_task</mat-icon><span class="tc-crear-txt">Crear tarea</span>
+      </button>
+    }
     <span class="tc-spacer"></span>
     <span class="tc-estado" [style.background]="estado().badgeBg" [style.color]="estado().badgeText">{{ ticket().estatus || '—' }}</span>
   </div>
@@ -33,14 +37,18 @@
 
     @if (editingNota()) {
       <div class="tc-nota-edit" (click)="$event.stopPropagation()">
-        <textarea [(ngModel)]="draft" rows="2" placeholder="Nota…" (keydown.escape)="cancelNota()"></textarea>
+        <textarea [(ngModel)]="draft" rows="2" placeholder="Escribe una nota…" (keydown.escape)="cancelNota()"></textarea>
         <div class="tc-nota-actions">
           <button mat-icon-button (click)="saveNota()" matTooltip="Guardar"><mat-icon>check</mat-icon></button>
           <button mat-icon-button (click)="cancelNota()" matTooltip="Cancelar"><mat-icon>close</mat-icon></button>
         </div>
       </div>
-    } @else if (nota()) {
-      <div class="tc-nota" [title]="nota()"><mat-icon>sticky_note_2</mat-icon> {{ nota() }}</div>
+    } @else {
+      <button class="tc-nota-area" [class.empty]="!nota()" (click)="$event.stopPropagation(); startNota()"
+              [matTooltip]="nota() ? 'Editar nota' : 'Agregar nota'">
+        <mat-icon>sticky_note_2</mat-icon>
+        <span>{{ nota() || 'Agregar nota' }}</span>
+      </button>
     }
   </div>
 
@@ -58,7 +66,6 @@
 <mat-menu #menu="matMenu">
   <button mat-menu-item (click)="asignar.emit()"><mat-icon>person_add</mat-icon> Asignar / reasignar</button>
   <button mat-menu-item [matMenuTriggerFor]="estadoMenu"><mat-icon>swap_horiz</mat-icon> Cambiar estado</button>
-  <button mat-menu-item (click)="startNota()"><mat-icon>edit_note</mat-icon> {{ nota() ? 'Editar nota' : 'Agregar nota' }}</button>
   <button mat-menu-item (click)="toggleAccion.emit()"><mat-icon>flag</mat-icon> {{ esAccion() ? 'Quitar acción' : 'Marcar acción' }}</button>
   <button mat-menu-item (click)="togglePendiente.emit()"><mat-icon>pause_circle</mat-icon> {{ esPendiente() ? 'Quitar pendiente' : 'Marcar pendiente' }}</button>
 </mat-menu>

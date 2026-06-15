@@ -190,11 +190,14 @@ tabs (Prioritarios / Todos / Asignados a mí / **Generales** / Estadísticas) co
 - **`TicketCard`** ([ticket-card/](src/app/features/tickets/ticket-card/)) presentacional (inputs + outputs,
   sin servicios):
   - **Cabecera**: `#número` + botón **"Crear tarea"** (→ `CardDetailDialog` precargado) + badge de **estado**.
-  - **Cuerpo**: asunto a **2 líneas** (`-webkit-line-clamp`), cliente, badge de **tipo**, y subsección de
-    fechas (📅 ingreso "10 jun 2025" · 🔄 modificación "Hoy 9:42" / "13 jun 16:05").
+    Si el ticket **ya tiene tarea en el board** (`ticketsEnBoard`, derivado de `data.stories()`), el botón
+    se reemplaza por una etiqueta **"en board"**.
+  - **Cuerpo**: asunto a **2 líneas** (`-webkit-line-clamp`), cliente, badge de **tipo**, subsección de
+    fechas (📅 ingreso "10 jun 2025" · 🔄 modificación "Hoy 9:42" / "13 jun 16:05") y **área de nota
+    editable** (clic → textarea inline, no en el menú).
   - **Pie**: avatar (iniciales+color, `colorFor`/`initialsFromName` de board-utils) + **"Ver conversación"**
-    + **menú ⋮** (asignar / cambiar estado / nota / marcar acción ⚑ / pendiente ⏸). La card entera abre la
-    conversación; Crear tarea y ⋮ hacen `stopPropagation`.
+    + **menú ⋮** (asignar / cambiar estado / marcar acción ⚑ / pendiente ⏸). La card entera abre la
+    conversación; Crear tarea, área de nota y ⋮ hacen `stopPropagation`.
   - Colores en [tickets-card-utils.ts](src/app/features/tickets/tickets-card-utils.ts): `estadoStyle`
     (**color por estado real** del catálogo, ≈7 tonos), `tipoStyle` (INCIDENCIA/REQUERIMIENTO/CONSULTA),
     `fmtIngreso`/`fmtMod`. **Solo modo claro** (la app es light-only por el bug de Safari/M3 en `styles.scss`).

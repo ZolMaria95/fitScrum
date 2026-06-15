@@ -135,6 +135,9 @@ export class Tickets implements OnDestroy {
   /** ¿La tab actual ya tiene datos cargados? (para el estado vacío). */
   readonly tabHasData = computed(() => (this.tab() === 'generales' ? this.allTickets().length > 0 : this.tickets().length > 0));
 
+  /** Nº de tickets que ya tienen una tarea creada en el board (ocultan "Crear tarea"). */
+  readonly ticketsEnBoard = computed(() => new Set(this.data.stories().map((s) => String(s.ticket)).filter(Boolean)));
+
   // Opciones de los filtros (sobre el universo de la tab, sin filtrar).
   readonly optClientes = computed(() => [...new Set(this.base().map((t) => t.clienteRaw))].sort());
   readonly optAcciones = computed(() => [...new Set(this.base().map((t) => t.accion))].sort());

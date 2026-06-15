@@ -133,6 +133,7 @@
           [nota]="noteOf(t)"
           [esAccion]="isAction(t)"
           [esPendiente]="isPending(t)"
+          [yaEnBoard]="ticketsEnBoard().has(t.ticket)"
           (verConversacion)="openConversation(t)"
           (crearTarea)="openTicketTask(t)"
           (asignar)="openAssign(t)"

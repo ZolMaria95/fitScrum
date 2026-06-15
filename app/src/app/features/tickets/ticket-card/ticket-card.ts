@@ -24,6 +24,8 @@ export class TicketCard {
   readonly nota = input('');
   readonly esAccion = input(false);
   readonly esPendiente = input(false);
+  /** El ticket ya tiene tarea en el board → se oculta "Crear tarea". */
+  readonly yaEnBoard = input(false);
 
   readonly verConversacion = output<void>();
   readonly crearTarea = output<void>();

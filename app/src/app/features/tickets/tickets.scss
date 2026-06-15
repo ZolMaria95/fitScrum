@@ -36,11 +36,10 @@
 // ── Tabs ──
 .hd-tabs {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap; // envuelven en pantallas chicas, sin scroll
+  gap: 4px 2px;
   border-bottom: 2px solid var(--mat-sys-outline-variant);
   margin-bottom: 14px;
-  overflow-x: auto; // scroll de las tabs en móvil, no de la página
-  -webkit-overflow-scrolling: touch;
 }
 
 .hd-tab {
