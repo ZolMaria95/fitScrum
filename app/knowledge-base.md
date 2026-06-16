@@ -124,8 +124,8 @@ Lazy-loaded bajo `Layout` (`authGuard`); `/` → `/board`.
 
 | Ruta | Estado |
 |---|---|
-| `login`, `board`, `tickets` | **Hecho** |
-| `burndown`, `progreso`, `consultas`, `semanal`, `mi-panel`, `pendientes` | placeholders |
+| `login`, `board`, `tickets`, `semanal` | **Hecho** |
+| `burndown`, `progreso`, `consultas`, `mi-panel`, `pendientes` | placeholders |
 
 ### Shell responsive ([layout/](src/app/layout/)) — menú hamburguesa lateral
 
@@ -253,6 +253,23 @@ filtros (cliente/clasificación/acción/estatus) y búsqueda por número (local 
 
 ---
 
+## 7b. HelpDesk Semanal ([features/semanal/](src/app/features/semanal/))
+
+Port de `js/semanal.js`. **Rotación de soporte por semana** (semanas **Vie→Jue**, relevo el viernes;
+`getWeekFriday`). Reactivo por signals + un `rev` que se incrementa tras mutar (el soporte semanal en
+`DataService` es objeto plano, no signal).
+
+- **Calendario mensual** (`calendarCells`, grid 7×6): cada celda coloreada por consultor; el **viernes**
+  ancla muestra el chip con el nombre corto. Navegación mes anterior/siguiente/Hoy. Clic en celda →
+  selecciona la semana (tickets) y abre el modal de asignación.
+- **Resumen lateral:** semana actual, **tickets resueltos** de la semana seleccionada (alta/baja con
+  `addWeekTicket`/`removeWeekTicket`), **próximas 8 semanas** y **resumen de asignaciones** (conteo por consultor).
+- **Color por consultor:** `PALETTE` de 12 (bg+fg), mapeado por orden de `data.team()` (`colorMap`).
+- **Asignación** (`semanal-assign-dialog/`): consultor (de `data.team()`) + notas; "Quitar asignación".
+  Persiste vía `DataService.setWeekAssignment`/`clearWeekAssignment` (datos en `weeklySupport`).
+
+---
+
 ## 8. Theming, datos y persistencia
 
 - **Tema** ([styles.scss](src/styles.scss) + [_theme-colors.scss](src/_theme-colors.scss)): paleta
@@ -286,8 +303,9 @@ componente: 8 kB / 16 kB en `angular.json`.
 | Login | ✅ |
 | Board (Kanban + sprints + integración Helpdesk) | ✅ |
 | Tickets (grid de cards responsive + conversación + asignación + estados + mensajes) | ✅ |
+| HelpDesk Semanal (rotación de soporte + calendario + tickets resueltos) | ✅ |
 | Catálogos del API (usuarios, clientes, estados) | ✅ |
-| Burndown, Progreso, Consultas, Mi Panel, Semanal, Pendientes | ⏳ placeholders |
+| Burndown, Progreso, Consultas, Mi Panel, Pendientes | ⏳ placeholders |
 | TUsuariosPizza | ❌ se elimina |
 
 ### Mapa legacy → Angular
