@@ -295,9 +295,10 @@ export class HelpdeskService {
         .set('offset', String(pageIndex * pageSize))
         // El API ordena por `<campo>_order=asc|desc` (p. ej. modified_date_order).
         .set(`${sort.field}_order`, sort.dir);
-      // Multi-cliente: se repite el parámetro (client_id=4&client_id=7), convención
-      // de listas de FastAPI (el API corre sobre uvicorn/FastAPI).
-      for (const id of f.clientIds ?? []) params = params.append('client_id', id);
+      // Multi-cliente: el API espera una LISTA separada por comas en un solo
+      // parámetro (client_id=4,5,6), igual que la herramienta del Helpdesk.
+      // (Repetir el parámetro NO sirve: el API se queda con uno solo.)
+      if (f.clientIds?.length) params = params.set('client_id', f.clientIds.join(','));
       if (f.statusId) params = params.set('ticket_status_id', f.statusId);
       if (f.assignedUserId) params = params.set('assigned_user_id', f.assignedUserId);
       const data = await firstValueFrom(this.http.get<any>(`${this.base}/tickets/tickets`, { params }));
