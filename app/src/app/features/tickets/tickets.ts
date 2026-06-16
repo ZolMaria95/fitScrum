@@ -13,18 +13,18 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { DataService } from '../../core/services/data.service';
-import { HelpdeskService } from '../../core/services/helpdesk.service';
+import { HelpdeskService, TicketFilters } from '../../core/services/helpdesk.service';
 import { ShellService } from '../../core/services/shell.service';
 import { CardDetailDialog } from '../board/card-detail-dialog/card-detail-dialog';
 import { TicketMessagesDialog } from './ticket-messages-dialog/ticket-messages-dialog';
 import { AssignTicketDialog } from './assign-ticket-dialog/assign-ticket-dialog';
 import { PendienteDateDialog, PendienteDateResult } from '../pendientes/pendiente-date-dialog/pendiente-date-dialog';
 import { TicketCard } from './ticket-card/ticket-card';
-import { CLASIF_COLOR, CLASIF_ORDER, CLIENTES_VALIDOS, PRIORITY_ACTIONS } from './helpdesk.constants';
+import { CLIENTES_VALIDOS } from './helpdesk.constants';
 import { Ticket } from './ticket-utils';
 
-// Orden de tabs: Pendientes primero (default), Prioritarios al final.
-type Tab = 'pendientes' | 'asignados' | 'generales' | 'prioritarios' | 'estadisticas';
+// Orden de tabs: Pendientes (default) primero, Estadísticas al final.
+type Tab = 'pendientes' | 'asignados' | 'generales' | 'estadisticas';
 
 interface StatRow {
   key: string;
@@ -68,29 +68,26 @@ export class Tickets implements OnDestroy {
   /** Panel de filtros que se publica al drawer del shell. */
   readonly filtersTpl = viewChild<TemplateRef<unknown>>('filtersTpl');
 
-  // Pool único perezoso (12 por página, bajo demanda); las tabs lo filtran.
+  // La consulta filtra server-side; `tickets` es la página actual del API.
   readonly tickets = this.hd.tickets;
   readonly loading = this.hd.loading;
-  readonly hasMore = this.hd.hasMore;
   readonly status = this.hd.status;
   readonly statusNames = this.hd.statusNames;
+  readonly clients = this.hd.clients;
   /** Estados elegibles en el menú: nunca se permite cambiar a ABIERTO. */
   readonly statusOptions = computed(() => this.statusNames().filter((s) => s.trim().toUpperCase() !== 'ABIERTO'));
-  readonly CLASIF_COLOR = CLASIF_COLOR;
 
   // ── Estado de la vista ──
   readonly tab = signal<Tab>('pendientes');
-  readonly filterCliente = signal('');
-  readonly filterAccion = signal('');
-  readonly filterClasif = signal('');
-  readonly filterEstatus = signal('');
+  readonly filterCliente = signal(''); // client_id (server-side); '' = todos
+  readonly filterEstatus = signal(''); // nombre de estado (server-side); '' = todos
   readonly filterTicket = signal('');
   readonly remoteResult = signal<Ticket | null>(null);
   readonly sortCol = signal('fechaUltimoMensaje');
   readonly sortDir = signal<'asc' | 'desc' | ''>('desc');
   private searchTimer: any = null;
 
-  // Paginación por páginas: se renderiza SOLO la página actual (reduce scroll/DOM).
+  // Paginación server-side: cada página = una consulta con su offset; `total` del API.
   readonly pageIndex = signal(0);
   readonly pageSize = signal(12);
 
@@ -100,13 +97,14 @@ export class Tickets implements OnDestroy {
   readonly pendientes = signal(this.data.getHdPendientes());
 
   constructor() {
-    // Catálogo de estados (para el menú de cambio de estado de cada card).
+    // Catálogos del API: estados (menú de cambio de estado) y clientes (filtro Cliente).
     this.hd.getTicketStatuses();
+    this.hd.getClients();
     // Publica los filtros de esta vista en el drawer del shell.
     effect(() => this.shell.setFilters(this.filtersTpl() ?? null));
-    // Auto-consulta al entrar a Tickets (solo si el pool aún está vacío; para
-    // recargar a propósito está el botón de refrescar, siempre visible).
-    if (!this.hd.tickets().length && !this.hd.loading()) this.refresh();
+    // Consulta fresca al entrar (el servicio es singleton y pudo quedar una página
+    // de una consulta anterior). El botón ↻ vuelve a llamar a refresh().
+    this.refresh();
   }
 
   ngOnDestroy(): void {
@@ -117,100 +115,65 @@ export class Tickets implements OnDestroy {
     return String(this.auth.session()?.id || '').trim().toUpperCase();
   }
 
-  /** Tickets operativos: clientes válidos y no finalizados (Prioritarios/Pendientes/Asignados). */
+  /** Tickets operativos: clientes válidos y no finalizados (refinamiento de Pendientes). */
   private readonly operativos = computed(() =>
     this.tickets().filter((t) => CLIENTES_VALIDOS.has(t.clienteRaw) && !esFinalizado(t)),
   );
 
   // ── Conjunto base según la tab / búsqueda ──
+  // Cliente/Estatus/Asignado ya vienen filtrados del API. Aquí solo el refinamiento
+  // derivado de Pendientes (operativos), que la API no expresa como parámetro.
   private readonly base = computed<Ticket[]>(() => {
-    const remote = this.remoteResult();
-    if (remote) return [remote];
-    if (this.filterTicket()) return this.tickets(); // búsqueda por nº: todo el pool
-    const tab = this.tab();
-    if (tab === 'generales') return this.tickets();
-    const ops = this.operativos();
-    if (tab === 'asignados') return ops.filter((t) => t.usuarioAsignado === this.myId);
-    if (tab === 'prioritarios') return ops.filter((t) => PRIORITY_ACTIONS.has(t.accion));
-    return ops; // pendientes
+    if (this.remoteResult()) return [this.remoteResult()!];
+    if (this.filterTicket()) return this.tickets();
+    if (this.tab() === 'pendientes') return this.operativos();
+    return this.tickets(); // asignados (server-side) / generales
   });
 
-  readonly counts = computed(() => {
-    const ops = this.operativos();
-    const uid = this.myId;
-    return {
-      pendientes: ops.length,
-      asignados: uid ? ops.filter((t) => t.usuarioAsignado === uid).length : 0,
-      prio: ops.filter((t) => PRIORITY_ACTIONS.has(t.accion)).length,
-      generales: this.tickets().length,
-    };
-  });
-
-  /** Total del universo de la tab actual (denominador de "X de Y"). */
-  readonly tabTotal = computed(() => this.base().length);
-  /** ¿El pool ya tiene datos cargados? (para el estado vacío). */
+  /** Total server-side de la consulta actual (denominador de "X de Y"). */
+  readonly tabTotal = computed(() => this.hd.total());
+  /** ¿Hay datos cargados? (para el estado vacío). */
   readonly tabHasData = computed(() => this.tickets().length > 0);
 
   /** Nº de tickets que ya tienen una tarea creada en el board (ocultan "Crear tarea"). */
   readonly ticketsEnBoard = computed(() => new Set(this.data.stories().map((s) => String(s.ticket)).filter(Boolean)));
 
-  // Opciones de los filtros (sobre el universo de la tab, sin filtrar).
-  readonly optClientes = computed(() => [...new Set(this.base().map((t) => t.clienteRaw))].sort());
-  readonly optAcciones = computed(() => [...new Set(this.base().map((t) => t.accion))].sort());
-  readonly optClasifs = computed(() => CLASIF_ORDER.filter((c) => this.base().some((t) => t.clasificacion === c)));
-  readonly optEstatus = computed(() => [...new Set(this.base().map((t) => t.estatus).filter(Boolean))].sort());
+  // Opciones de los filtros server-side, desde los CATÁLOGOS del API (no de la página
+  // cargada): así se puede elegir cualquier cliente/estatus, no solo los visibles.
+  readonly optClientes = computed(() => this.clients()); // {id, name}[]
+  readonly optEstatus = computed(() => [...this.statusNames()].sort());
 
   // Búsqueda dentro de cada filtro (selects con muchas opciones).
   readonly buscarCliente = signal('');
-  readonly buscarAccion = signal('');
-  readonly buscarClasif = signal('');
   readonly buscarEstatus = signal('');
   private fOpt(list: string[], term: string): string[] {
     const t = term.trim().toLowerCase();
     return t ? list.filter((x) => x.toLowerCase().includes(t)) : list;
   }
-  readonly optClientesF = computed(() => this.fOpt(this.optClientes(), this.buscarCliente()));
-  readonly optAccionesF = computed(() => this.fOpt(this.optAcciones(), this.buscarAccion()));
-  readonly optClasifsF = computed(() => this.fOpt(this.optClasifs(), this.buscarClasif()));
+  readonly optClientesF = computed(() => {
+    const t = this.buscarCliente().trim().toLowerCase();
+    const list = this.optClientes();
+    return t ? list.filter((c) => c.name.toLowerCase().includes(t)) : list;
+  });
   readonly optEstatusF = computed(() => this.fOpt(this.optEstatus(), this.buscarEstatus()));
 
   readonly rows = computed<Ticket[]>(() => {
     let base = this.base();
-    if (!this.remoteResult()) {
-      const cli = this.filterCliente(), acc = this.filterAccion(), cla = this.filterClasif();
-      const est = this.filterEstatus(), tic = this.filterTicket();
-      base = base.filter(
-        (t) =>
-          (!cli || t.clienteRaw === cli) &&
-          (!acc || t.accion === acc) &&
-          (!cla || t.clasificacion === cla) &&
-          (!est || t.estatus === est) &&
-          (!tic || String(t.ticket).includes(tic)),
-      );
-    }
+    const tic = this.filterTicket();
+    if (tic && !this.remoteResult()) base = base.filter((t) => String(t.ticket).includes(tic));
     return this.sortRows(base);
   });
 
   readonly hasFilters = computed(
-    () => !!(this.filterCliente() || this.filterAccion() || this.filterClasif() || this.filterEstatus() || this.filterTicket() || this.remoteResult()),
+    () => !!(this.filterCliente() || this.filterEstatus() || this.filterTicket() || this.remoteResult()),
   );
 
-  // ── Paginación ──
-  /** Página actual. Mientras el pool tenga más, no se recorta (la página se llena
-   *  al paginar con `ensureLoadedFor`); ya sin más, se acota al último real. */
-  readonly clampedPageIndex = computed(() => {
-    if (this.hasMore()) return this.pageIndex();
-    const pages = Math.max(1, Math.ceil(this.rows().length / this.pageSize()));
-    return Math.min(this.pageIndex(), pages - 1);
-  });
-  /** Solo las filas de la página actual (lo único que se renderiza). */
-  readonly pagedRows = computed<Ticket[]>(() => {
-    const start = this.clampedPageIndex() * this.pageSize();
-    return this.rows().slice(start, start + this.pageSize());
-  });
-  /** Longitud del paginador: filas reales + una página extra mientras haya más
-   *  en el pool (para habilitar "Siguiente", que dispara la carga). */
-  readonly paginatorLength = computed(() => this.rows().length + (this.hasMore() ? this.pageSize() : 0));
+  // ── Paginación server-side ──
+  // La página ya viene paginada del API; no se recorta en el cliente. El paginador
+  // usa el `total` del API; en Pendientes la página puede mostrar menos por el
+  // refinamiento de operativos.
+  readonly pagedRows = computed<Ticket[]>(() => this.rows());
+  readonly paginatorLength = computed(() => this.hd.total());
 
   readonly stats = computed(() => {
     const all = this.operativos();
@@ -220,7 +183,7 @@ export class Tickets implements OnDestroy {
       all.forEach((t) => m.set(sel(t), (m.get(sel(t)) || 0) + 1));
       return m;
     };
-    const toRows = (m: Map<string, number>, useColor: boolean): StatRow[] =>
+    const toRows = (m: Map<string, number>): StatRow[] =>
       [...m.entries()]
         .filter(([, v]) => v > 0)
         .sort((a, b) => b[1] - a[1])
@@ -228,13 +191,12 @@ export class Tickets implements OnDestroy {
           key,
           count,
           pct: total ? ((count / total) * 100).toFixed(1) + '%' : '0%',
-          color: useColor ? CLASIF_COLOR[key] || '#757575' : 'inherit',
+          color: 'inherit',
         }));
     return {
       total,
-      porClasif: toRows(acc((t) => t.clasificacion), true),
-      porCliente: toRows(acc((t) => t.clienteRaw), false),
-      porEstatus: toRows(acc((t) => t.estatus), false),
+      porCliente: toRows(acc((t) => t.clienteRaw)),
+      porEstatus: toRows(acc((t) => t.estatus)),
     };
   });
 
@@ -255,47 +217,67 @@ export class Tickets implements OnDestroy {
   }
 
   // ── Acciones ──
-  /** Recarga el pool desde la primera página (botón refrescar / auto-consulta). */
+  /** Filtros server-side desde la tab + filtros activos. */
+  private buildFilters(): TicketFilters {
+    const f: TicketFilters = {};
+    if (this.filterCliente()) f.clientId = this.filterCliente();
+    if (this.filterEstatus()) f.statusId = this.hd.statusIdOf(this.filterEstatus());
+    if (this.tab() === 'asignados') f.assignedUserId = this.myId;
+    return f;
+  }
+
+  /** Consulta la página actual: filtrada server-side, o carga amplia para Estadísticas. */
+  private async query(): Promise<void> {
+    if (this.tab() === 'estadisticas') {
+      await this.hd.loadAll();
+      return;
+    }
+    await this.hd.loadFiltered(this.buildFilters(), this.pageIndex(), this.pageSize());
+  }
+
+  /** Recarga desde la primera página (botón refrescar / auto-consulta al entrar). */
   async refresh(): Promise<void> {
     this.pageIndex.set(0);
-    await this.hd.refresh();
-    await this.ensureLoadedFor(0);
+    await this.query();
   }
 
   async setTab(t: Tab): Promise<void> {
+    if (t === this.tab()) return;
     this.tab.set(t);
     this.pageIndex.set(0);
-    await this.ensureLoadedFor(0); // llena la primera página de la tab abierta
+    await this.query();
   }
 
-  /** Navegación del paginador: trae más páginas del pool si la página pedida falta. */
+  /** Navegación del paginador: trae la página pedida del API (una consulta). */
   async onPage(e: PageEvent): Promise<void> {
     this.pageSize.set(e.pageSize);
     this.pageIndex.set(e.pageIndex);
-    await this.ensureLoadedFor(e.pageIndex);
+    await this.query();
   }
 
-  /** Carga páginas del pool hasta llenar la página `pageIndex` de la tab actual
-   *  (o hasta agotar el pool / tope de seguridad). */
-  private async ensureLoadedFor(pageIndex: number): Promise<void> {
-    const need = (pageIndex + 1) * this.pageSize();
-    while (this.rows().length < need && this.hasMore() && !this.loading() && this.tickets().length < 400) {
-      await this.hd.loadMore();
-    }
+  /** Cambio del filtro de Cliente (client_id) → reconsulta desde la página 0. */
+  async onClienteChange(clientId: string): Promise<void> {
+    this.filterCliente.set(clientId);
+    this.pageIndex.set(0);
+    await this.query();
   }
 
-  clearFilters(): void {
+  /** Cambio del filtro de Estatus → reconsulta desde la página 0. */
+  async onEstatusChange(estatus: string): Promise<void> {
+    this.filterEstatus.set(estatus);
+    this.pageIndex.set(0);
+    await this.query();
+  }
+
+  async clearFilters(): Promise<void> {
     this.filterCliente.set('');
-    this.filterAccion.set('');
-    this.filterClasif.set('');
     this.filterEstatus.set('');
     this.filterTicket.set('');
     this.remoteResult.set(null);
     this.buscarCliente.set('');
-    this.buscarAccion.set('');
-    this.buscarClasif.set('');
     this.buscarEstatus.set('');
     this.pageIndex.set(0);
+    await this.query();
   }
 
   onSearchInput(value: string): void {

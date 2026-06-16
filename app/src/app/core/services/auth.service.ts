@@ -46,7 +46,7 @@ export class AuthService {
       body: JSON.stringify({ username_or_email: usernameOrEmail, password, force_logout: 'true' }),
     });
     if (!r.ok) throw new Error(`Login fallido (${r.status}): ${await r.text()}`);
-    const { access_token } = await r.json();
+    const { access_token, refresh_token } = await r.json();
 
     const me = await fetch(`${this.base}/users/me`, { headers: { Authorization: `Bearer ${access_token}` } });
     if (!me.ok) throw new Error(`No se pudo cargar el perfil (${me.status})`);
@@ -61,6 +61,7 @@ export class AuthService {
       color: local?.color || this.colorFor(profile.user_id),
       email: profile.email || '',
       token: access_token,
+      refreshToken: refresh_token || '',
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     this._session.set(session);
@@ -83,11 +84,48 @@ export class AuthService {
     this._session.set(null);
   }
 
+  private refreshPromise: Promise<string | null> | null = null;
+
   /**
-   * Verifica que la sesión siga válida contra el API (GET /users/me). Si el token
-   * expiró/no existe (401/403) limpia la sesión y devuelve false. Ante errores de
-   * red devuelve true (no podemos afirmar que expiró). Útil antes de abrir vistas
-   * que dependen del API (p. ej. la conversación de un ticket).
+   * Renueva el access_token con el refresh_token (POST /auth/refresh). Las llamadas
+   * concurrentes comparten la misma petición (dedupe), así varios 401 simultáneos
+   * disparan un solo refresh. Devuelve el nuevo access_token, o null si el
+   * refresh_token venció/falta (→ hay que volver a iniciar sesión).
+   */
+  refreshSession(): Promise<string | null> {
+    return (this.refreshPromise ??= this.doRefresh().finally(() => (this.refreshPromise = null)));
+  }
+
+  private async doRefresh(): Promise<string | null> {
+    const rt = this._session()?.refreshToken;
+    if (!rt) return null;
+    try {
+      const r = await fetch(`${this.base}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+      if (!r.ok) return null;
+      const data = await r.json();
+      const access: string | undefined = data?.access_token;
+      const cur = this._session();
+      if (!access || !cur) return null;
+      // El API rota el refresh_token: si trae uno nuevo lo guardamos, si no, mantenemos el actual.
+      const next: Session = { ...cur, token: access, refreshToken: data.refresh_token || rt };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(next));
+      this._session.set(next);
+      return access;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Verifica que la sesión siga válida contra el API (GET /users/me). Si el
+   * access_token venció (401) intenta renovarlo con el refresh_token; solo si eso
+   * falla (o es 403) limpia la sesión y devuelve false. Ante errores de red devuelve
+   * true (no podemos afirmar que expiró). Útil antes de abrir vistas que dependen
+   * del API (p. ej. la conversación de un ticket).
    */
   async verifySession(): Promise<boolean> {
     const t = this.token;
@@ -95,6 +133,8 @@ export class AuthService {
     try {
       const r = await fetch(`${this.base}/users/me`, { headers: { Authorization: `Bearer ${t}` } });
       if (r.status === 401 || r.status === 403) {
+        // access_token vencido: intentar renovarlo con el refresh_token antes de rendirse.
+        if (r.status === 401 && (await this.refreshSession())) return true;
         this.clearSession();
         return false;
       }

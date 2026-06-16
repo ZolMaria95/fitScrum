@@ -45,9 +45,10 @@ export class MiPanel {
   noteDraft = '';
 
   constructor() {
-    // El dashboard necesita el panorama: carga amplia si el pool está vacío.
+    // El dashboard necesita el panorama completo. Carga amplia siempre: la vista
+    // Tickets pudo dejar una página filtrada (server-side) en el servicio compartido.
     this.data.ensureInit();
-    if (!this.hd.tickets().length) this.hd.loadAll();
+    this.hd.loadAll();
   }
 
   refresh(): void {

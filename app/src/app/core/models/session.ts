@@ -6,7 +6,8 @@ export interface Session {
   apiRole: string;   // role_description autoritativo del Helpdesk (permisos)
   color: string;     // color de avatar
   email: string;
-  token: string;     // access_token del Helpdesk
+  token: string;        // access_token del Helpdesk (vida corta)
+  refreshToken: string; // refresh_token del Helpdesk (vida larga) → renueva el access_token
 }
 
 // Perfil crudo devuelto por GET /users/me del Helpdesk.

@@ -38,6 +38,13 @@ export interface HdClient {
   name: string;
 }
 
+/** Filtros server-side de la consulta de tickets (los acepta el API). */
+export interface TicketFilters {
+  clientId?: string;
+  statusId?: string;
+  assignedUserId?: string;
+}
+
 const HD_CLIENTS_LS_KEY = 'fit-daily_hd_clients';
 const HD_STATUS_LS_KEY = 'fit-daily_hd_statuses';
 
@@ -69,14 +76,17 @@ export class HelpdeskService {
   readonly clients = this._clients.asReadonly();
   private clientsPromise: Promise<HdClient[]> | null = null;
 
-  // ── Tickets: pool ÚNICO, PEREZOSO (todas las tabs) ──
-  // Se carga por página de 12, bajo demanda, y SIN mensajes (los mensajes se piden
-  // solo al abrir la conversación). Todos los clientes; las tabs filtran este pool
-  // en el componente (las operativas a CLIENTES_VALIDOS) y `ensureLoadedFor` pide
-  // más páginas si el filtro deja la página actual corta.
+  // ── Tickets ──
+  // `loadFiltered` consulta UNA página filtrada server-side (client_id /
+  // ticket_status_id / assigned_user_id) y deja `_tickets` = esa página + `_total`
+  // (para paginar bien). `loadAll`/`loadMore` traen el panorama amplio sin filtro
+  // (los usan Mi Panel y la tab Estadísticas). SIN mensajes (se piden al abrir la
+  // conversación). Los refinamientos derivados (operativos) los hace el componente.
   private static readonly PAGE_SIZE = 12;
   private readonly _tickets = signal<Ticket[]>([]);
   readonly tickets = this._tickets.asReadonly();
+  private readonly _total = signal(0);
+  readonly total = this._total.asReadonly(); // total server-side de la consulta actual
   readonly loading = signal(false);
   readonly hasMore = signal(false);
   readonly status = signal<{ msg: string; type: 'idle' | 'loading' | 'ok' | 'error' }>({ msg: '', type: 'idle' });
@@ -264,6 +274,39 @@ export class HelpdeskService {
     }
   }
 
+  /**
+   * Consulta UNA página de tickets filtrada server-side (client_id /
+   * ticket_status_id / assigned_user_id) y la deja como resultado actual + `total`
+   * (para paginar). Esta es la consulta de la vista Tickets: el filtro va EN la
+   * petición al API, no se trae todo para filtrar en el navegador.
+   */
+  async loadFiltered(f: TicketFilters, pageIndex: number, pageSize: number): Promise<void> {
+    if (this.loading()) return;
+    this.loading.set(true);
+    this.setStatus('Cargando tickets...', 'loading');
+    try {
+      let params = new HttpParams()
+        .set('limit', String(pageSize))
+        .set('offset', String(pageIndex * pageSize))
+        .set('modified_date_order', 'desc');
+      if (f.clientId) params = params.set('client_id', f.clientId);
+      if (f.statusId) params = params.set('ticket_status_id', f.statusId);
+      if (f.assignedUserId) params = params.set('assigned_user_id', f.assignedUserId);
+      const data = await firstValueFrom(this.http.get<any>(`${this.base}/tickets/tickets`, { params }));
+      const items: Ticket[] = (data?.items || []).map(mapTicket).map(evaluarFechas).map(clasificar);
+      this._tickets.set(items);
+      this._total.set(Number(data?.total ?? items.length));
+      this.hasMore.set((pageIndex + 1) * pageSize < this._total());
+      this.setStatus(`✓ ${this._total()} tickets`, 'ok');
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const esRed = /fetch|failed|load failed|network|0/i.test(msg);
+      this.setStatus(esRed ? 'No se pudo conectar al API.' : `Error: ${msg}`, 'error');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   /** Mensajes crudos de un ticket. */
   async fetchMessages(ticketId: string): Promise<any[]> {
     try {
@@ -399,6 +442,11 @@ export class HelpdeskService {
   /** Catálogo de estados del API: { 'EN PROCESO': '003', ... }. Consulta + cache. */
   getTicketStatuses(): Promise<Record<string, string>> {
     return (this.statusesPromise ??= this.fetchAllStatuses());
+  }
+
+  /** ticket_status_id de un estado por su nombre (para filtrar server-side). */
+  statusIdOf(name: string): string | undefined {
+    return this.statusMap[(name || '').trim().toUpperCase()];
   }
 
   private async fetchAllStatuses(): Promise<Record<string, string>> {

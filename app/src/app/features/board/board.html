@@ -46,12 +46,12 @@
     <div class="assignee-filter">
       <span class="filter-label">Asignado a:</span>
       <mat-form-field appearance="outline" class="assignee-select" subscriptSizing="dynamic">
-        <mat-label>Empleados</mat-label>
+        <mat-label>Consultores</mat-label>
         <mat-select multiple [value]="selectedAssignees()" (selectionChange)="onAssigneeSelectChange($event.value)" (closed)="buscarAsignado.set('')">
           <div class="sel-head" (click)="$event.stopPropagation()">
             <div class="sel-head-search">
               <mat-icon>search</mat-icon>
-              <input [value]="buscarAsignado()" (input)="buscarAsignado.set($any($event.target).value)" (keydown)="$event.stopPropagation()" placeholder="Buscar empleado…" />
+              <input [value]="buscarAsignado()" (input)="buscarAsignado.set($any($event.target).value)" (keydown)="$event.stopPropagation()" placeholder="Buscar consultor…" />
             </div>
             <button type="button" class="sel-head-all" (click)="toggleAllAssignees(); $event.stopPropagation()">
               {{ allAssigneesSelected() ? 'Quitar todos' : 'Seleccionar todos' }}

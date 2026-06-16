@@ -1,5 +1,5 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withHashLocation } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { MAT_DATE_LOCALE, provideNativeDateAdapter } from '@angular/material/core';
 
@@ -11,7 +11,9 @@ import { helpdeskAuthInterceptor } from './core/interceptors/helpdesk-auth.inter
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
+    // Hash routing (#/ruta): GitHub Pages sirve el Angular en subcarpeta y, sin
+    // fallback SPA, las rutas por path darían 404 al refrescar. El hash lo evita.
+    provideRouter(routes, withHashLocation()),
     provideHttpClient(withInterceptors([helpdeskAuthInterceptor])),
     // Datepicker de Material en es-ES (formato dd/mm/yyyy).
     provideNativeDateAdapter(),
