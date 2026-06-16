@@ -239,6 +239,31 @@ export class HelpdeskService {
     }
   }
 
+  /** Carga un set amplio en paralelo (6 páginas de 40, SIN mensajes) en el pool.
+   *  Para dashboards que necesitan el panorama completo (p. ej. Mi Panel). */
+  async loadAll(): Promise<void> {
+    if (this.loading()) return;
+    this.loading.set(true);
+    this.setStatus('Cargando tickets...', 'loading');
+    try {
+      const SIZE = 40;
+      const offsets = [0, 40, 80, 120, 160, 200];
+      const pages = await Promise.all(offsets.map((o) => this.fetchPage(o, SIZE)));
+      const raw = pages.flat();
+      const tickets = raw.map(mapTicket).map(evaluarFechas).map(clasificar);
+      this._tickets.set(tickets);
+      this.offset = offsets.length * SIZE;
+      this.hasMore.set(pages[pages.length - 1].length === SIZE);
+      this.setStatus(`✓ ${tickets.length} tickets`, 'ok');
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const esRed = /fetch|failed|load failed|network|0/i.test(msg);
+      this.setStatus(esRed ? 'No se pudo conectar al API.' : `Error: ${msg}`, 'error');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   /** Mensajes crudos de un ticket. */
   async fetchMessages(ticketId: string): Promise<any[]> {
     try {
