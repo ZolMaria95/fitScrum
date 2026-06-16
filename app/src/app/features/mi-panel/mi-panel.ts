@@ -93,8 +93,8 @@ export class MiPanel {
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()),
   );
 
-  // ── Bloque 4: Por asignar (tareas en To Do) ──
-  readonly porAsignar = computed<Story[]>(() => this.data.stories().filter((s) => s.status === 'todo'));
+  // ── Bloque 4: Por asignar (tareas en To Do SIN asignado en el board) ──
+  readonly porAsignar = computed<Story[]>(() => this.data.stories().filter((s) => s.status === 'todo' && !s.assignee));
 
   // ── Helpers de stories ──
   memberOf(id: string | null) { return id ? this.data.getMember(id) : undefined; }

@@ -280,7 +280,7 @@ Port de `js/sol-panel.js`. Dashboard del **Scrum Master** (ruta con `solGuard`).
 2. **Notificar al cliente** — tickets `clasificacion === 'CLIENTE PENDIENTE' && diasSinMovimiento >= 3`;
    cada card permite **nota de seguimiento** (`solNotes`, `getSolNotes`/`setSolNote`).
 3. **Próximos a vencer** — stories no-Done con `dueDate` en ≤3 días (incl. vencidas); clic abre `CardDetailDialog`.
-4. **Por asignar** — stories en To Do; botón **Asignar** abre `CardDetailDialog`.
+4. **Por asignar** — stories en To Do **sin asignado** (`!s.assignee`); botón **Asignar** abre `CardDetailDialog`.
 
 Lee el **pool de tickets** (`hd.tickets()`); al entrar hace `hd.loadAll()` (carga amplia en paralelo, sin
 mensajes) si está vacío + botón **↻**. Mapas planos (`hdActions`/`hdNotes`/`solNotes`) en signals locales que
