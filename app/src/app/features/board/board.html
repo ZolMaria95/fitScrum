@@ -117,6 +117,12 @@
     </div>
   }
 
+  <mat-form-field appearance="outline" class="ticket-search" subscriptSizing="dynamic">
+    <mat-label>N° ticket</mat-label>
+    <input matInput [value]="ticketSearch()" (input)="ticketSearch.set($any($event.target).value)" inputmode="numeric" placeholder="Buscar ticket…" />
+    <mat-icon matSuffix>search</mat-icon>
+  </mat-form-field>
+
   <span class="spacer"></span>
 
   <button mat-flat-button color="primary" (click)="openNew()">

@@ -9,6 +9,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -62,6 +63,7 @@ interface Column {
     MatButtonToggleModule,
     MatChipsModule,
     MatFormFieldModule,
+    MatInputModule,
     MatSelectModule,
     MatCheckboxModule,
     MatIconModule,
@@ -133,6 +135,7 @@ export class Board {
   readonly priorityFilter = signal<PriorityFilter>('all');
   readonly activeClients = signal<Set<string>>(new Set());
   readonly activeAssignees = signal<Set<string>>(new Set());
+  readonly ticketSearch = signal('');
 
   // ── Permisos ──
   readonly puedeGestionarTodo = this.auth.puedeGestionarTodo;
@@ -210,10 +213,12 @@ export class Board {
     const prio = this.priorityFilter();
     const clients = this.activeClients();
     const assignees = this.activeAssignees();
+    const tic = this.ticketSearch().trim();
     const filtered = this.visibleStories().filter((s) => {
       if (prio !== 'all' && s.priority !== prio) return false;
       if (clients.size > 0 && !(s.client && clients.has(s.client))) return false;
       if (assignees.size > 0 && !(!s.assignee || assignees.has(s.assignee))) return false;
+      if (tic && !(s.ticket && String(s.ticket).includes(tic))) return false;
       return true;
     });
     return STATUSES.map((status) => ({

@@ -124,8 +124,8 @@ Lazy-loaded bajo `Layout` (`authGuard`); `/` → `/board`.
 
 | Ruta | Estado |
 |---|---|
-| `login`, `board`, `tickets`, `semanal` | **Hecho** |
-| `burndown`, `progreso`, `consultas`, `mi-panel`, `pendientes` | placeholders |
+| `login`, `board`, `tickets`, `semanal`, `mi-panel` | **Hecho** |
+| `burndown`, `progreso`, `consultas`, `pendientes` | placeholders |
 
 ### Shell responsive ([layout/](src/app/layout/)) — menú hamburguesa lateral
 
@@ -156,7 +156,7 @@ badge, avatar = **código de usuario** (igual que los filtros).
 - **`sprint-dialog/`** — crear/editar/borrar sprint.
 - **`confirm-dialog/`** — confirmación reutilizable (variante "escribí BORRAR").
 
-**Funciona:** drag&drop (CDK) con permisos + WIP, filtros (prioridad/asignado/cliente), progreso,
+**Funciona:** drag&drop (CDK) con permisos + WIP, filtros (prioridad/asignado/cliente/**N° ticket**), progreso,
 certificar, esperando cliente, borrar card / Borrar Board. **Regla:** una tarea que salió de To Do
 **no puede volver** (drag y modal). Las done-finalizadas **salen del board a los 2 días**.
 **Permiso `puedeOperar(card)`** (mover la tarea por drag + marcar sus checks): el **asignado**, el
@@ -270,6 +270,22 @@ Port de `js/semanal.js`. **Rotación de soporte por semana** (semanas **Vie→Ju
 
 ---
 
+## 7c. Mi Panel ([features/mi-panel/](src/app/features/mi-panel/))
+
+Port de `js/sol-panel.js`. Dashboard del **Scrum Master** (ruta con `solGuard`). 4 KPIs + 4 bloques:
+1. **Acciones pendientes** — tickets del pool marcados con Acción (`hdActions`); botón **"Realizado ✓"**
+   quita la marca (`setHdAction(false)`). Muestra la nota HD (`hdNotes`).
+2. **Notificar al cliente** — tickets `clasificacion === 'CLIENTE PENDIENTE' && diasSinMovimiento >= 3`;
+   cada card permite **nota de seguimiento** (`solNotes`, `getSolNotes`/`setSolNote`).
+3. **Próximos a vencer** — stories no-Done con `dueDate` en ≤3 días (incl. vencidas); clic abre `CardDetailDialog`.
+4. **Por asignar** — stories en To Do; botón **Asignar** abre `CardDetailDialog`.
+
+Lee el **pool de tickets** (`hd.tickets()`); al entrar hace `hd.loadAll()` (carga amplia en paralelo, sin
+mensajes) si está vacío + botón **↻**. Mapas planos (`hdActions`/`hdNotes`/`solNotes`) en signals locales que
+se re-setean tras mutar; stories/team/clients ya son signals.
+
+---
+
 ## 8. Theming, datos y persistencia
 
 - **Tema** ([styles.scss](src/styles.scss) + [_theme-colors.scss](src/_theme-colors.scss)): paleta
@@ -304,8 +320,9 @@ componente: 8 kB / 16 kB en `angular.json`.
 | Board (Kanban + sprints + integración Helpdesk) | ✅ |
 | Tickets (grid de cards responsive + conversación + asignación + estados + mensajes) | ✅ |
 | HelpDesk Semanal (rotación de soporte + calendario + tickets resueltos) | ✅ |
+| Mi Panel (dashboard Scrum Master: KPIs + acciones/cliente-pendiente/vencer/asignar) | ✅ |
 | Catálogos del API (usuarios, clientes, estados) | ✅ |
-| Burndown, Progreso, Consultas, Mi Panel, Pendientes | ⏳ placeholders |
+| Burndown, Progreso, Consultas, Pendientes | ⏳ placeholders |
 | TUsuariosPizza | ❌ se elimina |
 
 ### Mapa legacy → Angular
