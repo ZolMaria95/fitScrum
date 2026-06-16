@@ -26,6 +26,8 @@ export class TicketCard {
   readonly esPendiente = input(false);
   /** El ticket ya tiene tarea en el board → se oculta "Crear tarea". */
   readonly yaEnBoard = input(false);
+  /** Muestra el badge de "días sin movimiento" (lo usa Mi Panel). */
+  readonly mostrarDias = input(false);
 
   readonly verConversacion = output<void>();
   readonly crearTarea = output<void>();

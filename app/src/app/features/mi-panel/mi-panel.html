@@ -49,21 +49,24 @@
   </div>
 
   @if (acciones().length) {
-    <div class="mp-table-wrap">
-      <table class="mp-table">
-        <thead><tr><th>Ticket</th><th>Cliente</th><th>Asunto</th><th>Nota</th><th></th></tr></thead>
-        <tbody>
-          @for (t of acciones(); track t.ticket) {
-            <tr>
-              <td class="mono crimson-tx">#{{ t.ticket }}</td>
-              <td class="b">{{ t.clienteRaw }}</td>
-              <td class="asunto">{{ t.asunto }}</td>
-              <td class="nota">{{ hdNoteOf(t.ticket) || '—' }}</td>
-              <td><button mat-flat-button color="primary" class="sm" (click)="realizado(t.ticket)">Realizado ✓</button></td>
-            </tr>
-          }
-        </tbody>
-      </table>
+    <div class="mp-ticket-grid">
+      @for (t of acciones(); track t.ticket) {
+        <app-ticket-card
+          [ticket]="t"
+          [statusOptions]="statusOptions()"
+          [nota]="noteOf(t)"
+          [esAccion]="isAction(t)"
+          [esPendiente]="isPending(t)"
+          [yaEnBoard]="ticketsEnBoard().has(t.ticket)"
+          [mostrarDias]="true"
+          (verConversacion)="openConversation(t)"
+          (crearTarea)="openTicketTask(t)"
+          (asignar)="openAssign(t)"
+          (cambiarEstado)="changeStatus(t, $event)"
+          (guardarNota)="onGuardarNota(t, $event)"
+          (toggleAccion)="toggleAction(t)"
+          (togglePendiente)="togglePending(t)" />
+      }
     </div>
   } @else {
     <div class="mp-empty">✓ Sin acciones pendientes.</div>
@@ -82,34 +85,23 @@
   </div>
 
   @if (clientePendiente().length) {
-    <div class="mp-cards">
+    <div class="mp-ticket-grid">
       @for (t of clientePendiente(); track t.ticket) {
-        <div class="mp-card amber" [class.urgent]="t.diasSinMovimiento > 7">
-          <div class="mp-card-top">
-            <span class="badge-ticket">#{{ t.ticket }}</span>
-            <span class="badge-days" [class.critical]="t.diasSinMovimiento > 7">{{ t.diasSinMovimiento }}d</span>
-          </div>
-          <div class="mp-card-client">{{ t.clienteRaw }}</div>
-          <div class="mp-card-title">{{ t.asunto }}</div>
-          @if (t.ultimoMensaje) { <div class="mp-card-msg">{{ trunc(t.ultimoMensaje, 100) }}</div> }
-
-          @if (editingNote() === t.ticket) {
-            <div class="mp-note-edit">
-              <textarea [(ngModel)]="noteDraft" rows="2" placeholder="Nota sobre el seguimiento con el cliente…"></textarea>
-              <div class="mp-note-actions">
-                <button mat-flat-button color="primary" class="sm" (click)="saveNote(t.ticket)">Guardar</button>
-                <button mat-button class="sm" (click)="cancelNote()">Cancelar</button>
-              </div>
-            </div>
-          } @else if (solNoteOf(t.ticket)) {
-            <div class="mp-note-saved">
-              <span class="mp-note-text" [title]="solNoteOf(t.ticket)">📝 {{ solNoteOf(t.ticket) }}</span>
-              <button class="mp-note-link" (click)="startNote(t.ticket)">Editar</button>
-            </div>
-          } @else {
-            <button class="mp-note-link add" (click)="startNote(t.ticket)">+ Agregar nota</button>
-          }
-        </div>
+        <app-ticket-card
+          [ticket]="t"
+          [statusOptions]="statusOptions()"
+          [nota]="noteOf(t)"
+          [esAccion]="isAction(t)"
+          [esPendiente]="isPending(t)"
+          [yaEnBoard]="ticketsEnBoard().has(t.ticket)"
+          [mostrarDias]="true"
+          (verConversacion)="openConversation(t)"
+          (crearTarea)="openTicketTask(t)"
+          (asignar)="openAssign(t)"
+          (cambiarEstado)="changeStatus(t, $event)"
+          (guardarNota)="onGuardarNota(t, $event)"
+          (toggleAccion)="toggleAction(t)"
+          (togglePendiente)="togglePending(t)" />
       }
     </div>
   } @else {

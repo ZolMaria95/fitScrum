@@ -1,0 +1,308 @@
+================================================================================
+                INFORME TÉCNICO — PROYECTO FIT-DAILY
+================================================================================
+Empresa:        Soft Warehouse S.A.
+Producto:       Fit-Daily (anteriormente "fitScrum")
+Preparado por:  Equipo de Desarrollo / Scrum Master
+Fecha:          16 de junio de 2026
+Dirigido a:     Gerencia
+Producción:     https://zolmaria95.github.io/fitScrum/angular/
+================================================================================
+
+
+1. RESUMEN EJECUTIVO
+--------------------------------------------------------------------------------
+Fit-Daily es una herramienta interna que unifica, en una sola aplicación web, la
+gestión ágil (Scrum) del equipo de consultores con el sistema de Helpdesk de
+FitBank. Cada tarea del tablero corresponde a un ticket real de un cliente, de
+modo que la operación diaria, el seguimiento de avances y la supervisión quedan
+conectados de punta a punta.
+
+Valor para el negocio:
+  • Una sola pantalla en lugar de saltar entre el Helpdesk y planillas manuales.
+  • Visibilidad en tiempo real del trabajo del equipo (tablero Kanban compartido).
+  • Trazabilidad: tarea ↔ ticket ↔ cliente ↔ consultor ↔ estado.
+  • Panel de supervisión para el Scrum Master (carga, pendientes, bloqueos).
+  • Sin costo de infraestructura de servidores: se apoya en servicios gestionados
+    (Firebase y Cloudflare) y publicación estática (GitHub Pages).
+
+Estado actual: la aplicación está EN PRODUCCIÓN y en uso por el equipo. Se está
+ejecutando una segunda generación construida en Angular 22, que reemplaza
+progresivamente a la versión inicial.
+
+
+2. PROPÓSITO Y ALCANCE
+--------------------------------------------------------------------------------
+Reemplazar el seguimiento manual de tareas por un tablero Kanban integrado al
+Helpdesk. El equipo de consultores atiende a 14 clientes (cooperativas y empresas
+financieras que usan el core bancario FitBank). El sistema cubre:
+
+  • Planificación y ejecución de sprints.
+  • Tablero Kanban (To Do → En Progreso → En Certificación → Finalizado).
+  • Consulta y operación de tickets del Helpdesk (filtrar, asignar, cambiar
+    estado, conversar, adjuntar).
+  • Panel del Scrum Master, pendientes con recordatorios y asignación semanal.
+
+
+3. TECNOLOGÍA (STACK)
+--------------------------------------------------------------------------------
+CAPA              TECNOLOGÍA                       NOTA
+-------------     ------------------------------   ------------------------------
+Framework UI      Angular 22 (standalone)          Sin NgModules; componentes
+                                                   independientes y carga perezosa
+Modo de render    Zoneless (sin zone.js)           Detección de cambios por
+                                                   Signals; menor overhead
+Reactividad       Angular Signals / computed       Estado declarativo y eficiente
+Librería visual   Angular Material 22 (Material 3) Componentes + accesibilidad
+                  + Angular CDK                    + drag & drop (tablero)
+Lenguaje          TypeScript 6 (estricto)          Tipado fuerte, menos errores
+Estilos           SCSS                             Un archivo por componente +
+                                                   tema global
+Base de datos     Firebase Realtime Database       Datos del proyecto (tiempo real)
+Sistema externo   API Helpdesk FitBank (REST)      Tickets, usuarios, clientes
+Proxy de API      Cloudflare Worker                Resuelve CORS y oculta el origen
+Hosting           GitHub Pages                     Publicación estática (CDN)
+Tipografía        Roboto (UI) + JetBrains Mono     Pesos 300–800
+Control de código Git / GitHub                     Repositorio "fitScrum"
+
+
+4. ARQUITECTURA
+--------------------------------------------------------------------------------
+4.1 Visión general
+
+  La aplicación es una SPA (Single Page Application) que se sirve estáticamente y
+  consume DOS fuentes de datos independientes:
+
+     ┌────────────────────────────────────────────────────────────────┐
+     │                  NAVEGADOR (App Angular - SPA)                    │
+     │  Vistas: Board · Tickets · Mi Panel · Semanal · Pendientes ...   │
+     │  Estado en memoria con Signals · Material 3 · responsive          │
+     └───────────────┬──────────────────────────────┬───────────────────┘
+                     │                                │
+         (datos del proyecto)              (tickets / catálogos)
+                     │                                │
+                     ▼                                ▼
+        ┌──────────────────────┐        ┌──────────────────────────────┐
+        │  Firebase Realtime DB │        │   Cloudflare Worker (proxy)   │
+        │  (sprints, tareas,    │        │            │                  │
+        │   avances, notas...)  │        │            ▼                  │
+        │  Sync en tiempo real  │        │   API Helpdesk FitBank (REST) │
+        └──────────────────────┘        └──────────────────────────────┘
+
+4.2 Frontend
+  • Componentes "standalone" con carga perezosa por ruta (cada vista se descarga
+    solo cuando se usa → arranque rápido).
+  • Estado con Signals: la interfaz se actualiza sola cuando cambian los datos,
+    sin código manual de refresco.
+  • Capa "core" (servicios) separada de las "features" (vistas):
+        core/services   → DataService, AuthService, HelpdeskService, ShellService
+        core/interceptors → inyecta el token y maneja expiración (401/403)
+        core/guards     → protección de rutas por sesión y por rol
+  • Shell responsive (menú lateral) mobile-first con CDK BreakpointObserver.
+
+4.3 Fuentes de datos
+  a) Firebase Realtime Database — datos PROPIOS del proyecto (tablero, sprints,
+     avances, notas, pendientes). Sincronización en tiempo real entre todas las
+     máquinas del equipo (lo que uno cambia, los demás lo ven al instante).
+  b) API Helpdesk de FitBank — sistema EXTERNO y fuente de verdad de los tickets,
+     usuarios (consultores) y clientes. La app lee y escribe ahí (asignar ticket,
+     cambiar estado, responder). Las consultas de tickets se filtran y paginan
+     DEL LADO DEL SERVIDOR (por cliente, estado, asignado), no en el navegador,
+     para no traer información de más.
+
+4.4 Autenticación y seguridad
+  • Inicio de sesión con las credenciales del propio Helpdesk (no hay un usuario
+    paralelo). La sesión se guarda localmente.
+  • Token de acceso de vida corta + "refresh token": cuando el token expira, la
+    app lo renueva automáticamente y reintenta la operación, sin sacar al usuario.
+  • Permisos por rol (Consultor / Supervisor / Scrum Master / Helpdesk-admin):
+    definen quién puede mover tareas ajenas, ver el panel de supervisión o borrar
+    el tablero.
+  • El proxy (Cloudflare Worker) evita exponer el API directamente al navegador y
+    resuelve las restricciones de CORS.
+
+4.5 Despliegue
+  • Publicación estática en GitHub Pages. La app Angular vive en la subcarpeta
+    /angular/ y CONVIVE con la versión anterior sin afectarla.
+  • Enrutado por hash (#) para que el refresco de página funcione en GitHub Pages.
+  • El Worker de Cloudflare se despliega de forma independiente.
+  • Flujo: compilar → publicar artefacto → GitHub Pages distribuye por CDN.
+
+
+5. HERRAMIENTAS
+--------------------------------------------------------------------------------
+  • Angular CLI            – compilación, servidor de desarrollo, build de prod.
+  • Node.js / npm          – gestor de dependencias y scripts.
+  • Git + GitHub           – control de versiones y repositorio.
+  • GitHub Pages           – hosting/CDN de la aplicación.
+  • Firebase (Google)      – base de datos en tiempo real gestionada.
+  • Cloudflare Workers     – proxy serverless hacia el API del Helpdesk.
+  • TypeScript             – lenguaje con verificación de tipos.
+  • SCSS                   – preprocesador de estilos.
+  • Vitest                 – framework de pruebas (configurado).
+  • Prettier               – formato de código consistente.
+
+
+6. ESTRUCTURA DE LA BASE DE DATOS
+--------------------------------------------------------------------------------
+6.1 Firebase Realtime Database (datos del proyecto)
+    Base tipo árbol JSON. Nodos de primer nivel:
+
+    NODO            CONTENIDO
+    -------------   ------------------------------------------------------------
+    sprints         Iteraciones; incluye el id del sprint activo + lista
+    stories         Tareas del tablero (mapa por id)
+    progress        Registros de avance por tarea
+    queries         Consultas / bloqueos del equipo
+    weeklySupport   Asignación semanal de consultor (vista "Semanal")
+    users           Equipo (cache local)
+    hdActions       Marcas de "acción" sobre tickets (panel del Scrum Master)
+    hdNotes         Notas internas por ticket
+    solNotes        Notas del panel del Scrum Master
+    hdPendientes    Tickets marcados como pendientes + fecha/hora de recordatorio
+
+    Modelo TAREA (story):
+       id            "TA-001"            prefijo TA- + correlativo
+       sprint        "SP-01"             sprint al que pertenece
+       status        todo|in_progress|review|done
+       priority      alta|media|baja
+       title         texto
+       description   texto
+       assignee      id de consultor (o null)
+       client        id de cliente (o null)
+       ticket        n° de ticket Helpdesk asociado
+       dueDate       fecha de entrega
+       points        puntos de esfuerzo
+       progress      0–100 (múltiplos de 5)
+       approved      finalizada/aprobada (sí/no)
+       waitingClient esperando respuesta del cliente (sí/no)
+       hdEstatus     estado del ticket en el Helpdesk (badge en la card)
+
+    Modelo SPRINT:
+       id, name, goal, start, end, capacity (puntos), status (active|completed|planned)
+
+    Modelo AVANCE (progress): id, storyId, author, date, hoursLogged, notes
+    Modelo CONSULTA (query):   id, title, description, storyId, priority, author,
+                               date, status (open|resolved), response, respondedBy
+
+6.2 API Helpdesk FitBank (sistema externo — solo se consume)
+    Entidades principales que la app lee/escribe:
+
+    ENTIDAD         USO EN FIT-DAILY
+    -------------   ------------------------------------------------------------
+    Ticket          subject, cliente, client_id, estado/ticket_status_id,
+                    assigned_user_id, prioridad, fechas, módulo, adjuntos.
+                    Filtrado server-side por cliente (lista), estado y asignado.
+    Usuario         catálogo de consultores asignables (/users/catalog),
+                    filtrado por rol (SOPORTE / ADMINISTRADOR / SUPERVISOR).
+    Cliente         catálogo de clientes (/clients/catalog).
+    Estado          catálogo de estados de ticket (nombre → código).
+    Mensajes        conversación del ticket + adjuntos.
+
+    Nota técnica: las ESCRITURAS del API usan form-urlencoded (no JSON) y los
+    filtros de múltiples clientes se envían como lista separada por comas
+    (client_id=4,5,6).
+
+
+7. ANÁLISIS DE USO (FUNCIONALIDADES)
+--------------------------------------------------------------------------------
+7.1 Roles y permisos
+    • Consultor   – opera SUS tareas (mover, avanzar, certificar).
+    • Supervisor  – puede gestionar tareas de cualquiera.
+    • Scrum Master– acceso al panel de supervisión ("Mi Panel").
+    • Helpdesk-admin (cuenta MSC001) – permisos máximos (p. ej. borrar tablero).
+
+7.2 Vistas (agrupadas en menú "Scrum" y "HelpDesk")
+    BOARD (Kanban)
+      - 4 columnas: To Do · En Progreso · En Certificación · Finalizado.
+      - Arrastrar y soltar con permisos y límite de trabajo en progreso (WIP).
+      - Tarjetas coloreadas por cliente; badge de prioridad y de estado del ticket.
+      - Filtros multi-selección por prioridad, consultor y cliente; búsqueda por
+        n° de ticket.
+      - Regla de negocio: una tarea que salió de "To Do" no puede regresar; las
+        finalizadas desaparecen automáticamente a los 2 días.
+      - Sincroniza el estado real del ticket del Helpdesk y ubica la tarea en la
+        columna correspondiente; reconcilia la asignación con el API.
+
+    TICKETS (Helpdesk)
+      - Grilla de tarjetas de tickets con pestañas: Pendientes · Asignados a mí ·
+        Todos los clientes · Estadísticas.
+      - Filtros server-side: Cliente (multi-selección con chips removibles),
+        Estatus y "Asignados a mí"; ordenamiento por fecha/prioridad.
+      - Paginación del lado del servidor con total real ("Página X de Y").
+      - Acciones: crear tarea desde el ticket, ver/responder la conversación,
+        asignar/reasignar consultor, cambiar estado, notas y marcas internas.
+
+    MI PANEL (Scrum Master)  – supervisión diaria: acciones pendientes, tickets
+                               sin movimiento, clientes a notificar.
+    SEMANAL                  – asignación semanal de consultor (calendario).
+    PENDIENTES               – tickets marcados como pendientes, con recordatorios
+                               por fecha/hora (alerta y opción de posponer/pausar).
+    BURNDOWN / PROGRESO / CONSULTAS – métricas e historiales (en evolución).
+
+7.3 Flujos clave
+    • De ticket a tarea: desde un ticket se crea la tarea con datos autocompletados
+      (cliente, asunto, asignado) y queda enlazada al ticket.
+    • Operación del board: al mover una tarea se escribe el estado correspondiente
+      en el ticket del Helpdesk (y viceversa al abrir el board).
+    • Supervisión: el Scrum Master ve carga, bloqueos y pendientes sin pedir
+      reportes manuales.
+
+
+8. ANÁLISIS DE DISEÑO (UX / UI)
+--------------------------------------------------------------------------------
+  • Sistema de diseño basado en Material 3 con la identidad de FitBank (azul
+    #04BAF0 como color primario; naranja/verde/rojo para prioridades y estados).
+  • Mobile-first y responsive: en escritorio el menú queda fijo; en tablet/móvil
+    (y en el Board, para dar ancho completo al Kanban) se vuelve un menú lateral
+    con botón ☰.
+  • Consistencia: mismos patrones de filtro (multi-selección con "chips" y "x")
+    en Board y Tickets; nomenclatura unificada de la empresa ("Consultor" en
+    lugar de "Empleado").
+  • Tipografía optimizada (Roboto con pesos 300–800) para que la negrita se lea
+    nítida; números/IDs en monoespaciada.
+  • Carga bajo demanda y paginación server-side: la app no descarga miles de
+    registros; trae solo lo que se ve, con indicación clara de cuántos hay en el
+    sistema y si existen más páginas.
+  • Accesibilidad: componentes Material con etiquetas y navegación por teclado;
+    contraste y estados (carga, vacío, error) explícitos.
+  • Decisiones de arquitectura visual documentadas: separación de capa
+    presentacional (tarjetas) y contenedora (vistas), lo que facilita mantener y
+    extender la interfaz.
+
+
+9. ESTADO DEL PROYECTO
+--------------------------------------------------------------------------------
+  • En producción y en uso por el equipo de consultores.
+  • Migración a Angular 22 por fases: Board y Tickets completos; Mi Panel,
+    Semanal y Pendientes operativos; Burndown/Progreso/Consultas en evolución.
+  • Integración con el Helpdesk funcionando (lectura, filtros, asignación,
+    cambio de estado, conversación, adjuntos).
+  • Sesión robusta con renovación automática de token.
+
+
+10. RIESGOS, DEPENDENCIAS Y PRÓXIMOS PASOS
+--------------------------------------------------------------------------------
+  Dependencias externas
+    • API Helpdesk de FitBank: la app depende de su disponibilidad y de los
+      parámetros que soporta (filtros, paginación). Cambios del lado del Helpdesk
+      pueden requerir ajustes.
+    • Firebase y Cloudflare: servicios gestionados de terceros.
+
+  Riesgos / consideraciones
+    • Algunos filtros avanzados (p. ej. excluir tickets finalizados en el conteo
+      exacto por página) dependen de capacidades del API que conviene confirmar
+      con el equipo de backend de FitBank.
+    • El despliegue actual del servidor de desarrollo en la red local depende de
+      una máquina encendida; la versión pública (GitHub Pages) no.
+
+  Próximos pasos sugeridos
+    • Completar las vistas de métricas (Burndown / Progreso / Consultas).
+    • Coordinar con el backend de FitBank el soporte de filtros por lista
+      (clientes y estados) para paginación 100% exacta.
+    • Evaluar el reemplazo total de la versión anterior una vez cerradas las fases.
+    • Definir política de respaldos de la base Firebase (ya se realizan exports).
+
+================================================================================
+                              FIN DEL INFORME
+================================================================================

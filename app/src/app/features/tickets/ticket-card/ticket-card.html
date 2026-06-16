@@ -7,6 +7,10 @@
   <div class="tc-head" [style.background]="cliente().bg" [style.borderLeftColor]="cliente().accent">
     <div class="tc-head-top">
       <span class="tc-id">#{{ ticket().ticket }}</span>
+      @if (mostrarDias() && ticket().diasSinMovimiento > 0) {
+        <span class="tc-dias" [class.alto]="ticket().diasSinMovimiento >= 7"
+              matTooltip="Días sin movimiento">{{ ticket().diasSinMovimiento }}d</span>
+      }
       <span class="tc-spacer"></span>
       @if (yaEnBoard()) {
         <span class="tc-en-board" matTooltip="Este ticket ya tiene una tarea en el board"><mat-icon>task_alt</mat-icon> en board</span>

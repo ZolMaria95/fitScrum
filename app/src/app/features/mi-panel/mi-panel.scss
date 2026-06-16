@@ -125,7 +125,15 @@
   &.prio-baja { color: #2E7D32; background: #27AE6018; }
 }
 
-// ── Cards (cliente pendiente / próximos a vencer) ──
+// Grid para las cards de ticket reutilizadas de la vista Tickets (mismo diseño).
+.mp-ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+// ── Cards (próximos a vencer) ──
 .mp-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
