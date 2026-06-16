@@ -9,6 +9,7 @@ import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../core/services/auth.service';
 import { DataService } from '../../core/services/data.service';
 import { HelpdeskService } from '../../core/services/helpdesk.service';
@@ -17,16 +18,23 @@ import { CardDetailDialog } from '../board/card-detail-dialog/card-detail-dialog
 import { TicketMessagesDialog } from './ticket-messages-dialog/ticket-messages-dialog';
 import { AssignTicketDialog } from './assign-ticket-dialog/assign-ticket-dialog';
 import { TicketCard } from './ticket-card/ticket-card';
-import { CLASIF_COLOR, CLASIF_ORDER, PRIORITY_ACTIONS } from './helpdesk.constants';
+import { CLASIF_COLOR, CLASIF_ORDER, CLIENTES_VALIDOS, PRIORITY_ACTIONS } from './helpdesk.constants';
 import { Ticket } from './ticket-utils';
 
-type Tab = 'prioritarios' | 'todos' | 'asignados' | 'generales' | 'estadisticas';
+// Orden de tabs: Pendientes primero (default), Prioritarios al final.
+type Tab = 'pendientes' | 'asignados' | 'generales' | 'prioritarios' | 'estadisticas';
 
 interface StatRow {
   key: string;
   count: number;
   pct: string;
   color: string;
+}
+
+/** Ticket finalizado (aprobado/cerrado) → fuera de las tabs operativas. */
+function esFinalizado(t: Ticket): boolean {
+  const e = (t.estatus || '').toUpperCase();
+  return e.includes('APROBADO') || e.includes('CERRADO POR EL CLIENTE');
 }
 
 /** Vista Tickets (grid de cards del Helpdesk). Port de js/helpdesk-panel.js. */
@@ -41,6 +49,7 @@ interface StatRow {
     MatSelectModule,
     MatPaginatorModule,
     MatProgressBarModule,
+    MatTooltipModule,
     TicketCard,
   ],
   templateUrl: './tickets.html',
@@ -57,21 +66,18 @@ export class Tickets implements OnDestroy {
   /** Panel de filtros que se publica al drawer del shell. */
   readonly filtersTpl = viewChild<TemplateRef<unknown>>('filtersTpl');
 
+  // Pool único perezoso (12 por página, bajo demanda); las tabs lo filtran.
   readonly tickets = this.hd.tickets;
-  readonly syncStatus = this.hd.syncStatus;
   readonly loading = this.hd.loading;
+  readonly hasMore = this.hd.hasMore;
+  readonly status = this.hd.status;
   readonly statusNames = this.hd.statusNames;
-  // Tab "Generales" (set completo, perezoso y paginado, sin mensajes).
-  readonly allTickets = this.hd.allTickets;
-  readonly loadingGenerales = this.hd.loadingGenerales;
-  readonly hasMoreGenerales = this.hd.hasMoreGenerales;
-  readonly generalesStatus = this.hd.generalesStatus;
   /** Estados elegibles en el menú: nunca se permite cambiar a ABIERTO. */
   readonly statusOptions = computed(() => this.statusNames().filter((s) => s.trim().toUpperCase() !== 'ABIERTO'));
   readonly CLASIF_COLOR = CLASIF_COLOR;
 
   // ── Estado de la vista ──
-  readonly tab = signal<Tab>('prioritarios');
+  readonly tab = signal<Tab>('pendientes');
   readonly filterCliente = signal('');
   readonly filterAccion = signal('');
   readonly filterClasif = signal('');
@@ -96,6 +102,9 @@ export class Tickets implements OnDestroy {
     this.hd.getTicketStatuses();
     // Publica los filtros de esta vista en el drawer del shell.
     effect(() => this.shell.setFilters(this.filtersTpl() ?? null));
+    // Auto-consulta al entrar a Tickets (solo si el pool aún está vacío; para
+    // recargar a propósito está el botón de refrescar, siempre visible).
+    if (!this.hd.tickets().length && !this.hd.loading()) this.refresh();
   }
 
   ngOnDestroy(): void {
@@ -106,34 +115,39 @@ export class Tickets implements OnDestroy {
     return String(this.auth.session()?.id || '').trim().toUpperCase();
   }
 
+  /** Tickets operativos: clientes válidos y no finalizados (Prioritarios/Pendientes/Asignados). */
+  private readonly operativos = computed(() =>
+    this.tickets().filter((t) => CLIENTES_VALIDOS.has(t.clienteRaw) && !esFinalizado(t)),
+  );
+
   // ── Conjunto base según la tab / búsqueda ──
   private readonly base = computed<Ticket[]>(() => {
     const remote = this.remoteResult();
     if (remote) return [remote];
-    // Generales: set completo perezoso (el filtro por nº lo aplica rows()).
-    if (this.tab() === 'generales') return this.allTickets();
-    const all = this.tickets();
-    if (this.filterTicket()) return all; // búsqueda por nº: ignora la tab
-    if (this.tab() === 'asignados') return all.filter((t) => t.usuarioAsignado === this.myId);
-    if (this.tab() === 'prioritarios') return all.filter((t) => PRIORITY_ACTIONS.has(t.accion));
-    return all;
+    if (this.filterTicket()) return this.tickets(); // búsqueda por nº: todo el pool
+    const tab = this.tab();
+    if (tab === 'generales') return this.tickets();
+    const ops = this.operativos();
+    if (tab === 'asignados') return ops.filter((t) => t.usuarioAsignado === this.myId);
+    if (tab === 'prioritarios') return ops.filter((t) => PRIORITY_ACTIONS.has(t.accion));
+    return ops; // pendientes
   });
 
   readonly counts = computed(() => {
-    const all = this.tickets();
+    const ops = this.operativos();
     const uid = this.myId;
     return {
-      prio: all.filter((t) => PRIORITY_ACTIONS.has(t.accion)).length,
-      all: all.length,
-      asignados: uid ? all.filter((t) => t.usuarioAsignado === uid).length : 0,
-      generales: this.allTickets().length,
+      pendientes: ops.length,
+      asignados: uid ? ops.filter((t) => t.usuarioAsignado === uid).length : 0,
+      prio: ops.filter((t) => PRIORITY_ACTIONS.has(t.accion)).length,
+      generales: this.tickets().length,
     };
   });
 
   /** Total del universo de la tab actual (denominador de "X de Y"). */
-  readonly tabTotal = computed(() => (this.tab() === 'generales' ? this.allTickets().length : this.counts().all));
-  /** ¿La tab actual ya tiene datos cargados? (para el estado vacío). */
-  readonly tabHasData = computed(() => (this.tab() === 'generales' ? this.allTickets().length > 0 : this.tickets().length > 0));
+  readonly tabTotal = computed(() => this.base().length);
+  /** ¿El pool ya tiene datos cargados? (para el estado vacío). */
+  readonly tabHasData = computed(() => this.tickets().length > 0);
 
   /** Nº de tickets que ya tienen una tarea creada en el board (ocultan "Crear tarea"). */
   readonly ticketsEnBoard = computed(() => new Set(this.data.stories().map((s) => String(s.ticket)).filter(Boolean)));
@@ -180,26 +194,24 @@ export class Tickets implements OnDestroy {
   );
 
   // ── Paginación ──
-  /** Página actual acotada al rango válido del set filtrado. */
+  /** Página actual. Mientras el pool tenga más, no se recorta (la página se llena
+   *  al paginar con `ensureLoadedFor`); ya sin más, se acota al último real. */
   readonly clampedPageIndex = computed(() => {
+    if (this.hasMore()) return this.pageIndex();
     const pages = Math.max(1, Math.ceil(this.rows().length / this.pageSize()));
     return Math.min(this.pageIndex(), pages - 1);
   });
-  /** Solo las filas de la página actual (lo único que se renderiza en la tabla). */
+  /** Solo las filas de la página actual (lo único que se renderiza). */
   readonly pagedRows = computed<Ticket[]>(() => {
     const start = this.clampedPageIndex() * this.pageSize();
     return this.rows().slice(start, start + this.pageSize());
   });
-  /** Longitud para el paginador. En Generales (carga perezosa) se suma una página
-   *  extra mientras haya más, para mantener habilitado "Siguiente". */
-  readonly paginatorLength = computed(() =>
-    this.tab() === 'generales'
-      ? this.rows().length + (this.hasMoreGenerales() ? this.pageSize() : 0)
-      : this.rows().length,
-  );
+  /** Longitud del paginador: filas reales + una página extra mientras haya más
+   *  en el pool (para habilitar "Siguiente", que dispara la carga). */
+  readonly paginatorLength = computed(() => this.rows().length + (this.hasMore() ? this.pageSize() : 0));
 
   readonly stats = computed(() => {
-    const all = this.tickets();
+    const all = this.operativos();
     const total = all.length;
     const acc = (sel: (t: Ticket) => string) => {
       const m = new Map<string, number>();
@@ -241,28 +253,32 @@ export class Tickets implements OnDestroy {
   }
 
   // ── Acciones ──
-  sync(): void {
-    this.hd.sync();
+  /** Recarga el pool desde la primera página (botón refrescar / auto-consulta). */
+  async refresh(): Promise<void> {
+    this.pageIndex.set(0);
+    await this.hd.refresh();
+    await this.ensureLoadedFor(0);
   }
 
-  setTab(t: Tab): void {
+  async setTab(t: Tab): Promise<void> {
     this.tab.set(t);
     this.pageIndex.set(0);
-    // Generales se carga perezoso al entrar la primera vez.
-    if (t === 'generales' && !this.allTickets().length && !this.loadingGenerales()) {
-      this.hd.syncGenerales();
-    }
+    await this.ensureLoadedFor(0); // llena la primera página de la tab abierta
   }
 
-  /** Navegación del paginador. En Generales pide al API la página que falte. */
-  onPage(e: PageEvent): void {
+  /** Navegación del paginador: trae más páginas del pool si la página pedida falta. */
+  async onPage(e: PageEvent): Promise<void> {
     this.pageSize.set(e.pageSize);
     this.pageIndex.set(e.pageIndex);
-    if (this.tab() === 'generales') {
-      const need = (e.pageIndex + 1) * e.pageSize;
-      if (this.allTickets().length < need && this.hasMoreGenerales() && !this.loadingGenerales()) {
-        this.hd.loadMoreGenerales();
-      }
+    await this.ensureLoadedFor(e.pageIndex);
+  }
+
+  /** Carga páginas del pool hasta llenar la página `pageIndex` de la tab actual
+   *  (o hasta agotar el pool / tope de seguridad). */
+  private async ensureLoadedFor(pageIndex: number): Promise<void> {
+    const need = (pageIndex + 1) * this.pageSize();
+    while (this.rows().length < need && this.hasMore() && !this.loading() && this.tickets().length < 400) {
+      await this.hd.loadMore();
     }
   }
 
@@ -288,9 +304,8 @@ export class Tickets implements OnDestroy {
     clearTimeout(this.searchTimer);
     if (!v || !/^\d+$/.test(v)) return;
     this.searchTimer = setTimeout(async () => {
-      // Ya está en memoria (en cualquiera de los dos sets) → no consultar al API.
+      // Ya está en el pool en memoria → no consultar al API.
       if (this.tickets().some((t) => String(t.ticket).includes(v))) return;
-      if (this.allTickets().some((t) => String(t.ticket).includes(v))) return;
       const t = await this.hd.searchTicketRemote(v);
       if (t) this.remoteResult.set(t);
     }, 450);

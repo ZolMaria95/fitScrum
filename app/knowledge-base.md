@@ -181,9 +181,10 @@ certificar, esperando cliente, borrar card / Borrar Board. **Regla:** una tarea 
 
 ## 7. Tickets ([features/tickets/](src/app/features/tickets/))
 
-Port de `js/helpdesk-panel.js`. **Grid de cards responsive** (no tabla), **↻ Sincronizar**,
-tabs (Prioritarios / Todos / Asignados a mí / **Generales** / Estadísticas) con contadores, filtros
-(cliente/clasificación/acción/estatus) y búsqueda por número (local en ambos sets + remota).
+Port de `js/helpdesk-panel.js`. **Grid de cards responsive** (no tabla),
+tabs (**Pendientes** / Asignados a mí / **Generales** / **Prioritarios** / Estadísticas) con contadores,
+filtros (cliente/clasificación/acción/estatus) y búsqueda por número (local en el pool + remota).
+**Pendientes** es la tab por defecto; Prioritarios va al final.
 
 - **Grid de cards** (`.ticket-grid`, [tickets.html](src/app/features/tickets/tickets.html)): **2 col
   <540px / 4 col 540–899px / 5 col ≥900px** con `minmax(0, 1fr)`, **sin scroll horizontal** en ningún
@@ -204,18 +205,21 @@ tabs (Prioritarios / Todos / Asignados a mí / **Generales** / Estadísticas) co
   - Colores en [tickets-card-utils.ts](src/app/features/tickets/tickets-card-utils.ts): `estadoStyle`
     (**color por estado real** del catálogo, ≈7 tonos), `tipoStyle` (INCIDENCIA/REQUERIMIENTO/CONSULTA),
     `fmtIngreso`/`fmtMod`. **Solo modo claro** (la app es light-only por el bug de Safari/M3 en `styles.scss`).
-- **Paginación por páginas** (`mat-paginator`, **12 por página**): renderiza **solo la página actual**
-  (menos scroll/DOM) en **todas** las tabs. `pagedRows` = slice de `rows()`; `clampedPageIndex` acota el
-  índice. Cambiar tab/filtros/búsqueda resetea a la página 1.
-- **Dos sets de tickets** (en `HelpdeskService`):
-  - `tickets` (sync `↻`): **operativo** — solo `CLIENTES_VALIDOS`, sin aprobados/cerrados, **con
-    mensajes**. Powerea Prioritarios/Todos/Asignados/Estadísticas (sin cambios).
-  - `allTickets` (tab **Generales**): **todos** los clientes, incluidos aprobados/cerrados, carga
-    **perezosa** y **SIN mensajes** — los mensajes se piden solo al abrir la conversación. Cada
-    "Siguiente" del paginador trae del API la página que falte (offset, `fetchPage(offset, 12)`);
-    `paginatorLength` suma una página extra mientras `hasMoreGenerales`. `syncGenerales`/`loadMoreGenerales`.
-  - Asignar / cambiar estado refrescan **ambos** sets (`patchTicket`). En Generales (sin último
-    mensaje) la celda muestra un botón **💬 Ver conversación**.
+- **Pool ÚNICO, PEREZOSO** (en `HelpdeskService`): un solo `tickets` que se carga **por página de 12, bajo
+  demanda** y **SIN mensajes** (los mensajes se piden solo al abrir la conversación). Todos los clientes.
+  `refresh()` reinicia y trae la 1.ª página; `loadMore()` la siguiente (offset, `fetchPage(offset, 12)`);
+  `hasMore`/`loading`/`status`. **No hay botón Sincronizar**: hay **auto-consulta al entrar** (solo si el
+  pool está vacío → llena la 1.ª página de **Pendientes**) y un **botón ↻ refrescar siempre visible**.
+- **Las tabs filtran el pool** (en el componente):
+  - **Pendientes / Asignados / Prioritarios** → `operativos` (solo `CLIENTES_VALIDOS` y **no** aprobados/
+    cerrados); Prioritarios añade `PRIORITY_ACTIONS`, Asignados `usuarioAsignado === yo`.
+  - **Generales** → todo el pool (todos los clientes, incl. cerrados). **Estadísticas** → sobre `operativos`.
+  - Asignar / cambiar estado refrescan el pool (`patchTicket`).
+- **Paginación perezosa** (`mat-paginator`, 12/pág): renderiza **solo la página actual** (`pagedRows`).
+  `paginatorLength = rows().length + (hasMore ? 12 : 0)` (página extra para habilitar "Siguiente").
+  `ensureLoadedFor(pageIndex)` pide más páginas del pool hasta llenar la página pedida (tope 400 tickets);
+  `clampedPageIndex` no recorta mientras `hasMore`, y al agotar el pool acota al último real. Abrir una tab
+  o paginar dispara la carga necesaria; cambiar tab/filtros/búsqueda resetea a la página 1.
 
 - **Diálogos desde la card:** **Asignar** → `AssignTicketDialog` (lista buscable; asigna en el API);
   **Cambiar estado** → `setTicketStatus` con la lista del catálogo (`statusOptions`, nunca ABIERTO);

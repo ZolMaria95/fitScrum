@@ -3,7 +3,6 @@ import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { HD_SAFE } from '../interceptors/helpdesk-auth.interceptor';
-import { CLIENTES_VALIDOS } from '../../features/tickets/helpdesk.constants';
 import {
   Ticket,
   applyMessages,
@@ -70,22 +69,18 @@ export class HelpdeskService {
   readonly clients = this._clients.asReadonly();
   private clientsPromise: Promise<HdClient[]> | null = null;
 
-  // ── Tickets ──
+  // ── Tickets: pool ÚNICO, PEREZOSO (todas las tabs) ──
+  // Se carga por página de 12, bajo demanda, y SIN mensajes (los mensajes se piden
+  // solo al abrir la conversación). Todos los clientes; las tabs filtran este pool
+  // en el componente (las operativas a CLIENTES_VALIDOS) y `ensureLoadedFor` pide
+  // más páginas si el filtro deja la página actual corta.
+  private static readonly PAGE_SIZE = 12;
   private readonly _tickets = signal<Ticket[]>([]);
   readonly tickets = this._tickets.asReadonly();
-  readonly syncStatus = signal<{ msg: string; type: 'idle' | 'loading' | 'ok' | 'error' }>({ msg: '', type: 'idle' });
   readonly loading = signal(false);
-
-  // ── Tickets "Generales" (todos los clientes, sin filtro) ──
-  // Set aparte y PEREZOSO: se carga por página bajo demanda y NO trae mensajes
-  // (los mensajes se piden solo al abrir la conversación). No toca el sync operativo.
-  private static readonly PAGE_SIZE = 12;
-  private readonly _allTickets = signal<Ticket[]>([]);
-  readonly allTickets = this._allTickets.asReadonly();
-  readonly loadingGenerales = signal(false);
-  readonly hasMoreGenerales = signal(false);
-  readonly generalesStatus = signal<{ msg: string; type: 'idle' | 'loading' | 'ok' | 'error' }>({ msg: '', type: 'idle' });
-  private generalesOffset = 0;
+  readonly hasMore = signal(false);
+  readonly status = signal<{ msg: string; type: 'idle' | 'loading' | 'ok' | 'error' }>({ msg: '', type: 'idle' });
+  private offset = 0;
 
   /** Perfil del usuario en sesión. */
   me() {
@@ -195,9 +190,9 @@ export class HelpdeskService {
     return this._clients();
   }
 
-  // ── Tickets: sync, mensajes, adjuntos, envío ──────────────────────────
+  // ── Tickets: carga paginada, mensajes, adjuntos, envío ────────────────
   private setStatus(msg: string, type: 'idle' | 'loading' | 'ok' | 'error'): void {
-    this.syncStatus.set({ msg, type });
+    this.status.set({ msg, type });
   }
 
   private async fetchPage(offset: number, limit = 40): Promise<any[]> {
@@ -211,90 +206,36 @@ export class HelpdeskService {
     }
   }
 
-  /** Sincroniza tickets: 6 páginas, filtra clientes válidos, clasifica y carga
-   *  el último mensaje de cada uno en lotes. Powerea las tabs operativas
-   *  (Prioritarios/Todos/Asignados/Estadísticas). Port de sync() de helpdesk-panel.js. */
-  async sync(): Promise<void> {
+  /** (Re)inicia la carga: limpia el pool y trae la primera página (12). Botón
+   *  "refrescar" y auto-consulta al entrar a Tickets. */
+  async refresh(): Promise<void> {
+    this._tickets.set([]);
+    this.offset = 0;
+    this.hasMore.set(false);
+    await this.loadMore();
+  }
+
+  /** Trae la siguiente página (PAGE_SIZE tickets, SIN mensajes) y la agrega. */
+  async loadMore(): Promise<void> {
     if (this.loading()) return;
     this.loading.set(true);
-    this.setStatus('Cargando tickets (6 páginas)...', 'loading');
-    try {
-      const offsets = [0, 40, 80, 120, 160, 200];
-      const pages = await Promise.all(offsets.map((o) => this.fetchPage(o)));
-      const raw = pages.flat();
-
-      const filtrados = raw
-        .filter((t) => CLIENTES_VALIDOS.has(String(t.cliente || '').trim().toUpperCase()))
-        .filter((t) => {
-          const est = String(t.estado || '').toUpperCase();
-          return !est.includes('APROBADO') && !est.includes('CERRADO POR EL CLIENTE');
-        });
-
-      // Fase 1: sin mensajes, feedback inmediato.
-      const tickets = filtrados.map(mapTicket).map(evaluarFechas).map(clasificar);
-      this._tickets.set([...tickets]);
-      this.setStatus(`${tickets.length} tickets cargados. Obteniendo mensajes...`, 'loading');
-
-      // Fase 2: mensajes en lotes de 10.
-      const BATCH = 10;
-      for (let i = 0; i < tickets.length; i += BATCH) {
-        const lote = tickets.slice(i, i + BATCH);
-        await Promise.all(
-          lote.map(async (t) => {
-            const msgs = await this.fetchMessages(t.ticket);
-            applyMessages(t, msgs);
-            evaluarFechas(t);
-            clasificar(t);
-          }),
-        );
-        this._tickets.set([...tickets]);
-        this.setStatus(`Mensajes: ${Math.min(i + BATCH, tickets.length)} / ${tickets.length}...`, 'loading');
-      }
-
-      this.setStatus(`✓ ${tickets.length} tickets — ${new Date().toLocaleTimeString('es-ES')}`, 'ok');
-    } catch (err: any) {
-      const msg = err?.message || '';
-      const esRed = /fetch|failed|load failed|network|0/i.test(msg);
-      this.setStatus(esRed ? 'No se pudo conectar al proxy. Ejecuta: python proxy.py' : `Error: ${msg}`, 'error');
-    } finally {
-      this.loading.set(false);
-    }
-  }
-
-  /** (Re)inicia la carga de "Generales": limpia y trae la primera página. */
-  async syncGenerales(): Promise<void> {
-    this._allTickets.set([]);
-    this.generalesOffset = 0;
-    this.hasMoreGenerales.set(false);
-    await this.loadMoreGenerales();
-  }
-
-  /** Carga la siguiente página de "Generales" (PAGE_SIZE tickets, SIN mensajes) y
-   *  la agrega. Todos los clientes, incluidos aprobados/cerrados. */
-  async loadMoreGenerales(): Promise<void> {
-    if (this.loadingGenerales()) return;
-    this.loadingGenerales.set(true);
-    const offset = this.generalesOffset;
-    const pagina = Math.floor(offset / HelpdeskService.PAGE_SIZE) + 1;
-    this.generalesStatus.set({ msg: `Cargando página ${pagina}...`, type: 'loading' });
+    const offset = this.offset;
+    this.setStatus('Cargando tickets...', 'loading');
     try {
       const raw = await this.fetchPage(offset, HelpdeskService.PAGE_SIZE);
-      // Sin mensajes: evaluarFechas/clasificar funcionan con las señales no-mensaje.
+      // Sin mensajes: evaluarFechas/clasificar usan las señales no-mensaje.
       const nuevos = raw.map(mapTicket).map(evaluarFechas).map(clasificar);
-      this._allTickets.set([...this._allTickets(), ...nuevos]);
-      this.generalesOffset = offset + HelpdeskService.PAGE_SIZE;
-      this.hasMoreGenerales.set(raw.length === HelpdeskService.PAGE_SIZE);
-      const total = this._allTickets().length;
-      this.generalesStatus.set({
-        msg: this.hasMoreGenerales() ? `${total} tickets — página ${pagina} lista` : `✓ ${total} tickets (todo cargado)`,
-        type: 'ok',
-      });
+      this._tickets.set([...this._tickets(), ...nuevos]);
+      this.offset = offset + HelpdeskService.PAGE_SIZE;
+      this.hasMore.set(raw.length === HelpdeskService.PAGE_SIZE);
+      const total = this._tickets().length;
+      this.setStatus(this.hasMore() ? `${total} tickets cargados` : `✓ ${total} tickets`, 'ok');
     } catch (err: any) {
       const msg = err?.message || '';
       const esRed = /fetch|failed|load failed|network|0/i.test(msg);
-      this.generalesStatus.set({ msg: esRed ? 'No se pudo conectar al proxy.' : `Error: ${msg}`, type: 'error' });
+      this.setStatus(esRed ? 'No se pudo conectar al API.' : `Error: ${msg}`, 'error');
     } finally {
-      this.loadingGenerales.set(false);
+      this.loading.set(false);
     }
   }
 
@@ -512,19 +453,17 @@ export class HelpdeskService {
     this.patchTicket(ticketId, { usuarioAsignado: userId, nombreAsignado: u?.name || userId });
   }
 
-  /** Aplica un patch a un ticket (por nº) en AMBAS listas: operativa y generales. */
+  /** Aplica un patch a un ticket (por nº) en el pool en memoria. */
   private patchTicket(ticketId: string, patch: Partial<Ticket>): void {
-    for (const sig of [this._tickets, this._allTickets]) {
-      const arr = sig();
-      const idx = arr.findIndex((t) => t.ticket === ticketId);
-      if (idx < 0) continue;
-      const t: Ticket = { ...arr[idx], ...patch };
-      evaluarFechas(t);
-      clasificar(t);
-      const next = [...arr];
-      next[idx] = t;
-      sig.set(next);
-    }
+    const arr = this._tickets();
+    const idx = arr.findIndex((t) => t.ticket === ticketId);
+    if (idx < 0) return;
+    const t: Ticket = { ...arr[idx], ...patch };
+    evaluarFechas(t);
+    clasificar(t);
+    const next = [...arr];
+    next[idx] = t;
+    this._tickets.set(next);
   }
 
   // ── Cache (localStorage) ──────────────────────────────────────────────

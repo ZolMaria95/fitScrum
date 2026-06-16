@@ -4,8 +4,7 @@
 
 .hd-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: 10px;
   margin-bottom: 12px;
 
@@ -20,6 +19,8 @@
     color: var(--mat-sys-on-surface-variant);
     white-space: nowrap;
   }
+
+  .grow { flex: 1 1 auto; }
 }
 
 .hd-status {
@@ -80,7 +81,6 @@
   gap: 8px;
 
   mat-form-field { width: 100%; }
-  .f-sync { width: 100%; }
 }
 
 // ── Grid de cards (responsive, sin scroll horizontal) ──

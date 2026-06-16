@@ -1,10 +1,6 @@
 <!-- Panel de filtros: se publica al drawer del shell (ShellService). -->
 <ng-template #filtersTpl>
   <div class="hd-filters-panel">
-    <button mat-flat-button color="primary" class="f-sync" (click)="sync()" [disabled]="loading()">
-      <mat-icon>sync</mat-icon> Sincronizar
-    </button>
-
     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="f-search">
       <mat-label>N° ticket</mat-label>
       <input matInput [ngModel]="filterTicket()" (ngModelChange)="onSearchInput($event)" inputmode="numeric" />
@@ -69,31 +65,32 @@
 <div class="hd-header">
   <h2>Tickets Helpdesk</h2>
   <span class="hd-results">{{ rows().length }} de {{ tabTotal() }}</span>
+  <span class="grow"></span>
+  <button mat-icon-button class="hd-refresh" (click)="refresh()" [disabled]="loading()"
+          matTooltip="Refrescar tickets" aria-label="Refrescar tickets">
+    <mat-icon>refresh</mat-icon>
+  </button>
 </div>
 
-@if (loading() || (tab() === 'generales' && loadingGenerales())) {
+@if (loading()) {
   <mat-progress-bar mode="indeterminate"></mat-progress-bar>
 }
-@if (tab() === 'generales') {
-  @if (generalesStatus().msg) {
-    <div class="hd-status" [class]="'st-' + generalesStatus().type">{{ generalesStatus().msg }}</div>
-  }
-} @else if (syncStatus().msg) {
-  <div class="hd-status" [class]="'st-' + syncStatus().type">{{ syncStatus().msg }}</div>
+@if (status().msg) {
+  <div class="hd-status" [class]="'st-' + status().type">{{ status().msg }}</div>
 }
 
 <div class="hd-tabs">
-  <button class="hd-tab" [class.active]="tab() === 'prioritarios'" (click)="setTab('prioritarios')">
-    Prioritarios <span class="hd-tab-count alert">{{ counts().prio }}</span>
-  </button>
-  <button class="hd-tab" [class.active]="tab() === 'todos'" (click)="setTab('todos')">
-    Todos <span class="hd-tab-count">{{ counts().all }}</span>
+  <button class="hd-tab" [class.active]="tab() === 'pendientes'" (click)="setTab('pendientes')">
+    Pendientes <span class="hd-tab-count">{{ counts().pendientes }}</span>
   </button>
   <button class="hd-tab" [class.active]="tab() === 'asignados'" (click)="setTab('asignados')">
     Asignados a mí <span class="hd-tab-count">{{ counts().asignados }}</span>
   </button>
   <button class="hd-tab" [class.active]="tab() === 'generales'" (click)="setTab('generales')">
     Generales <span class="hd-tab-count">{{ counts().generales }}</span>
+  </button>
+  <button class="hd-tab" [class.active]="tab() === 'prioritarios'" (click)="setTab('prioritarios')">
+    Prioritarios <span class="hd-tab-count alert">{{ counts().prio }}</span>
   </button>
   <button class="hd-tab" [class.active]="tab() === 'estadisticas'" (click)="setTab('estadisticas')">Estadísticas</button>
 </div>
@@ -120,9 +117,9 @@
 } @else {
   @if (!rows().length) {
     <div class="hd-empty">
-      @if (tabHasData()) { Sin tickets que coincidan con el filtro. }
-      @else if (tab() === 'generales') { Cargando tickets generales… }
-      @else { Pulsa <strong>↻ Sincronizar</strong> (en los filtros) para cargar los tickets. }
+      @if (loading()) { Cargando tickets… }
+      @else if (tabHasData()) { Sin tickets que coincidan con el filtro. }
+      @else { No hay tickets. Usa el botón <strong>↻</strong> para refrescar. }
     </div>
   } @else {
     <div class="ticket-grid">
@@ -149,7 +146,7 @@
       [pageIndex]="clampedPageIndex()"
       [pageSize]="pageSize()"
       [hidePageSize]="true"
-      [showFirstLastButtons]="tab() !== 'generales'"
+      [showFirstLastButtons]="false"
       (page)="onPage($event)"
       aria-label="Páginas de tickets">
     </mat-paginator>
