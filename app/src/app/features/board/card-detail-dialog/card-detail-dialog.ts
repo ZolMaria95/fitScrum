@@ -297,7 +297,9 @@ export class CardDetailDialog {
         ticket,
         progress: pct,
       });
-      this.maybeAssignHd(ticket, assignee, this.input.prefill?.assignee ?? null);
+      // Al CREAR siempre se empuja la asignación al API (sin omitir por coincidir
+      // con el prefill): garantiza que el ticket quede asignado al técnico elegido.
+      this.maybeAssignHd(ticket, assignee);
       this.ref.close(true);
       return;
     }

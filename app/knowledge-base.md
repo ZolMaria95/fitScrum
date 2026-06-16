@@ -150,7 +150,9 @@ badge, avatar = **código de usuario** (igual que los filtros).
 
 - **`card-detail-dialog/`** — crear/editar tarea: buscadores (`MatAutocomplete`) de **asignado** y
   **cliente** desde el API, fecha con **datepicker**, progreso, estado. Al escribir un **N° de
-  ticket** consulta el ticket y autocompleta (título/cliente/asignado). **El cliente solo es editable
+  ticket** consulta el ticket y autocompleta (título/cliente/asignado). **Al crear** con ticket + técnico,
+  **siempre** se empuja la asignación al API (`assignTicket`, sin omitir por coincidir con el prefill); en
+  edición se empuja al cambiar el asignado (y el board reconcilia al abrir). **El cliente solo es editable
   al crear o, en edición, para el **Helpdesk (MSC001)** en tareas **sin ticket** (`showClientEditor`);
   las tareas **con ticket** muestran el cliente del ticket (read-only) y lo fija el sync del board.
 - **`sprint-dialog/`** — crear/editar/borrar sprint.
