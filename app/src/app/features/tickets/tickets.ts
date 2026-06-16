@@ -10,6 +10,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { DataService } from '../../core/services/data.service';
 import { HelpdeskService } from '../../core/services/helpdesk.service';
@@ -17,6 +18,7 @@ import { ShellService } from '../../core/services/shell.service';
 import { CardDetailDialog } from '../board/card-detail-dialog/card-detail-dialog';
 import { TicketMessagesDialog } from './ticket-messages-dialog/ticket-messages-dialog';
 import { AssignTicketDialog } from './assign-ticket-dialog/assign-ticket-dialog';
+import { PendienteDateDialog, PendienteDateResult } from '../pendientes/pendiente-date-dialog/pendiente-date-dialog';
 import { TicketCard } from './ticket-card/ticket-card';
 import { CLASIF_COLOR, CLASIF_ORDER, CLIENTES_VALIDOS, PRIORITY_ACTIONS } from './helpdesk.constants';
 import { Ticket } from './ticket-utils';
@@ -359,9 +361,26 @@ export class Tickets implements OnDestroy {
     this.data.setHdAction(t.ticket, !this.isAction(t));
     this.actions.set({ ...this.data.getHdActions() });
   }
-  togglePending(t: Ticket): void {
-    if (this.isPending(t)) this.data.removeHdPendiente(t.ticket);
-    else this.data.setHdPendiente(t.ticket, { ticket: t.ticket, asunto: t.asunto, clienteRaw: t.clienteRaw });
+  async togglePending(t: Ticket): Promise<void> {
+    if (this.isPending(t)) {
+      this.data.removeHdPendiente(t.ticket);
+      this.pendientes.set({ ...this.data.getHdPendientes() });
+      return;
+    }
+    // Al marcar pendiente: pedir fecha + hora del recordatorio.
+    const res = (await firstValueFrom(
+      this.dialog
+        .open(PendienteDateDialog, { data: { title: 'Marcar pendiente', ticket: t.ticket }, width: '420px', maxWidth: '95vw' })
+        .afterClosed(),
+    )) as PendienteDateResult | undefined;
+    if (!res) return; // cancelado → no se marca
+    this.data.setHdPendiente(t.ticket, {
+      ticket: t.ticket,
+      asunto: t.asunto,
+      clienteRaw: t.clienteRaw,
+      dueDate: res.dueDate,
+      dueTime: res.dueTime,
+    });
     this.pendientes.set({ ...this.data.getHdPendientes() });
   }
   noteOf(t: Ticket): string {

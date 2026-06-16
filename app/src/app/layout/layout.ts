@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter, map, startWith } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
@@ -41,6 +42,8 @@ export class Layout {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly breakpoints = inject(BreakpointObserver);
+  private readonly snack = inject(MatSnackBar);
+  private readonly destroyRef = inject(DestroyRef);
   readonly shell = inject(ShellService);
 
   readonly session = this.auth.session;
@@ -67,7 +70,13 @@ export class Layout {
 
   constructor() {
     // Carga los datos (Firebase/localStorage) y arranca el sync en tiempo real.
-    this.data.ensureInit().then(() => this.data.startStreaming());
+    this.data.ensureInit().then(() => {
+      this.data.startStreaming();
+      this.checkReminders();
+    });
+    // Recordatorios de tickets pendientes: revisa cada 5 min (capta la hora/relevo de día).
+    const timer = setInterval(() => this.checkReminders(), 5 * 60 * 1000);
+    this.destroyRef.onDestroy(() => clearInterval(timer));
 
     // El drawer sigue al modo: abierto si es fijo, cerrado si es overlay.
     effect(() => this.opened.set(this.fixed()));
@@ -91,6 +100,33 @@ export class Layout {
       r = r.firstChild;
     }
     return data;
+  }
+
+  /** Alerta recurrente de tickets pendientes cuya fecha/hora ya llegó (1 vez por día,
+   *  hasta que se pause o se redefina la fecha en el panel de Pendientes). */
+  private checkReminders(): void {
+    const now = Date.now();
+    const p = (n: number) => String(n).padStart(2, '0');
+    const t = new Date();
+    const todayStr = `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+
+    const pend = this.data.getHdPendientes();
+    const due = Object.values(pend).filter((x: any) => {
+      if (!x.dueDate || x.paused || x.lastAlerted === todayStr) return false;
+      const at = new Date(`${x.dueDate}T${x.dueTime || '09:00'}:00`).getTime();
+      return at <= now;
+    }) as any[];
+    if (!due.length) return;
+
+    due.forEach((x) => this.data.updateHdPendiente(x.ticket, { lastAlerted: todayStr }));
+    const msg =
+      due.length === 1
+        ? `Ticket #${due[0].ticket} pendiente de analizar.`
+        : `Tenés ${due.length} tickets pendientes de analizar.`;
+    this.snack
+      .open(msg, 'Ver pendientes', { duration: 12000 })
+      .onAction()
+      .subscribe(() => this.router.navigate(['/pendientes']));
   }
 
   async logout(): Promise<void> {

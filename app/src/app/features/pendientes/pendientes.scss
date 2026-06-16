@@ -1,0 +1,88 @@
+:host {
+  display: block;
+}
+
+.pend-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+
+  h2 { margin: 0; font-size: 20px; color: var(--mat-sys-on-surface); }
+  .pend-count {
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--mat-sys-surface-container-high);
+    border-radius: 10px;
+    padding: 1px 10px;
+  }
+}
+
+.pend-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--mat-sys-outline-variant, #e0e0e0);
+  border-radius: 12px;
+}
+
+.pend-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #fff;
+
+  th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--mat-sys-on-surface-variant);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--mat-sys-outline-variant, #e6e6ea);
+    white-space: nowrap;
+  }
+  td { padding: 6px 12px; border-bottom: 1px solid #eef1f5; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #f6f9fc; }
+
+  .b { font-weight: 600; }
+  .asunto { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acciones { width: 48px; text-align: right; }
+
+  tr.due { background: #fff4f4; }
+  tr.due:hover { background: #ffecec; }
+}
+
+.recordatorio {
+  white-space: nowrap;
+
+  .fecha { font-size: 12px; color: var(--mat-sys-on-surface); margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .badge {
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .vencido { background: #c0392b18; color: #c0392b; }
+  .pausado { background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface-variant); }
+  .programado { background: #e3effb; color: #0c447c; }
+  .sinfecha { background: #f0e2a8; color: #6a5a00; }
+}
+
+.pend-ticket {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--brand, #048abf);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  &:hover { text-decoration: underline; }
+}
+
+.pend-empty {
+  padding: 32px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant);
+}

@@ -124,8 +124,8 @@ Lazy-loaded bajo `Layout` (`authGuard`); `/` → `/board`.
 
 | Ruta | Estado |
 |---|---|
-| `login`, `board`, `tickets`, `semanal`, `mi-panel` | **Hecho** |
-| `burndown`, `progreso`, `consultas`, `pendientes` | placeholders |
+| `login`, `board`, `tickets`, `semanal`, `mi-panel`, `pendientes` | **Hecho** |
+| `burndown`, `progreso`, `consultas` | placeholders |
 
 ### Shell responsive ([layout/](src/app/layout/)) — menú hamburguesa lateral
 
@@ -290,6 +290,24 @@ se re-setean tras mutar; stories/team/clients ya son signals.
 
 ---
 
+## 7d. Pendientes ([features/pendientes/](src/app/features/pendientes/))
+
+Tickets marcados como pendientes (⏸ desde Tickets) con **recordatorio fecha + hora**. Datos en
+`hdPendientes` (`{ ticket, asunto, clienteRaw, addedAt, dueDate, dueTime, paused, lastAlerted }`).
+
+- **Marcar pendiente** (en Tickets): abre `pendiente-date-dialog/` (datepicker + `input[type=time]`) y
+  exige fecha/hora; cancelar → no se marca. `setHdPendiente(... dueDate, dueTime)`.
+- **Panel:** tabla ordenada por recordatorio más próximo; badge de estado (Recordar/Pausado/Programado/
+  Sin fecha) y fila resaltada si está **vencido**. Menú por fila: **Postergar** (reabre el diálogo),
+  **Pausar/Reanudar**, **Quitar**. Clic en el `#ticket` abre la conversación. `updateHdPendiente(patch)`.
+- **Alerta** (en [layout.ts](src/app/layout/layout.ts)): `checkReminders()` al iniciar + cada 5 min. Si un
+  pendiente tiene `dueDate/dueTime` pasados, no está pausado y no se alertó hoy (`lastAlerted !== hoy`),
+  muestra un **snackbar** ("N tickets pendientes…") con acción **"Ver pendientes"** (→ `/pendientes`) y
+  marca `lastAlerted = hoy`. Así **vuelve a saltar cada día** hasta que se pause o se redefina la fecha
+  (postergar/reanudar limpian `lastAlerted`).
+
+---
+
 ## 8. Theming, datos y persistencia
 
 - **Tema** ([styles.scss](src/styles.scss) + [_theme-colors.scss](src/_theme-colors.scss)): paleta
@@ -325,8 +343,9 @@ componente: 8 kB / 16 kB en `angular.json`.
 | Tickets (grid de cards responsive + conversación + asignación + estados + mensajes) | ✅ |
 | HelpDesk Semanal (rotación de soporte + calendario + tickets resueltos) | ✅ |
 | Mi Panel (dashboard Scrum Master: KPIs + acciones/cliente-pendiente/vencer/asignar) | ✅ |
+| Pendientes (tickets marcados ⏸ desde Tickets) | ✅ |
 | Catálogos del API (usuarios, clientes, estados) | ✅ |
-| Burndown, Progreso, Consultas, Pendientes | ⏳ placeholders |
+| Burndown, Progreso, Consultas | ⏳ placeholders |
 | TUsuariosPizza | ❌ se elimina |
 
 ### Mapa legacy → Angular

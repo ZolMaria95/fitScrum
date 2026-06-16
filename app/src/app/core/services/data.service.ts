@@ -363,6 +363,13 @@ export class DataService {
     this._hdPendientes[String(ticketId)] = { ...data, addedAt: new Date().toISOString() };
     this.persist('hdPendientes', this._hdPendientes);
   }
+  /** Merge parcial sobre un pendiente (fecha/hora, pausa, lastAlerted). */
+  updateHdPendiente(ticketId: string, patch: Record<string, any>) {
+    const cur = this._hdPendientes[String(ticketId)];
+    if (!cur) return;
+    this._hdPendientes[String(ticketId)] = { ...cur, ...patch };
+    this.persist('hdPendientes', this._hdPendientes);
+  }
   removeHdPendiente(ticketId: string) { delete this._hdPendientes[String(ticketId)]; this.persist('hdPendientes', this._hdPendientes); }
   getSolNotes() { return this._solNotes; }
   setSolNote(ticketId: string, note: string) {

@@ -1,0 +1,50 @@
+<div class="pend-header">
+  <h2>Pendientes</h2>
+  <span class="pend-count">{{ items().length }}</span>
+</div>
+
+@if (items().length) {
+  <div class="pend-table-wrap">
+    <table class="pend-table">
+      <thead>
+        <tr><th>Ticket</th><th>Cliente</th><th>Asunto</th><th>Recordatorio</th><th></th></tr>
+      </thead>
+      <tbody>
+        @for (it of items(); track it.ticket) {
+          <tr [class.due]="isDue(it)">
+            <td>
+              <button class="pend-ticket" (click)="openConversation(it.ticket)" matTooltip="Ver conversación">#{{ it.ticket }}</button>
+            </td>
+            <td class="b">{{ it.clienteRaw || '—' }}</td>
+            <td class="asunto" [matTooltip]="it.asunto || ''">{{ trunc(it.asunto, 60) }}</td>
+            <td class="recordatorio">
+              <span class="fecha">{{ fmtDateTime(it) }}</span>
+              @switch (estado(it)) {
+                @case ('vencido') { <span class="badge vencido">⏰ Recordar</span> }
+                @case ('pausado') { <span class="badge pausado">⏸ Pausado</span> }
+                @case ('programado') { <span class="badge programado">Programado</span> }
+                @default { <span class="badge sinfecha">Sin fecha</span> }
+              }
+            </td>
+            <td class="acciones">
+              <button mat-icon-button [matMenuTriggerFor]="menu" matTooltip="Acciones" aria-label="Acciones">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="postergar(it)"><mat-icon>event</mat-icon> Postergar / fecha</button>
+                @if (it.paused) {
+                  <button mat-menu-item (click)="reanudar(it)"><mat-icon>play_arrow</mat-icon> Reanudar alerta</button>
+                } @else if (it.dueDate) {
+                  <button mat-menu-item (click)="pausar(it)"><mat-icon>pause</mat-icon> Pausar alerta</button>
+                }
+                <button mat-menu-item (click)="remove(it.ticket)"><mat-icon>close</mat-icon> Quitar de pendientes</button>
+              </mat-menu>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+} @else {
+  <div class="pend-empty">No hay tickets pendientes.</div>
+}
