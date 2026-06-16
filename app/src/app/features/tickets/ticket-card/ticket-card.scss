@@ -230,10 +230,13 @@
 .tc-foot {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
   padding: 8px 10px;
   border-top: 1px solid var(--mat-sys-outline-variant, #ececec);
 }
+
+.tc-foot-spacer { flex: 1 1 auto; }
 
 .tc-avatar {
   display: inline-flex;
@@ -248,11 +251,31 @@
   flex: none;
 }
 
+// Toggles ⚑ acción / ⏸ pendiente (siempre visibles).
+.tc-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  color: #9aa0a6;
+  cursor: pointer;
+
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  &:hover { background: #00000010; }
+  &.on { color: #c0392b; }
+  &.pend.on { color: #9c27b0; }
+}
+
 .tc-ver {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: 1;
+  flex: none;
   min-width: 0;
   justify-content: center;
   border: 1px solid var(--brand, #048abf);

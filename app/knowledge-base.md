@@ -223,9 +223,9 @@ filtros (cliente/clasificación/acción/estatus) y búsqueda por número (local 
   - **Cuerpo**: asunto a **2 líneas** (`-webkit-line-clamp`), badges de **estado** (`estadoStyle`) y **tipo**,
     subsección de fechas (📅 ingreso "10 jun 2025" · 🔄 modificación "Hoy 9:42" / "13 jun 16:05") y **área de
     nota editable** (clic → textarea inline, no en el menú).
-  - **Pie**: avatar (iniciales+color, `colorFor`/`initialsFromName` de board-utils) + **"Ver conversación"**
-    + **menú ⋮** (asignar / cambiar estado / marcar acción ⚑ / pendiente ⏸). La card entera abre la
-    conversación; Crear tarea, área de nota y ⋮ hacen `stopPropagation`.
+  - **Pie**: avatar (iniciales+color, `colorFor`/`initialsFromName` de board-utils) + **toggles visibles
+    ⚑ acción / ⏸ pendiente** + **"Ver conversación"** + **menú ⋮** (asignar / cambiar estado). La card
+    entera abre la conversación; Crear tarea, toggles, área de nota y ⋮ hacen `stopPropagation`.
   - Colores en [tickets-card-utils.ts](src/app/features/tickets/tickets-card-utils.ts): `estadoStyle`
     (**color por estado real** del catálogo, ≈7 tonos), `tipoStyle` (INCIDENCIA/REQUERIMIENTO/CONSULTA),
     `fmtIngreso`/`fmtMod`. **Solo modo claro** (la app es light-only por el bug de Safari/M3 en `styles.scss`).

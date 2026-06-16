@@ -56,8 +56,17 @@
 
   <div class="tc-foot">
     <span class="tc-avatar" [style.background]="avatar().color" [matTooltip]="asignadoLabel()">{{ avatar().initials }}</span>
-    <button class="tc-ver" (click)="$event.stopPropagation(); verConversacion.emit()">
-      <mat-icon>chat</mat-icon><span class="tc-ver-txt">Ver conversación</span>
+    <button class="tc-flag" [class.on]="esAccion()" (click)="$event.stopPropagation(); toggleAccion.emit()"
+            [matTooltip]="esAccion() ? 'Quitar acción' : 'Marcar acción'" aria-label="Acción">
+      <mat-icon>flag</mat-icon>
+    </button>
+    <button class="tc-flag pend" [class.on]="esPendiente()" (click)="$event.stopPropagation(); togglePendiente.emit()"
+            [matTooltip]="esPendiente() ? 'Quitar pendiente' : 'Marcar pendiente'" aria-label="Pendiente">
+      <mat-icon>pause_circle</mat-icon>
+    </button>
+    <span class="tc-foot-spacer"></span>
+    <button class="tc-ver" (click)="$event.stopPropagation(); verConversacion.emit()" matTooltip="Ver conversación">
+      <mat-icon>chat</mat-icon><span class="tc-ver-txt">Ver</span>
     </button>
     <button mat-icon-button class="tc-menu" [matMenuTriggerFor]="menu" (click)="$event.stopPropagation()" aria-label="Más acciones">
       <mat-icon>more_vert</mat-icon>
@@ -68,8 +77,6 @@
 <mat-menu #menu="matMenu">
   <button mat-menu-item (click)="asignar.emit()"><mat-icon>person_add</mat-icon> Asignar / reasignar</button>
   <button mat-menu-item [matMenuTriggerFor]="estadoMenu"><mat-icon>swap_horiz</mat-icon> Cambiar estado</button>
-  <button mat-menu-item (click)="toggleAccion.emit()"><mat-icon>flag</mat-icon> {{ esAccion() ? 'Quitar acción' : 'Marcar acción' }}</button>
-  <button mat-menu-item (click)="togglePendiente.emit()"><mat-icon>pause_circle</mat-icon> {{ esPendiente() ? 'Quitar pendiente' : 'Marcar pendiente' }}</button>
 </mat-menu>
 
 <mat-menu #estadoMenu="matMenu">
