@@ -40,7 +40,7 @@ export interface HdClient {
 
 /** Filtros server-side de la consulta de tickets (los acepta el API). */
 export interface TicketFilters {
-  clientId?: string;
+  clientIds?: string[];
   statusId?: string;
   assignedUserId?: string;
 }
@@ -280,7 +280,12 @@ export class HelpdeskService {
    * (para paginar). Esta es la consulta de la vista Tickets: el filtro va EN la
    * petición al API, no se trae todo para filtrar en el navegador.
    */
-  async loadFiltered(f: TicketFilters, pageIndex: number, pageSize: number): Promise<void> {
+  async loadFiltered(
+    f: TicketFilters,
+    pageIndex: number,
+    pageSize: number,
+    sort: { field: string; dir: 'asc' | 'desc' } = { field: 'modified_date', dir: 'desc' },
+  ): Promise<void> {
     if (this.loading()) return;
     this.loading.set(true);
     this.setStatus('Cargando tickets...', 'loading');
@@ -288,8 +293,11 @@ export class HelpdeskService {
       let params = new HttpParams()
         .set('limit', String(pageSize))
         .set('offset', String(pageIndex * pageSize))
-        .set('modified_date_order', 'desc');
-      if (f.clientId) params = params.set('client_id', f.clientId);
+        // El API ordena por `<campo>_order=asc|desc` (p. ej. modified_date_order).
+        .set(`${sort.field}_order`, sort.dir);
+      // Multi-cliente: se repite el parámetro (client_id=4&client_id=7), convención
+      // de listas de FastAPI (el API corre sobre uvicorn/FastAPI).
+      for (const id of f.clientIds ?? []) params = params.append('client_id', id);
       if (f.statusId) params = params.set('ticket_status_id', f.statusId);
       if (f.assignedUserId) params = params.set('assigned_user_id', f.assignedUserId);
       const data = await firstValueFrom(this.http.get<any>(`${this.base}/tickets/tickets`, { params }));
@@ -297,7 +305,8 @@ export class HelpdeskService {
       this._tickets.set(items);
       this._total.set(Number(data?.total ?? items.length));
       this.hasMore.set((pageIndex + 1) * pageSize < this._total());
-      this.setStatus(`✓ ${this._total()} tickets`, 'ok');
+      // El total es el universo del API (paginado); items.length es lo realmente traído.
+      this.setStatus(`✓ ${items.length} cargados de ${this._total()} del sistema`, 'ok');
     } catch (err: any) {
       const msg = err?.message || '';
       const esRed = /fetch|failed|load failed|network|0/i.test(msg);

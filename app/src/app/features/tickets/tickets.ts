@@ -1,4 +1,4 @@
-import { Component, OnDestroy, TemplateRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, OnDestroy, TemplateRef, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
@@ -79,12 +79,14 @@ export class Tickets implements OnDestroy {
 
   // ── Estado de la vista ──
   readonly tab = signal<Tab>('pendientes');
-  readonly filterCliente = signal(''); // client_id (server-side); '' = todos
+  readonly filterClientes = signal<string[]>([]); // client_ids (server-side, multi); [] = todos
   readonly filterEstatus = signal(''); // nombre de estado (server-side); '' = todos
   readonly filterTicket = signal('');
   readonly remoteResult = signal<Ticket | null>(null);
-  readonly sortCol = signal('fechaUltimoMensaje');
-  readonly sortDir = signal<'asc' | 'desc' | ''>('desc');
+  // Orden server-side: el API ordena por `<campo>_order=asc|desc`.
+  readonly sortField = signal('modified_date');
+  readonly sortDir = signal<'asc' | 'desc'>('desc');
+  readonly sortValue = computed(() => `${this.sortField()}|${this.sortDir()}`);
   private searchTimer: any = null;
 
   // Paginación server-side: cada página = una consulta con su offset; `total` del API.
@@ -97,14 +99,18 @@ export class Tickets implements OnDestroy {
   readonly pendientes = signal(this.data.getHdPendientes());
 
   constructor() {
-    // Catálogos del API: estados (menú de cambio de estado) y clientes (filtro Cliente).
+    // Catálogo de estados (menú de cambio de estado de cada card).
     this.hd.getTicketStatuses();
-    this.hd.getClients();
-    // Publica los filtros de esta vista en el drawer del shell.
-    effect(() => this.shell.setFilters(this.filtersTpl() ?? null));
-    // Consulta fresca al entrar (el servicio es singleton y pudo quedar una página
-    // de una consulta anterior). El botón ↻ vuelve a llamar a refresh().
-    this.refresh();
+    // Publica los filtros de esta vista en el drawer del shell UNA vez, después del
+    // primer render y FUERA del ciclo de detección de cambios. (Hacerlo con un
+    // `effect` escribía una señal que el Layout lee durante su CD: en zoneless eso
+    // bloqueaba la pantalla en la primera carga hasta recargar. El template es
+    // estático, así que no necesita reactividad.)
+    afterNextRender(() => this.shell.setFilters(this.filtersTpl() ?? null));
+    // Espera el catálogo de clientes (para mapear los válidos a client_id) y luego
+    // consulta fresca. Así Pendientes filtra server-side por clientes válidos desde
+    // la primera carga. El botón ↻ vuelve a llamar a refresh().
+    this.hd.getClients().then(() => this.refresh());
   }
 
   ngOnDestroy(): void {
@@ -118,6 +124,12 @@ export class Tickets implements OnDestroy {
   /** Tickets operativos: clientes válidos y no finalizados (refinamiento de Pendientes). */
   private readonly operativos = computed(() =>
     this.tickets().filter((t) => CLIENTES_VALIDOS.has(t.clienteRaw) && !esFinalizado(t)),
+  );
+
+  /** client_id de los clientes válidos (CLIENTES_VALIDOS → id vía catálogo del API).
+   *  Permite filtrar Pendientes por esos clientes EN la consulta (páginas llenas). */
+  private readonly validClientIds = computed(() =>
+    this.clients().filter((c) => CLIENTES_VALIDOS.has(c.name.trim().toUpperCase())).map((c) => c.id),
   );
 
   // ── Conjunto base según la tab / búsqueda ──
@@ -161,11 +173,11 @@ export class Tickets implements OnDestroy {
     let base = this.base();
     const tic = this.filterTicket();
     if (tic && !this.remoteResult()) base = base.filter((t) => String(t.ticket).includes(tic));
-    return this.sortRows(base);
+    return base; // el orden lo aplica el API (sortField/sortDir) en la consulta
   });
 
   readonly hasFilters = computed(
-    () => !!(this.filterCliente() || this.filterEstatus() || this.filterTicket() || this.remoteResult()),
+    () => !!(this.filterClientes().length || this.filterEstatus() || this.filterTicket() || this.remoteResult()),
   );
 
   // ── Paginación server-side ──
@@ -174,6 +186,10 @@ export class Tickets implements OnDestroy {
   // refinamiento de operativos.
   readonly pagedRows = computed<Ticket[]>(() => this.rows());
   readonly paginatorLength = computed(() => this.hd.total());
+  /** Total de páginas según el `total` del API (para "Página X de Y"). */
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.hd.total() / this.pageSize())));
+  /** ¿Hay más páginas después de la actual? (indicador de "siguiente"). */
+  readonly hayMasPaginas = computed(() => this.pageIndex() + 1 < this.totalPages());
 
   readonly stats = computed(() => {
     const all = this.operativos();
@@ -200,27 +216,16 @@ export class Tickets implements OnDestroy {
     };
   });
 
-  private sortRows(arr: Ticket[]): Ticket[] {
-    const col = this.sortCol();
-    const dir = this.sortDir();
-    if (!col || !dir) return arr;
-    return [...arr].sort((a, b) => {
-      let va: any = a[col], vb: any = b[col];
-      if (typeof va === 'string' && va && /^\d{4}-\d{2}-\d{2}/.test(va)) {
-        va = new Date(va).getTime() || 0;
-        vb = new Date(vb || '').getTime() || 0;
-      }
-      if (typeof va === 'number') return dir === 'asc' ? va - vb : vb - va;
-      const cmp = String(va || '').toLowerCase().localeCompare(String(vb || '').toLowerCase());
-      return dir === 'asc' ? cmp : -cmp;
-    });
-  }
 
   // ── Acciones ──
   /** Filtros server-side desde la tab + filtros activos. */
   private buildFilters(): TicketFilters {
     const f: TicketFilters = {};
-    if (this.filterCliente()) f.clientId = this.filterCliente();
+    if (this.filterClientes().length) {
+      f.clientIds = this.filterClientes(); // selección explícita del usuario
+    } else if (this.tab() === 'pendientes') {
+      f.clientIds = this.validClientIds(); // Pendientes: solo clientes que atiende el equipo
+    }
     if (this.filterEstatus()) f.statusId = this.hd.statusIdOf(this.filterEstatus());
     if (this.tab() === 'asignados') f.assignedUserId = this.myId;
     return f;
@@ -232,7 +237,19 @@ export class Tickets implements OnDestroy {
       await this.hd.loadAll();
       return;
     }
-    await this.hd.loadFiltered(this.buildFilters(), this.pageIndex(), this.pageSize());
+    await this.hd.loadFiltered(this.buildFilters(), this.pageIndex(), this.pageSize(), {
+      field: this.sortField(),
+      dir: this.sortDir(),
+    });
+  }
+
+  /** Cambio de orden (campo|dir desde el dropdown) → reconsulta desde la página 0. */
+  async onSortChange(value: string): Promise<void> {
+    const [field, dir] = value.split('|');
+    this.sortField.set(field);
+    this.sortDir.set(dir === 'asc' ? 'asc' : 'desc');
+    this.pageIndex.set(0);
+    await this.query();
   }
 
   /** Recarga desde la primera página (botón refrescar / auto-consulta al entrar). */
@@ -255,9 +272,21 @@ export class Tickets implements OnDestroy {
     await this.query();
   }
 
-  /** Cambio del filtro de Cliente (client_id) → reconsulta desde la página 0. */
-  async onClienteChange(clientId: string): Promise<void> {
-    this.filterCliente.set(clientId);
+  /** Nombre de cliente por su id (para los chips de selección). */
+  clienteName(id: string): string {
+    return this.clients().find((c) => c.id === id)?.name || id;
+  }
+
+  /** Cambio del multi-select de Cliente (client_ids) → reconsulta desde la página 0. */
+  async onClientesChange(ids: string[]): Promise<void> {
+    this.filterClientes.set(ids ?? []);
+    this.pageIndex.set(0);
+    await this.query();
+  }
+
+  /** Quita un cliente del filtro (la "x" del chip) → reconsulta. */
+  async removeCliente(id: string): Promise<void> {
+    this.filterClientes.set(this.filterClientes().filter((x) => x !== id));
     this.pageIndex.set(0);
     await this.query();
   }
@@ -270,7 +299,7 @@ export class Tickets implements OnDestroy {
   }
 
   async clearFilters(): Promise<void> {
-    this.filterCliente.set('');
+    this.filterClientes.set([]);
     this.filterEstatus.set('');
     this.filterTicket.set('');
     this.remoteResult.set(null);

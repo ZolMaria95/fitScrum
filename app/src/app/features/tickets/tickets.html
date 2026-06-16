@@ -7,14 +7,25 @@
       <mat-icon matSuffix>search</mat-icon>
     </mat-form-field>
 
+    @if (filterClientes().length) {
+      <div class="hd-cli-chips">
+        @for (id of filterClientes(); track id) {
+          <span class="hd-cli-chip" [title]="clienteName(id)">
+            <span class="hd-cli-chip-txt">{{ clienteName(id) }}</span>
+            <button type="button" class="hd-cli-chip-x" (click)="removeCliente(id)" [attr.aria-label]="'Quitar ' + clienteName(id)">
+              <mat-icon>close</mat-icon>
+            </button>
+          </span>
+        }
+      </div>
+    }
     <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Cliente</mat-label>
-      <mat-select [value]="filterCliente()" (selectionChange)="onClienteChange($event.value)" (closed)="buscarCliente.set('')">
+      <mat-select multiple [value]="filterClientes()" (selectionChange)="onClientesChange($event.value)" (closed)="buscarCliente.set('')">
         <div class="sel-search" (click)="$event.stopPropagation()">
           <mat-icon class="sel-search-icon">search</mat-icon>
           <input matInput placeholder="Buscar cliente…" [ngModel]="buscarCliente()" (ngModelChange)="buscarCliente.set($event)" (keydown)="$event.stopPropagation()" />
         </div>
-        <mat-option value="">Todos ({{ optClientes().length }})</mat-option>
         @for (c of optClientesF(); track c.id) { <mat-option [value]="c.id">{{ c.name }}</mat-option> }
       </mat-select>
     </mat-form-field>
@@ -28,6 +39,18 @@
         </div>
         <mat-option value="">Todos</mat-option>
         @for (e of optEstatusF(); track e) { <mat-option [value]="e">{{ e }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Ordenar por</mat-label>
+      <mat-select [value]="sortValue()" (selectionChange)="onSortChange($event.value)">
+        <mat-option value="modified_date|desc">Modificación (recientes)</mat-option>
+        <mat-option value="modified_date|asc">Modificación (antiguos)</mat-option>
+        <mat-option value="entry_date|desc">Ingreso (recientes)</mat-option>
+        <mat-option value="entry_date|asc">Ingreso (antiguos)</mat-option>
+        <mat-option value="priority|asc">Prioridad (alta primero)</mat-option>
+        <mat-option value="priority|desc">Prioridad (baja primero)</mat-option>
       </mat-select>
     </mat-form-field>
 
@@ -108,12 +131,19 @@
       }
     </div>
 
+    <div class="hd-pageinfo">
+      <span>Página {{ pageIndex() + 1 }} de {{ totalPages() }} · {{ tabTotal() }} tickets</span>
+      @if (hayMasPaginas()) {
+        <span class="hd-pageinfo-more"><mat-icon>arrow_forward</mat-icon> hay más en la siguiente página</span>
+      }
+    </div>
+
     <mat-paginator
       [length]="paginatorLength()"
       [pageIndex]="pageIndex()"
       [pageSize]="pageSize()"
       [hidePageSize]="true"
-      [showFirstLastButtons]="false"
+      [showFirstLastButtons]="true"
       (page)="onPage($event)"
       aria-label="Páginas de tickets">
     </mat-paginator>

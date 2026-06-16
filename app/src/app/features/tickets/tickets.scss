@@ -83,6 +83,80 @@
   mat-form-field { width: 100%; }
 }
 
+// Chips de clientes seleccionados (arriba del select de Cliente), cada uno con "x".
+.hd-cli-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hd-cli-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--brand, #048abf) 14%, transparent);
+  color: var(--brand-dark, #0390bc);
+  font-size: 12px;
+  font-weight: 600;
+
+  .hd-cli-chip-txt {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hd-cli-chip-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    border-radius: 50%;
+
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+
+    &:hover { background: color-mix(in srgb, var(--brand, #048abf) 22%, transparent); }
+  }
+}
+
+// Indicador de página (deja claro que hay más adelante aunque la página sea corta).
+.hd-pageinfo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 10px 4px 0;
+  font-size: 13px;
+  color: var(--mat-sys-on-surface-variant, #5c5c68);
+
+  .hd-pageinfo-more {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    color: var(--brand-dark, #0390bc);
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
 // ── Grid de cards (responsive, sin scroll horizontal) ──
 .ticket-grid {
   display: grid;

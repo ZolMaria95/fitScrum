@@ -3,7 +3,7 @@
     class="drawer"
     [mode]="mode()"
     [opened]="opened()"
-    (openedChange)="opened.set($event)"
+    (openedChange)="drawerOpen.set($event)"
     [disableClose]="fixed()">
     <div class="drawer-brand">Fit-Daily</div>
 
@@ -42,10 +42,10 @@
     }
   </mat-sidenav>
 
-  <mat-sidenav-content class="shell-content">
+  <mat-sidenav-content #shellContent class="shell-content">
     @if (!fixed()) {
       <mat-toolbar color="primary" class="topbar">
-        <button mat-icon-button (click)="opened.set(!opened())" aria-label="Abrir menú">
+        <button mat-icon-button (click)="drawerOpen.set(!opened())" aria-label="Abrir menú">
           <mat-icon>menu</mat-icon>
         </button>
         <span class="brand">Fit-Daily</span>

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, inject, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -66,7 +66,15 @@ export class Layout {
   /** Panel fijo (mode side, siempre abierto, sin ☰). */
   readonly fixed = computed(() => this.isDesktop() && !this.collapsibleNav());
   readonly mode = computed<'side' | 'over'>(() => (this.fixed() ? 'side' : 'over'));
-  readonly opened = signal(false);
+  /** Estado manual del drawer (botón ☰) cuando es overlay; en modo fijo se ignora. */
+  readonly drawerOpen = signal(false);
+  /** Abierto = fijo (side, siempre abierto) o abierto manualmente en overlay. Derivar
+   *  `opened` y `mode` de `fixed()` juntos evita que el drawer se abra en modo `over`
+   *  durante la transición (lo que dejaba el contenido `inert` en zoneless). */
+  readonly opened = computed(() => this.fixed() || this.drawerOpen());
+
+  /** Contenido del shell (para limpiar un `inert` que Material pudo dejar pegado). */
+  private readonly shellContent = viewChild<ElementRef<HTMLElement>>('shellContent');
 
   constructor() {
     // Carga los datos (Firebase/localStorage) y arranca el sync en tiempo real.
@@ -78,8 +86,15 @@ export class Layout {
     const timer = setInterval(() => this.checkReminders(), 5 * 60 * 1000);
     this.destroyRef.onDestroy(() => clearInterval(timer));
 
-    // El drawer sigue al modo: abierto si es fijo, cerrado si es overlay.
-    effect(() => this.opened.set(this.fixed()));
+    // Red de seguridad (zoneless): en modo fijo (side) el contenido NUNCA debe quedar
+    // inerte. Si Material dejó el atributo `inert` pegado tras una transición de modo,
+    // se quita tras cada render (se re-evalúa al cambiar fixed/opened).
+    afterRenderEffect(() => {
+      this.fixed();
+      this.opened();
+      const el = this.shellContent()?.nativeElement;
+      if (el && this.fixed()) el.removeAttribute('inert');
+    });
 
     // En overlay, cerrar el drawer al navegar.
     this.router.events
@@ -88,7 +103,7 @@ export class Layout {
         takeUntilDestroyed(),
       )
       .subscribe(() => {
-        if (!this.fixed()) this.opened.set(false);
+        if (!this.fixed()) this.drawerOpen.set(false);
       });
   }
 
