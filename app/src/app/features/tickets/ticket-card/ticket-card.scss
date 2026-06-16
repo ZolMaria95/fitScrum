@@ -238,17 +238,38 @@
 
 .tc-foot-spacer { flex: 1 1 auto; }
 
-.tc-avatar {
+// Asignado: punto de color + nombre y apellido (en vez de iniciales).
+.tc-assignee {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  flex: none;
+  gap: 6px;
+  min-width: 0;
+  max-width: 140px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container-high, #eceff3);
+
+  .tc-assignee-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .tc-assignee-name {
+    min-width: 0;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--mat-sys-on-surface, #2b2b3a);
+  }
+
+  &.unassigned .tc-assignee-name {
+    font-weight: 500;
+    color: var(--mat-sys-on-surface-variant, #6b6b78);
+  }
 }
 
 // Toggles ⚑ acción / ⏸ pendiente (siempre visibles).

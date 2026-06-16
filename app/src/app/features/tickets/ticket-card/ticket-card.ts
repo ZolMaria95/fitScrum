@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { clientStyle, colorFor, initialsFromName } from '../../board/board-utils';
+import { clientStyle, colorFor, shortName } from '../../board/board-utils';
 import { Ticket } from '../ticket-utils';
 import { estadoStyle, fmtIngreso, fmtMod, tipoStyle } from '../tickets-card-utils';
 
@@ -44,7 +44,9 @@ export class TicketCard {
   readonly avatar = computed(() => {
     const t = this.ticket();
     const ref = t.usuarioAsignado || t.nombreAsignado || '';
-    return { initials: ref ? initialsFromName(t.nombreAsignado || t.usuarioAsignado) : '–', color: ref ? colorFor(ref) : '#9aa0a6' };
+    // Nombre + apellido (criterio compartido con el board); sin asignar → guion.
+    const nombre = shortName(t.nombreAsignado || t.usuarioAsignado);
+    return { nombre: ref ? nombre : 'Sin asignar', color: ref ? colorFor(ref) : '#9aa0a6', asignado: !!ref };
   });
   readonly asignadoLabel = computed(() => this.ticket().nombreAsignado || this.ticket().usuarioAsignado || 'Sin asignar');
 

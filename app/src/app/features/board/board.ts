@@ -38,6 +38,7 @@ import {
   progColor,
   resolveMember,
   roundUp5,
+  shortName,
   statusFromTicketEstado,
 } from './board-utils';
 
@@ -256,12 +257,8 @@ export class Board {
     if (this.allAssigneesSelected()) this.activeAssignees.set(new Set());
     else this.activeAssignees.set(new Set(this.assigneeChips().map((m) => m.id)));
   }
-  /** Nombre corto para los globos: 1.ª palabra (nombre) + 3.ª palabra (apellido). */
-  shortName(name: string): string {
-    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
-    if (parts.length <= 2) return parts.join(' ');
-    return `${parts[0]} ${parts[2]}`;
-  }
+  /** Nombre corto para los globos (criterio compartido en board-utils). */
+  readonly shortName = shortName;
   /** Quita un asignado (la "x" del globo). */
   removeAssignee(id: string): void {
     const s = new Set(this.activeAssignees());

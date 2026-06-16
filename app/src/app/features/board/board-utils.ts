@@ -68,6 +68,14 @@ export function initialsFromName(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+/** Nombre corto: 1.ª palabra (nombre) + 3.ª palabra (apellido) cuando hay 4 nombres;
+ *  con 2 palabras devuelve ambas. Mismo criterio que los globos del board. */
+export function shortName(name: string): string {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 2) return parts.join(' ');
+  return `${parts[0]} ${parts[2]}`;
+}
+
 // ── Estética de post-it: color por cliente + micro-rotación ──────────────
 const POSTIT_INK = '#2b2b3a'; // tinta oscura para legibilidad sobre pastel
 const POSTIT_BASE = '#fffdf2'; // crema base del post-it

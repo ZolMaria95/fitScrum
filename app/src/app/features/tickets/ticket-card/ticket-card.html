@@ -55,7 +55,10 @@
   </div>
 
   <div class="tc-foot">
-    <span class="tc-avatar" [style.background]="avatar().color" [matTooltip]="asignadoLabel()">{{ avatar().initials }}</span>
+    <span class="tc-assignee" [class.unassigned]="!avatar().asignado" [matTooltip]="asignadoLabel()">
+      <span class="tc-assignee-dot" [style.background]="avatar().color"></span>
+      <span class="tc-assignee-name">{{ avatar().nombre }}</span>
+    </span>
     <button class="tc-flag" [class.on]="esAccion()" (click)="$event.stopPropagation(); toggleAccion.emit()"
             [matTooltip]="esAccion() ? 'Quitar acción' : 'Marcar acción'" aria-label="Acción">
       <mat-icon>flag</mat-icon>
