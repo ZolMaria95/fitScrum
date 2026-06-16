@@ -105,6 +105,10 @@ export class Board {
         // El cliente de una tarea con ticket lo define el ticket.
         const clientId = String(raw.client_id ?? '').trim();
         if (clientId && s.client !== clientId) this.data.updateStoryClient(s.id, clientId);
+        // Asignación: si la tarea tiene asignado y el ticket no lo refleja, empújalo al API.
+        const ticketAssignee = String(raw.assigned_user_id || '').trim().toUpperCase();
+        const taskAssignee = String(s.assignee || '').trim().toUpperCase();
+        if (taskAssignee && taskAssignee !== ticketAssignee) this.helpdesk.assignTicket(s.ticket, taskAssignee);
         const estado = String(raw.estado || '');
         if (estado && s.hdEstatus !== estado) this.data.updateStoryHdEstatus(s.id, estado);
         const m = statusFromTicketEstado(estado);

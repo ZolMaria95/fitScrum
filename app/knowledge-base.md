@@ -187,7 +187,9 @@ Estado: `activeAssignees`/`activeClients` (Set) y `selectedAssignees`/`selectedC
   `INSTALADO PARA CERTIFICACIÓN→En Certificación`, `ENTREGADO→Done`,
   `APROBADO`/`CERRADO POR EL CLIENTE→Done` con el **check marcado**, **cualquier otro → To Do**
   (sin tocar el ticket). El estado del ticket se guarda en `story.hdEstatus` y se muestra como
-  **badge** en la card. También **fija el cliente** de la tarea con el `client_id` del ticket.
+  **badge** en la card. También **fija el cliente** de la tarea con el `client_id` del ticket y
+  **reconcilia la asignación**: si la tarea tiene asignado y el ticket no lo refleja, empuja la
+  asignación al API (`assignTicket`) — cubre los asignados locales (auto-asignación al arrastrar, etc.).
 - **Check "Finalizado"** (antes "Aprobado") en Done: **read-only para tareas CON ticket** (lo define el
   ticket: APROBADO/CERRADO lo marcan, el resto lo desmarcan). Para tareas **SIN ticket** es **editable**
   (`onFinalize` → `approveStory`/`unapproveStory`, con confirmación al marcar y desmarcado si se cancela).
