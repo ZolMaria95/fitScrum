@@ -4,9 +4,10 @@ import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
-import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatCheckboxChange, MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
@@ -30,7 +31,9 @@ import {
   canStartWork,
   cardTilt,
   clientStyle,
+  colorFor,
   dueInfo,
+  pastel,
   progColor,
   resolveMember,
   roundUp5,
@@ -58,6 +61,7 @@ interface Column {
     MatButtonModule,
     MatButtonToggleModule,
     MatChipsModule,
+    MatFormFieldModule,
     MatSelectModule,
     MatCheckboxModule,
     MatIconModule,
@@ -96,6 +100,9 @@ export class Board {
       conTicket.map(async (s) => {
         const raw = await this.helpdesk.fetchTicketRaw(s.ticket);
         if (!raw) return;
+        // El cliente de una tarea con ticket lo define el ticket.
+        const clientId = String(raw.client_id ?? '').trim();
+        if (clientId && s.client !== clientId) this.data.updateStoryClient(s.id, clientId);
         const estado = String(raw.estado || '');
         if (estado && s.hdEstatus !== estado) this.data.updateStoryHdEstatus(s.id, estado);
         const m = statusFromTicketEstado(estado);
@@ -116,6 +123,7 @@ export class Board {
   readonly dueInfo = dueInfo;
   readonly progColor = progColor;
   readonly clientStyle = clientStyle;
+  readonly pastel = pastel;
   readonly cardTilt = cardTilt;
   readonly STATUS_LABELS = STATUS_LABELS;
   readonly PRIORITY_LABELS = PRIORITY_LABELS;
@@ -123,7 +131,7 @@ export class Board {
 
   // ── Filtros (signals locales) ──
   readonly priorityFilter = signal<PriorityFilter>('all');
-  readonly clientFilter = signal<string>('all');
+  readonly activeClients = signal<Set<string>>(new Set());
   readonly activeAssignees = signal<Set<string>>(new Set());
 
   // ── Permisos ──
@@ -168,19 +176,43 @@ export class Board {
       .filter((s) => !(s.status === 'done' && s.approved && (s.approvedDate || '') < cutoffStr));
   });
 
-  /** Chips de asignado: ids presentes en la base visible (antes de filtrar). */
+  /** Empleados asignados en el board (para el multi-select), ordenados por nombre. */
   readonly assigneeChips = computed(() => {
     const ids = [...new Set(this.visibleStories().map((s) => s.assignee).filter(Boolean))] as string[];
-    return ids.map((id) => this.resolveMember(id)).filter((m): m is NonNullable<typeof m> => !!m);
+    return ids
+      .map((id) => this.resolveMember(id))
+      .filter((m): m is NonNullable<typeof m> => !!m)
+      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
   });
+
+  /** Clientes presentes en las tareas del board (para el multi-select), por nombre. */
+  readonly clientChips = computed(() => {
+    const ids = [...new Set(this.visibleStories().map((s) => s.client).filter(Boolean))] as string[];
+    return ids
+      .map((id) => {
+        const c = this.clientOf(id);
+        return { id, name: c?.name || id, color: c?.color || colorFor(id) };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  });
+
+  // Buscador dentro de cada multi-select de filtro.
+  readonly buscarAsignado = signal('');
+  readonly buscarCliente = signal('');
+  private filtraOpc<T extends { id: string; name: string }>(list: T[], term: string): T[] {
+    const t = term.trim().toLowerCase();
+    return t ? list.filter((x) => x.name.toLowerCase().includes(t) || x.id.toLowerCase().includes(t)) : list;
+  }
+  readonly assigneeOptions = computed(() => this.filtraOpc(this.assigneeChips(), this.buscarAsignado()));
+  readonly clientOptions = computed(() => this.filtraOpc(this.clientChips(), this.buscarCliente()));
 
   readonly columns = computed<Column[]>(() => {
     const prio = this.priorityFilter();
-    const client = this.clientFilter();
+    const clients = this.activeClients();
     const assignees = this.activeAssignees();
     const filtered = this.visibleStories().filter((s) => {
       if (prio !== 'all' && s.priority !== prio) return false;
-      if (client !== 'all' && s.client !== client) return false;
+      if (clients.size > 0 && !(s.client && clients.has(s.client))) return false;
       if (assignees.size > 0 && !(!s.assignee || assignees.has(s.assignee))) return false;
       return true;
     });
@@ -200,16 +232,60 @@ export class Board {
     this.priorityFilter.set(f);
     this.activeAssignees.set(new Set()); // paridad con el legacy
   }
-  toggleAssignee(id: string): void {
+  /** Ids seleccionados como array (para el mat-select multiple y los globos). */
+  readonly selectedAssignees = computed(() => [...this.activeAssignees()]);
+  /** Reemplaza la selección desde el multi-select. */
+  onAssigneeSelectChange(ids: string[]): void {
+    this.activeAssignees.set(new Set(ids));
+  }
+  /** ¿Están todos los empleados del board seleccionados? */
+  readonly allAssigneesSelected = computed(
+    () => this.assigneeChips().length > 0 && this.selectedAssignees().length === this.assigneeChips().length,
+  );
+  /** Selecciona todos los empleados del board (o los quita si ya están todos). */
+  toggleAllAssignees(): void {
+    if (this.allAssigneesSelected()) this.activeAssignees.set(new Set());
+    else this.activeAssignees.set(new Set(this.assigneeChips().map((m) => m.id)));
+  }
+  /** Nombre corto para los globos: 1.ª palabra (nombre) + 3.ª palabra (apellido). */
+  shortName(name: string): string {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length <= 2) return parts.join(' ');
+    return `${parts[0]} ${parts[2]}`;
+  }
+  /** Quita un asignado (la "x" del globo). */
+  removeAssignee(id: string): void {
     const s = new Set(this.activeAssignees());
-    s.has(id) ? s.delete(id) : s.add(id);
+    s.delete(id);
     this.activeAssignees.set(s);
   }
   clearAssignees(): void {
     this.activeAssignees.set(new Set());
   }
-  setClientFilter(id: string): void {
-    this.clientFilter.set(id);
+
+  // ── Filtro de clientes (multi-select, mismo patrón que asignados) ──
+  readonly selectedClients = computed(() => [...this.activeClients()]);
+  onClientSelectChange(ids: string[]): void {
+    this.activeClients.set(new Set(ids));
+  }
+  readonly allClientsSelected = computed(
+    () => this.clientChips().length > 0 && this.selectedClients().length === this.clientChips().length,
+  );
+  toggleAllClients(): void {
+    if (this.allClientsSelected()) this.activeClients.set(new Set());
+    else this.activeClients.set(new Set(this.clientChips().map((c) => c.id)));
+  }
+  removeClient(id: string): void {
+    const s = new Set(this.activeClients());
+    s.delete(id);
+    this.activeClients.set(s);
+  }
+  /** Nombre de cliente para el globo (resuelto desde las tareas). */
+  clientNameOf(id: string): string {
+    return this.clientChips().find((c) => c.id === id)?.name || id;
+  }
+  clientColorOf(id: string): string {
+    return this.clientChips().find((c) => c.id === id)?.color || '#9aa0a6';
   }
   /** Resuelve el cliente: primero los locales (con color), luego el catálogo del API. */
   clientOf(id: string | null): { id: string; name: string; color?: string } | undefined {
@@ -221,23 +297,54 @@ export class Board {
   }
 
   // ── Drag & drop ──
-  canDrag(card: Story): boolean {
-    if (this.puedeGestionarTodo()) return true;
+  /** Mover la tarea y marcar sus checks: el asignado, el Helpdesk (MSC001) o un Supervisor. */
+  puedeOperar(card: Story): boolean {
+    if (this.puedeGestionarTodo()) return true; // MSC001 o Supervisor
     const owner = String(card.assignee || '').trim().toUpperCase();
     return !!owner && owner === this.myId;
+  }
+  canDrag(card: Story): boolean {
+    return this.puedeOperar(card);
+  }
+  /** Aviso de advertencia cuando alguien sin permiso intenta modificar una tarea ajena. */
+  private avisoSinPermiso(): void {
+    this.snack.open(
+      'No tienes permisos para modificar esta tarea. Solo el asignado, un supervisor o el Helpdesk pueden.',
+      'OK',
+      { duration: 4000 },
+    );
   }
 
   async drop(event: CdkDragDrop<Story[]>, target: Status): Promise<void> {
     const task = event.item.data as Story;
     if (!task || task.status === target) return;
+    // Permiso: solo el asignado, un supervisor o el Helpdesk pueden moverla.
+    if (!this.puedeOperar(task)) {
+      this.avisoSinPermiso();
+      return;
+    }
     // Regla: una tarea que ya salió de To Do no puede volver a To Do.
     if (target === 'todo') {
       this.snack.open('Una tarea que ya salió de To Do no puede volver.', 'OK', { duration: 3000 });
       return;
     }
     if (task.status === 'todo' && target === 'in_progress') {
-      const ok = await canStartWork(task, this.workDeps);
+      const ok = await canStartWork(task, this.workDeps); // WIP + permisos + confirmación
       if (!ok) return; // bloqueado/cancelado: el signal recompone y la card vuelve a su columna
+    } else {
+      // Cualquier otro cambio de columna pide confirmación.
+      const ok = await firstValueFrom(
+        this.dialog
+          .open(ConfirmDialog, {
+            data: {
+              title: 'Mover tarea',
+              message: `¿Mover "${task.title}" a "${STATUS_LABELS[target]}"?`,
+              confirmText: 'Mover',
+            },
+          })
+          .afterClosed(),
+      );
+      if (!ok) return; // cancelado: el signal recompone y la card vuelve a su columna
     }
     this.data.updateStoryStatus(task.id, target);
     this.pushHdEstado(task, HD_ESTADO_POR_STATUS[target]);
@@ -274,13 +381,63 @@ export class Board {
     if (willWait) this.pushHdEstado(card, HD_ESTADO_ESPERANDO);
   }
 
-  onCert(card: Story, checked: boolean): void {
-    if (checked) {
-      this.data.updateStoryStatus(card.id, 'done');
-      this.pushHdEstado(card, HD_ESTADO_POR_STATUS['done']);
+  async onCert(card: Story, ev: MatCheckboxChange): Promise<void> {
+    if (!ev.checked) return;
+    if (!this.puedeOperar(card)) {
+      ev.source.checked = false;
+      this.avisoSinPermiso();
+      return;
     }
+    // Confirmación (igual que cualquier cambio de columna).
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialog, {
+          data: {
+            title: 'Certificar tarea',
+            message: `¿Marcar "${card.title}" como certificada y moverla a Finalizado?`,
+            confirmText: 'Certificar',
+          },
+        })
+        .afterClosed(),
+    );
+    if (!ok) {
+      ev.source.checked = false; // cancelado → quita el check
+      return;
+    }
+    this.data.updateStoryStatus(card.id, 'done');
+    this.pushHdEstado(card, HD_ESTADO_POR_STATUS['done']);
   }
-  // El check "Finalizado" no es editable: lo define el estado del ticket (ver syncTicketStatuses).
+
+  /** Check "Finalizado" en Done. Tareas CON ticket: lo define el ticket (read-only).
+   *  Tareas SIN ticket: el usuario lo marca/desmarca (con confirmación al marcar). */
+  async onFinalize(card: Story, ev: MatCheckboxChange): Promise<void> {
+    if (card.ticket) return; // las que tienen ticket lo definen por el ticket
+    if (!this.puedeOperar(card)) {
+      ev.source.checked = !!card.approved; // revierte al estado real
+      this.avisoSinPermiso();
+      return;
+    }
+    if (!ev.checked) {
+      this.data.unapproveStory(card.id);
+      return;
+    }
+    const ok = await firstValueFrom(
+      this.dialog
+        .open(ConfirmDialog, {
+          data: {
+            title: 'Finalizar tarea',
+            message: `¿Marcar "${card.title}" como finalizada?`,
+            confirmText: 'Finalizar',
+          },
+        })
+        .afterClosed(),
+    );
+    if (!ok) {
+      ev.source.checked = false; // cancelado → quita el check
+      return;
+    }
+    this.data.approveStory(card.id);
+  }
 
   async deleteCard(card: Story): Promise<void> {
     const ok = await firstValueFrom(

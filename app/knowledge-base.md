@@ -150,13 +150,32 @@ badge, avatar = **código de usuario** (igual que los filtros).
 
 - **`card-detail-dialog/`** — crear/editar tarea: buscadores (`MatAutocomplete`) de **asignado** y
   **cliente** desde el API, fecha con **datepicker**, progreso, estado. Al escribir un **N° de
-  ticket** consulta el ticket y autocompleta (título/cliente/asignado).
+  ticket** consulta el ticket y autocompleta (título/cliente/asignado). **El cliente solo es editable
+  al crear o, en edición, para el **Helpdesk (MSC001)** en tareas **sin ticket** (`showClientEditor`);
+  las tareas **con ticket** muestran el cliente del ticket (read-only) y lo fija el sync del board.
 - **`sprint-dialog/`** — crear/editar/borrar sprint.
 - **`confirm-dialog/`** — confirmación reutilizable (variante "escribí BORRAR").
 
 **Funciona:** drag&drop (CDK) con permisos + WIP, filtros (prioridad/asignado/cliente), progreso,
 certificar, esperando cliente, borrar card / Borrar Board. **Regla:** una tarea que salió de To Do
 **no puede volver** (drag y modal). Las done-finalizadas **salen del board a los 2 días**.
+**Permiso `puedeOperar(card)`** (mover la tarea por drag + marcar sus checks): el **asignado**, el
+**Helpdesk (MSC001)** o un **Supervisor** (`puedeGestionarTodo`). Si alguien **sin permiso** intenta moverla
+o marcar un check, sale una **advertencia** (`avisoSinPermiso`) y no se aplica (la card vuelve / el check se
+desmarca). No se bloquea/deshabilita el control: se deja intentar para poder avisar.
+
+**Todo cambio de columna pide confirmación** (`ConfirmDialog`): por **drag** (`To Do→In Progress` usa
+`canStartWork` con WIP+permisos; el resto un confirm "Mover tarea") y por el **check "Certificado"**
+(`onCert`, mueve a Finalizado; si se cancela, se desmarca el checkbox con `ev.source.checked = false`).
+
+**Filtros "Asignado a" y "Cliente"** (mismo patrón): `mat-select` **multiple** poblado con los valores
+**presentes en las tareas del board** —empleados por **nombre completo** (`assigneeChips`) y clientes por
+nombre (`clientChips`)—, ordenados. Lo elegido se muestra en **globos `[… |x]`** en **color pastel**
+(`pastel()` de board-utils; en asignados `shortName` = 1.ª+3.ª palabra, nombre completo en el tooltip; los de
+cliente acotan con ellipsis). La "x" quita (`removeAssignee`/`removeClient`); el panel tiene un **encabezado
+`.sel-head`** con **buscador** (`buscarAsignado`/`buscarCliente` → `assigneeOptions`/`clientOptions`) y
+**"Seleccionar todos / Quitar todos"** (`toggleAllAssignees`/`toggleAllClients`). Sin selección = todos.
+Estado: `activeAssignees`/`activeClients` (Set) y `selectedAssignees`/`selectedClients` (array para el select).
 
 **Barra de sprint (encima del board):** selector + **✏ editar** + **＋ nuevo** + banner
 (nombre/objetivo/fechas/capacidad/estado).
@@ -168,9 +187,10 @@ certificar, esperando cliente, borrar card / Borrar Board. **Regla:** una tarea 
   `INSTALADO PARA CERTIFICACIÓN→En Certificación`, `ENTREGADO→Done`,
   `APROBADO`/`CERRADO POR EL CLIENTE→Done` con el **check marcado**, **cualquier otro → To Do**
   (sin tocar el ticket). El estado del ticket se guarda en `story.hdEstatus` y se muestra como
-  **badge** en la card.
-- **Check "Finalizado"** (antes "Aprobado") = **read-only**: lo define siempre el ticket
-  (APROBADO/CERRADO lo marcan, el resto lo desmarcan).
+  **badge** en la card. También **fija el cliente** de la tarea con el `client_id` del ticket.
+- **Check "Finalizado"** (antes "Aprobado") en Done: **read-only para tareas CON ticket** (lo define el
+  ticket: APROBADO/CERRADO lo marcan, el resto lo desmarcan). Para tareas **SIN ticket** es **editable**
+  (`onFinalize` → `approveStory`/`unapproveStory`, con confirmación al marcar y desmarcado si se cancela).
 - **Escritura del estado** (drag manual / botón esperando / modal): `in_progress→EN PROCESO`,
   `review→INSTALADO PARA CERTIFICACIÓN`, `done→ENTREGADO`, esperando`→INFO PENDIENTE CLIENTE`
   (`HD_ESTADO_POR_STATUS`/`HD_ESTADO_ESPERANDO`) — consistente con la lectura.

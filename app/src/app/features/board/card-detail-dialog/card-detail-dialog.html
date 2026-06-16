@@ -8,7 +8,7 @@
     <input matInput [(ngModel)]="title" placeholder="Título de la tarea" />
   </mat-form-field>
 
-  @if (isNew) {
+  @if (showClientEditor()) {
     <div class="row">
       <mat-form-field appearance="outline" class="grow">
         <mat-label>Cliente</mat-label>
@@ -30,22 +30,24 @@
           }
         </mat-autocomplete>
       </mat-form-field>
-      <mat-form-field appearance="outline" class="ticket">
-        <mat-label>N° Ticket</mat-label>
-        <input
-          matInput
-          [(ngModel)]="ticket"
-          inputmode="numeric"
-          placeholder="Buscar ticket…"
-          (blur)="lookupTicket()"
-          (keydown.enter)="lookupTicket()"
-        />
-        @if (ticketLoading()) {
-          <mat-spinner matSuffix diameter="18"></mat-spinner>
-        } @else {
-          <mat-icon matSuffix>search</mat-icon>
-        }
-      </mat-form-field>
+      @if (isNew) {
+        <mat-form-field appearance="outline" class="ticket">
+          <mat-label>N° Ticket</mat-label>
+          <input
+            matInput
+            [(ngModel)]="ticket"
+            inputmode="numeric"
+            placeholder="Buscar ticket…"
+            (blur)="lookupTicket()"
+            (keydown.enter)="lookupTicket()"
+          />
+          @if (ticketLoading()) {
+            <mat-spinner matSuffix diameter="18"></mat-spinner>
+          } @else {
+            <mat-icon matSuffix>search</mat-icon>
+          }
+        </mat-form-field>
+      }
     </div>
   } @else if (story!.ticket || client) {
     <div class="meta">

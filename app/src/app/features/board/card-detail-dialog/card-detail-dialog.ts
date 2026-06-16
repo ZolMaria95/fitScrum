@@ -76,20 +76,26 @@ export class CardDetailDialog {
 
   readonly story = this.input.story;
   readonly isNew = !this.story;
+  /** El usuario Helpdesk (MSC001) puede editar el cliente de tareas SIN ticket. */
+  readonly esHelpdesk = this.auth.esMSC001;
+  /** Muestra el buscador de cliente: al crear, o al editar una tarea sin ticket siendo Helpdesk. */
+  readonly showClientEditor = computed(() => this.isNew || (this.esHelpdesk() && !this.story?.ticket));
 
   readonly STATUSES = STATUSES;
   readonly STATUS_LABELS = STATUS_LABELS;
   readonly PRIORITIES: Priority[] = ['alta', 'media', 'baja'];
   readonly PRIORITY_LABELS = PRIORITY_LABELS;
 
-  // Cliente actual (modo edición), resuelto local → API para mostrar el chip.
+  // Cliente actual (modo edición). Prefiere el nombre del catálogo del API (completo,
+  // p. ej. "COAC LA DOLOROSA DURAN") y cae al local solo si el id no está en el API
+  // (clientes locales con id propio). Así las tareas con ticket muestran el nombre real.
   get client(): { id: string; name: string; color?: string } | null {
     const id = this.story?.client;
     if (!id) return null;
-    const local = this.data.getClient(id) as { id: string; name: string; color?: string } | undefined;
-    if (local) return local;
     const api = this.helpdesk.clients().find((c) => c.id === id);
-    return api ? { id: api.id, name: api.name } : { id, name: id };
+    if (api) return { id: api.id, name: api.name };
+    const local = this.data.getClient(id) as { id: string; name: string; color?: string } | undefined;
+    return local ?? { id, name: id };
   }
 
   // Clientes del API (consulta independiente + cache). Fallback a los locales
@@ -313,6 +319,9 @@ export class CardDetailDialog {
     this.data.updateStoryStatus(task.id, this.status);
     this.data.updateStoryDueDate(task.id, this.dueDateStr());
     this.data.updateStoryAssignee(task.id, assignee);
+    // El Helpdesk puede cambiar el cliente de tareas SIN ticket (las que tienen
+    // ticket toman el cliente del ticket en el sync del board).
+    if (this.esHelpdesk() && !task.ticket) this.data.updateStoryClient(task.id, this.clientId || null);
     if (this.editable) this.data.updateStoryPriority(task.id, this.priority);
     // Si la tarea tiene ticket y cambió el asignado → reflejar en el Helpdesk.
     this.maybeAssignHd(task.ticket, assignee, task.assignee);

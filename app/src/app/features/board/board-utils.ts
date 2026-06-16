@@ -88,6 +88,11 @@ function blend(hex: string, base: string, weight: number): string {
   return `rgb(${mix(r1, r2)}, ${mix(g1, g2)}, ${mix(b1, b2)})`;
 }
 
+/** Versión pastel (clara) de un color, para fondos de chips/badges. */
+export function pastel(hex: string): string {
+  return blend(hex, '#ffffff', 0.3); // 30% color + 70% blanco
+}
+
 export interface ClientStyle {
   bg: string;
   accent: string;

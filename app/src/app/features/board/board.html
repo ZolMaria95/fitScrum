@@ -44,31 +44,78 @@
 
   @if (assigneeChips().length) {
     <div class="assignee-filter">
-      <span class="filter-label">Asignado:</span>
-      <mat-chip-set>
-        @for (m of assigneeChips(); track m.id) {
-          <mat-chip
-            class="achip"
-            [class.inactive]="activeAssignees().size > 0 && !activeAssignees().has(m.id)"
-            [style.background]="m.color"
-            [matTooltip]="m.name"
-            (click)="toggleAssignee(m.id)"
-          >{{ m.id }}</mat-chip>
-        }
-        <button class="todos-btn" [class.active]="activeAssignees().size === 0" (click)="clearAssignees()">Todos</button>
-      </mat-chip-set>
+      <span class="filter-label">Asignado a:</span>
+      <mat-form-field appearance="outline" class="assignee-select" subscriptSizing="dynamic">
+        <mat-label>Empleados</mat-label>
+        <mat-select multiple [value]="selectedAssignees()" (selectionChange)="onAssigneeSelectChange($event.value)" (closed)="buscarAsignado.set('')">
+          <div class="sel-head" (click)="$event.stopPropagation()">
+            <div class="sel-head-search">
+              <mat-icon>search</mat-icon>
+              <input [value]="buscarAsignado()" (input)="buscarAsignado.set($any($event.target).value)" (keydown)="$event.stopPropagation()" placeholder="Buscar empleado…" />
+            </div>
+            <button type="button" class="sel-head-all" (click)="toggleAllAssignees(); $event.stopPropagation()">
+              {{ allAssigneesSelected() ? 'Quitar todos' : 'Seleccionar todos' }}
+            </button>
+          </div>
+          @for (m of assigneeOptions(); track m.id) {
+            <mat-option [value]="m.id">{{ m.name }}</mat-option>
+          } @empty {
+            <mat-option disabled>Sin coincidencias</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      @if (selectedAssignees().length) {
+        <mat-chip-set class="assignee-chips">
+          @for (id of selectedAssignees(); track id) {
+            @let mem = resolveMember(id);
+            <mat-chip class="achip" [style.background]="pastel(mem?.color || '#9aa0a6')" [matTooltip]="mem?.name || id" (removed)="removeAssignee(id)">
+              {{ shortName(mem?.name || id) }}
+              <button matChipRemove [attr.aria-label]="'Quitar ' + (mem?.name || id)">
+                <mat-icon>close</mat-icon>
+              </button>
+            </mat-chip>
+          }
+        </mat-chip-set>
+      }
     </div>
   }
 
-  <mat-form-field appearance="outline" class="client-filter" subscriptSizing="dynamic">
-    <mat-label>Cliente</mat-label>
-    <mat-select [value]="clientFilter()" (selectionChange)="setClientFilter($event.value)">
-      <mat-option value="all">Todos los clientes</mat-option>
-      @for (c of clients(); track c.id) {
-        <mat-option [value]="c.id">{{ c.name }}</mat-option>
+  @if (clientChips().length) {
+    <div class="client-filter">
+      <span class="filter-label">Cliente:</span>
+      <mat-form-field appearance="outline" class="client-select" subscriptSizing="dynamic">
+        <mat-label>Clientes</mat-label>
+        <mat-select multiple [value]="selectedClients()" (selectionChange)="onClientSelectChange($event.value)" (closed)="buscarCliente.set('')">
+          <div class="sel-head" (click)="$event.stopPropagation()">
+            <div class="sel-head-search">
+              <mat-icon>search</mat-icon>
+              <input [value]="buscarCliente()" (input)="buscarCliente.set($any($event.target).value)" (keydown)="$event.stopPropagation()" placeholder="Buscar cliente…" />
+            </div>
+            <button type="button" class="sel-head-all" (click)="toggleAllClients(); $event.stopPropagation()">
+              {{ allClientsSelected() ? 'Quitar todos' : 'Seleccionar todos' }}
+            </button>
+          </div>
+          @for (c of clientOptions(); track c.id) {
+            <mat-option [value]="c.id">{{ c.name }}</mat-option>
+          } @empty {
+            <mat-option disabled>Sin coincidencias</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      @if (selectedClients().length) {
+        <mat-chip-set class="assignee-chips">
+          @for (id of selectedClients(); track id) {
+            <mat-chip class="achip cchip" [style.background]="pastel(clientColorOf(id))" [matTooltip]="clientNameOf(id)" (removed)="removeClient(id)">
+              {{ clientNameOf(id) }}
+              <button matChipRemove [attr.aria-label]="'Quitar ' + clientNameOf(id)"><mat-icon>close</mat-icon></button>
+            </mat-chip>
+          }
+        </mat-chip-set>
       }
-    </mat-select>
-  </mat-form-field>
+    </div>
+  }
 
   <span class="spacer"></span>
 
@@ -114,7 +161,6 @@
             [style.--tilt]="cardTilt(card.id)"
             cdkDrag
             [cdkDragData]="card"
-            [cdkDragDisabled]="!canDrag(card)"
             (click)="openDetail(card)"
           >
             <div class="card-top">
@@ -176,13 +222,13 @@
               }
               @case ('review') {
                 <div class="card-check" (click)="$event.stopPropagation()">
-                  <mat-checkbox (change)="onCert(card, $event.checked)" aria-label="Certificado"></mat-checkbox>
+                  <mat-checkbox [checked]="false" (change)="onCert(card, $event)" aria-label="Certificado"></mat-checkbox>
                   <span class="check-text">Certificado</span>
                 </div>
               }
               @case ('done') {
                 <div class="card-check" (click)="$event.stopPropagation()">
-                  <mat-checkbox [checked]="card.approved" disabled>
+                  <mat-checkbox [checked]="card.approved" [disabled]="!!card.ticket" (change)="onFinalize(card, $event)">
                     {{ card.approved ? 'Finalizado ✓' : 'Finalizado' }}
                   </mat-checkbox>
                 </div>

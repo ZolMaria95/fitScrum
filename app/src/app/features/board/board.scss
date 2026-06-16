@@ -84,6 +84,7 @@
 .assignee-filter {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 
   .filter-label {
@@ -92,38 +93,53 @@
   }
 }
 
-.achip {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: #fff;
-  cursor: pointer;
-  min-height: 26px;
-  transition: opacity 0.15s;
-
-  &.inactive {
-    opacity: 0.35;
-  }
+.assignee-select {
+  width: 200px;
 }
 
-.todos-btn {
-  border: 1px solid var(--mat-sys-outline);
-  background: transparent;
-  color: var(--mat-sys-on-surface-variant);
-  border-radius: 14px;
-  padding: 3px 12px;
-  font-size: 12px;
-  cursor: pointer;
+.assignee-chips {
+  display: flex;
+}
 
-  &.active {
-    background: var(--mat-sys-primary);
-    color: var(--mat-sys-on-primary);
-    border-color: var(--mat-sys-primary);
+// Globo [Nombre Apellido |x] en color pastel por empleado.
+.achip {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #3a3a4a; // texto oscuro legible sobre pastel
+  min-height: 26px;
+
+  button[matChipRemove] {
+    color: #3a3a4a;
+    opacity: 0.7;
+    &:hover { opacity: 1; }
+
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
   }
 }
 
 .client-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.client-select {
   width: 200px;
+}
+
+// Globo de cliente: nombres largos → acotar con ellipsis.
+.cchip {
+  max-width: 200px;
+
+  ::ng-deep .mdc-evolution-chip__text-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 // ── Kanban ─────────────────────────────────────────────────────────
@@ -470,7 +486,7 @@
   .kanban {
     grid-template-columns: 1fr;
   }
-  .client-filter {
+  .client-select {
     width: 100%;
   }
 }

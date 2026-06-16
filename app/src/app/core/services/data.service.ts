@@ -293,6 +293,7 @@ export class DataService {
   updateStoryTitle(id: string, title: string) { this.patchStoryField(id, { title }); }
   updateStoryDescription(id: string, description: string) { this.patchStoryField(id, { description }); }
   updateStoryAssignee(id: string, assignee: string | null) { this.patchStoryField(id, { assignee }); }
+  updateStoryClient(id: string, client: string | null) { this.patchStoryField(id, { client }); }
   updateStoryHdEstatus(id: string, hdEstatus: string) { this.patchStoryField(id, { hdEstatus }); }
   updateStoryPriority(id: string, priority: string) { this.patchStoryField(id, { priority }); }
   approveStory(id: string) { this.patchStoryField(id, { approved: true, approvedDate: new Date().toISOString().split('T')[0] }); }
