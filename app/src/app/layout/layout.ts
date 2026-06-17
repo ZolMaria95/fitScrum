@@ -1,7 +1,7 @@
 import { Component, DestroyRef, ElementRef, afterNextRender, afterRenderEffect, computed, inject, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -9,7 +9,7 @@ import { MatListModule } from '@angular/material/list';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { filter, map, startWith } from 'rxjs';
+import { filter, map } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { DataService } from '../core/services/data.service';
 import { ShellService } from '../core/services/shell.service';
@@ -40,7 +40,6 @@ export class Layout {
   private readonly auth = inject(AuthService);
   private readonly data = inject(DataService);
   private readonly router = inject(Router);
-  private readonly route = inject(ActivatedRoute);
   private readonly breakpoints = inject(BreakpointObserver);
   private readonly snack = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
@@ -53,18 +52,12 @@ export class Layout {
     initialValue: typeof window !== 'undefined' && window.innerWidth >= 900,
   });
 
-  /** Rutas que ocultan el menú aun en escritorio (Board: Kanban a ancho completo). */
-  private readonly collapsibleNav = toSignal(
-    this.router.events.pipe(
-      filter((e) => e instanceof NavigationEnd),
-      startWith(null),
-      map(() => this.deepestData()['collapsibleNav'] === true),
-    ),
-    { initialValue: false },
-  );
-
-  /** Panel fijo (mode side, siempre abierto, sin ☰). */
-  readonly fixed = computed(() => this.isDesktop() && !this.collapsibleNav());
+  /** Panel fijo (mode `side`, siempre abierto) en escritorio; overlay (`over`) en móvil.
+   *  Depende SOLO del breakpoint — NUNCA de la ruta/pantalla — para que el modo sea
+   *  idéntico en todas las vistas. (Antes Board usaba `over` en escritorio vía
+   *  `collapsibleNav`: esa inconsistencia de modo entre rutas dejaba el contenido
+   *  `inert` pegado al navegar en círculo. En `side` Material no aplica focus-trap/inert.) */
+  readonly fixed = computed(() => this.isDesktop());
   readonly mode = computed<'side' | 'over'>(() => (this.fixed() ? 'side' : 'over'));
   /** Estado manual del drawer (botón ☰) cuando es overlay; en modo fijo se ignora. */
   readonly drawerOpen = signal(false);
@@ -120,16 +113,6 @@ export class Layout {
       .subscribe(() => {
         if (!this.fixed()) this.drawerOpen.set(false);
       });
-  }
-
-  private deepestData(): Record<string, any> {
-    let r = this.route.snapshot.firstChild;
-    let data: Record<string, any> = {};
-    while (r) {
-      data = { ...data, ...r.data };
-      r = r.firstChild;
-    }
-    return data;
   }
 
   /** Alerta recurrente de tickets pendientes cuya fecha/hora ya llegó (1 vez por día,

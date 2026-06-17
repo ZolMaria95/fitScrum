@@ -12,14 +12,22 @@ El legacy sigue siendo la referencia funcional/modelo de datos — ver
 
 ## 1. Stack
 
-- **Framework:** Angular 22 (standalone components, sin NgModules).
+- **Framework:** Angular 22 (standalone components, sin NgModules). **Zoneless** (sin
+  `zone.js`): la detección de cambios es por Signals. ⚠️ Varios componentes de Material
+  asumen zone.js → ver las notas de `inert`/sidenav más abajo.
 - **UI:** Angular Material 22 (Material 3 / `mat.theme`) + CDK (drag & drop) + `mat-table`,
   `mat-datepicker` (date adapter nativo, locale `es-ES`, en [app.config.ts](src/app/app.config.ts)).
-- **Reactividad:** Signals (`signal` / `computed`). RxJS solo para HttpClient (`firstValueFrom`).
+- **Reactividad:** Signals (`signal` / `computed` / `effect` / `afterRenderEffect`). RxJS solo
+  para HttpClient (`firstValueFrom`) y eventos del router.
+- **Routing:** **hash routing** (`withHashLocation()`), para servir en subcarpeta de GitHub Pages
+  sin 404 al refrescar.
 - **Lenguaje:** TypeScript 6 estricto.
-- **Estilos:** SCSS (un `.scss` por componente + `styles.scss` global).
+- **Estilos:** SCSS (un `.scss` por componente + `styles.scss` global). Tipografía Roboto (pesos
+  300–800, cargados en `index.html`).
 - **Persistencia:** Firebase Realtime DB (REST) con fallback a `localStorage`.
-- **API Helpdesk:** `helpdesk-api.fit-bank.com` vía proxy (`proxy.py` en dev, Cloudflare Worker en prod).
+- **API Helpdesk:** `helpdesk-api.fit-bank.com` vía proxy (`proxy.conf.json` del dev server en dev,
+  Cloudflare Worker en prod).
+- **PWA:** `@angular/service-worker` con auto-actualización de versión (ver §8).
 
 ---
 
@@ -74,10 +82,13 @@ Estado como **signals**: `sprints`, `stories`, `team`, `clients`.
 - Sync en tiempo real (SSE Firebase + polling); persistencia Firebase REST / `localStorage`.
 
 ### `AuthService` ([auth.service.ts](src/app/core/services/auth.service.ts))
-Sesión en `localStorage` (`fit-daily_session`). Login `POST /auth/login` → `GET /users/me`.
+Sesión en `localStorage` (`fit-daily_session`) = `{ token (access), refreshToken, id, role, ... }`.
+Login `POST /auth/login` → guarda `access_token` + `refresh_token` → `GET /users/me`.
 Permisos: `esMSC001`, `esSupervisor`, `puedeVerMiPanel`, `puedeBorrarBoard`, `puedeGestionarTodo`.
-`verifySession()`: valida el token contra `GET /users/me`; si 401/403 limpia la sesión y devuelve false
-(la conversación lo usa antes de cargar, para pedir re-login en vez de mostrar "Sin mensajes").
+- **`refreshSession()`**: `POST /auth/refresh` con el `refresh_token` → nuevo `access_token` (rota el
+  refresh si el API manda uno). **Dedup**: varios 401 concurrentes comparten un solo refresh.
+- `verifySession()`: valida contra `GET /users/me`; en 401 intenta `refreshSession()` antes de rendirse;
+  si falla (o 403) limpia la sesión.
 
 ### `HelpdeskService` ([helpdesk.service.ts](src/app/core/services/helpdesk.service.ts))
 Cliente del API del Helpdesk. **Regla clave: todas las ESCRITURAS del API son
@@ -92,12 +103,20 @@ Todas las llamadas usan el contexto **`HD_SAFE`** (no desloguea en 401/403).
 - `getTicketStatuses()` → **`GET /ticket-statuses/catalog`** → mapa `nombre → ticket_status_id`.
   Signal `statusNames`.
 
-**Tickets (port de `js/helpdesk-panel.js`):**
-- `sync()` — 6 páginas (`/tickets/tickets?limit=40&offset=…`), filtra `CLIENTES_VALIDOS` y excluye
-  aprobados/cerrados, clasifica, y carga el último mensaje en lotes. Signals `tickets`,
-  `syncStatus`, `loading`.
+**Tickets — consulta SERVER-SIDE (rediseñado; el filtrado va EN la petición, no en el navegador):**
+- **`loadFiltered(filtros, pageIndex, pageSize, sort)`** — consulta UNA página filtrada al API y deja
+  `tickets` = esa página + `total` (signal) para paginar. Params:
+  `limit`/`offset`, `modified_date_order|entry_date_order|priority_order = asc|desc` (orden),
+  y los filtros: **`client_id` como LISTA separada por comas** (`client_id=4,5,6` — el API ignora el
+  parámetro repetido, usa solo uno; ⚠️ **debe ir con comas**), `ticket_status_id`, `assigned_user_id`.
+- **`loadAll()`** — set amplio (6×40 sin filtro) para dashboards: lo usan **Mi Panel** y la tab
+  **Estadísticas** de Tickets. `statusIdOf(nombre)` traduce estado→código.
+- Signals: `tickets` (página actual), `total`, `loading`, `status`, `hasMore`.
 - `fetchMessages`, `searchTicketRemote`, `fetchTicketRaw`, `ticketAttachmentIds`,
   `attachmentUrl` (blob con auth, para `<img>`/descargas).
+- ⚠️ El API solo acepta filtros server-side por **un** estado / **un** asignado, y `client_id` como
+  lista por comas. "No finalizado" (excluir aprobados/cerrados) no se puede expresar → la tab
+  Pendientes lo refina en el cliente (puede dejar páginas con <12).
 
 **Escrituras (form-urlencoded):**
 - `assignTicket(id, userId)` → `PUT /tickets/tickets/:id` con `assigned_user_id`.
@@ -113,19 +132,23 @@ constantes (`CLIENTES_VALIDOS`, `CLASIF_*`, `PRIORITY_ACTIONS`, `EMPLEADOS`…) 
 [helpdesk.constants.ts](src/app/features/tickets/helpdesk.constants.ts).
 
 ### Interceptor + Guards
-`helpdeskAuthInterceptor`: Bearer + logout en 401/403 (salvo `HD_SAFE`). `authGuard`, `solGuard`
-(Mi Panel), `msc001Guard` (definido, sin cablear).
+`helpdeskAuthInterceptor`: añade el Bearer y, ante **401**, llama a `refreshSession()` (deduped) y
+**reintenta** la request con el token nuevo (transparente); si el refresh falla, o ante **403**,
+cierra sesión y redirige a `/login` (salvo requests `HD_SAFE`, que solo fallan). Sin bucles (el
+reintento no re-entra al `catchError`; `/auth/*` excluido).
+`authGuard` (sesión), `solGuard` (Mi Panel: Scrum Master/MSC001), `msc001Guard` (acciones de admin).
 
 ---
 
 ## 5. Rutas y features ([app.routes.ts](src/app/app.routes.ts))
 
-Lazy-loaded bajo `Layout` (`authGuard`); `/` → `/board`.
+Lazy-loaded bajo `Layout` (`authGuard`); `/` → `/board`. Migración **completa**: todas las vistas
+portadas a Angular.
 
 | Ruta | Estado |
 |---|---|
 | `login`, `board`, `tickets`, `semanal`, `mi-panel`, `pendientes` | **Hecho** |
-| `burndown`, `progreso`, `consultas` | placeholders |
+| `burndown`, `progreso`, `consultas` | **Hecho** (ver §7e) |
 
 ### Shell responsive ([layout/](src/app/layout/)) — menú hamburguesa lateral
 
@@ -134,11 +157,20 @@ Diseño **mobile-first**. El `Layout` es un `mat-sidenav-container`:
   (`mat-nav-list`: grupo Scrum y grupo Helpdesk) + pie con usuario/logout.
 - **Responsive** con CDK `BreakpointObserver('(min-width: 900px)')` → `isDesktop`, más un flag por ruta
   `data.collapsibleNav`. `fixed = isDesktop && !collapsibleNav`: si es fijo → `mode="side"` siempre abierto,
-  sin ☰; si no (móvil/tablet **o Board en escritorio**) → `mode="over"`, ☰ en topbar slim, se cierra al navegar.
+  sin ☰; si no (móvil/tablet **o Board en escritorio**) → `mode="over"`, ☰ en topbar slim.
+- `opened = computed(() => fixed() || drawerOpen())` (atómico con `mode`, deriva de `fixed`). `drawerOpen`
+  es el estado manual del ☰ en overlay. Al navegar se cierra (NavigationEnd + `(click)` en la nav-list).
 - **Board** lleva `data: { collapsibleNav: true }` → oculta el menú aun en escritorio (Kanban a ancho completo).
+- ⚠️ **Bug de `inert` en zoneless (resuelto):** en `over`, Material pone `inert` en `.mat-drawer-content`
+  (focus-trap) y al cerrar/cambiar a `side` **no lo quita** (la limpieza por CD no corre sin zone.js) →
+  el contenido se ve pero no acepta clics/scroll hasta recargar. Fix en `Layout`: el contenido se considera
+  inerte **solo** cuando hay overlay abierto (`over && opened`); en `side` o con drawer **cerrado** se quita
+  `inert` vía `afterRenderEffect` (reacciona a fixed/opened) **+ `MutationObserver`** (lo quita apenas Material
+  lo pone). Si reaparece un bloqueo, revisar este bloque.
 - **`ShellService`** ([shell.service.ts](src/app/core/services/shell.service.ts)): `filters` (signal de
   `TemplateRef`), `setFilters`/`clear`. Cada vista publica su panel de filtros como `<ng-template>` y el drawer
-  lo renderiza con `ngTemplateOutlet`. Hoy **solo Tickets** lo usa (Board mantiene sus filtros internos).
+  lo renderiza con `ngTemplateOutlet`. **Tickets** lo publica con `afterNextRender` (no `effect`, que en
+  zoneless bloqueaba). Hoy solo Tickets lo usa (Board mantiene sus filtros internos).
 
 ---
 
@@ -205,10 +237,14 @@ Estado: `activeAssignees`/`activeClients` (Set) y `selectedAssignees`/`selectedC
 
 ## 7. Tickets ([features/tickets/](src/app/features/tickets/))
 
-Port de `js/helpdesk-panel.js`. **Grid de cards responsive** (no tabla),
-tabs (**Pendientes** / Asignados a mí / **Generales** / **Prioritarios** / Estadísticas) con contadores,
-filtros (cliente/clasificación/acción/estatus) y búsqueda por número (local en el pool + remota).
-**Pendientes** es la tab por defecto; Prioritarios va al final.
+Port de `js/helpdesk-panel.js`, **rediseñado a consulta server-side** (decisión del cliente/jefe:
+el filtro va EN la petición al API, no se trae todo para filtrar en el navegador). **Grid de cards
+responsive** (no tabla), tabs (**Pendientes** / Asignados a mí / **Todos los clientes** / Estadísticas)
+y filtros **Cliente** (multi-selección), **Estatus** y **Ordenar por**, + búsqueda por número (remota).
+**Pendientes** es la tab por defecto.
+> Se **quitaron** los filtros derivados que el API no soporta: Clasificación, Acción y la tab
+> **Prioritarios** (la función `clasificar()` se conserva porque Mi Panel la usa). "Generales" se
+> renombró a **"Todos los clientes"**.
 
 - **Grid de cards** (`.ticket-grid`, [tickets.html](src/app/features/tickets/tickets.html)): **2 col
   <540px / 4 col 540–899px / 5 col ≥900px** con `minmax(0, 1fr)`, **sin scroll horizontal** en ningún
@@ -223,27 +259,31 @@ filtros (cliente/clasificación/acción/estatus) y búsqueda por número (local 
   - **Cuerpo**: asunto a **2 líneas** (`-webkit-line-clamp`), badges de **estado** (`estadoStyle`) y **tipo**,
     subsección de fechas (📅 ingreso "10 jun 2025" · 🔄 modificación "Hoy 9:42" / "13 jun 16:05") y **área de
     nota editable** (clic → textarea inline, no en el menú).
-  - **Pie**: avatar (iniciales+color, `colorFor`/`initialsFromName` de board-utils) + **toggles visibles
-    ⚑ acción / ⏸ pendiente** + **"Ver conversación"** + **menú ⋮** (asignar / cambiar estado). La card
-    entera abre la conversación; Crear tarea, toggles, área de nota y ⋮ hacen `stopPropagation`.
+  - **Pie**: chip de asignado con **punto de color + "Nombre Apellido"** (`shortName` de board-utils =
+    1.ª+3.ª palabra; tooltip con el nombre completo) + **toggles visibles ⚑ acción / ⏸ pendiente** +
+    **"Ver conversación"** + **menú ⋮** (asignar / cambiar estado). Input opcional **`mostrarDias`** →
+    badge "Nd" de días sin movimiento (lo activa **Mi Panel**, no Tickets). La card entera abre la
+    conversación; Crear tarea, toggles, área de nota y ⋮ hacen `stopPropagation`.
   - Colores en [tickets-card-utils.ts](src/app/features/tickets/tickets-card-utils.ts): `estadoStyle`
     (**color por estado real** del catálogo, ≈7 tonos), `tipoStyle` (INCIDENCIA/REQUERIMIENTO/CONSULTA),
     `fmtIngreso`/`fmtMod`. **Solo modo claro** (la app es light-only por el bug de Safari/M3 en `styles.scss`).
-- **Pool ÚNICO, PEREZOSO** (en `HelpdeskService`): un solo `tickets` que se carga **por página de 12, bajo
-  demanda** y **SIN mensajes** (los mensajes se piden solo al abrir la conversación). Todos los clientes.
-  `refresh()` reinicia y trae la 1.ª página; `loadMore()` la siguiente (offset, `fetchPage(offset, 12)`);
-  `hasMore`/`loading`/`status`. **No hay botón Sincronizar**: hay **auto-consulta al entrar** (solo si el
-  pool está vacío → llena la 1.ª página de **Pendientes**) y un **botón ↻ refrescar siempre visible**.
-- **Las tabs filtran el pool** (en el componente):
-  - **Pendientes / Asignados / Prioritarios** → `operativos` (solo `CLIENTES_VALIDOS` y **no** aprobados/
-    cerrados); Prioritarios añade `PRIORITY_ACTIONS`, Asignados `usuarioAsignado === yo`.
-  - **Generales** → todo el pool (todos los clientes, incl. cerrados). **Estadísticas** → sobre `operativos`.
-  - Asignar / cambiar estado refrescan el pool (`patchTicket`).
-- **Paginación perezosa** (`mat-paginator`, 12/pág): renderiza **solo la página actual** (`pagedRows`).
-  `paginatorLength = rows().length + (hasMore ? 12 : 0)` (página extra para habilitar "Siguiente").
-  `ensureLoadedFor(pageIndex)` pide más páginas del pool hasta llenar la página pedida (tope 400 tickets);
-  `clampedPageIndex` no recorta mientras `hasMore`, y al agotar el pool acota al último real. Abrir una tab
-  o paginar dispara la carga necesaria; cambiar tab/filtros/búsqueda resetea a la página 1.
+- **Consulta server-side** (`HelpdeskService.loadFiltered`, ver §4): cada cambio de tab/filtro/orden/página
+  hace **una** consulta con los params correspondientes y `tickets` = esa página + `total`. SIN mensajes
+  (se piden al abrir la conversación). Hay **auto-consulta al entrar** (espera el catálogo de clientes y
+  llama `refresh()`) y un **botón ↻**.
+- **Filtros server-side** (`buildFilters()`):
+  - **Cliente** = `client_id` (multi-selección; chips removibles arriba del select; se mandan como
+    **lista por comas**). El dropdown se puebla del **catálogo** (`hd.clients()`), no de los tickets cargados.
+  - **Estatus** = `ticket_status_id` (vía `statusIdOf`). **Asignados a mí** = `assigned_user_id`.
+  - **Ordenar por**: modificación/ingreso/prioridad (`<campo>_order`). ⚠️ solo `modified_date_order` está
+    confirmado en el API; ingreso/prioridad siguen la misma convención (verificar).
+- **Tabs:** **Pendientes** manda además los `client_id` de `CLIENTES_VALIDOS` (los 14 válidos, mapeados por
+  nombre→id) y refina **operativos** en cliente (excluye finalizados — el API no excluye estados); **Todos
+  los clientes** sin filtro de cliente; **Asignados a mí** por `assigned_user_id`; **Estadísticas** hace
+  `loadAll()` y agrega Por Cliente / Por Estatus (sin "Por Clasificación").
+- **Paginación server-side** (`mat-paginator`, 12/pág): `paginatorLength = total` del API; indicador
+  **"Página X de Y · hay más en la siguiente"**. Cambiar tab/filtro/orden resetea a la página 0 y reconsulta.
+  Mensaje de estado: **"N cargados de TOTAL del sistema"**.
 
 - **Diálogos desde la card:** **Asignar** → `AssignTicketDialog` (lista buscable; asigna en el API);
   **Cambiar estado** → `setTicketStatus` con la lista del catálogo (`statusOptions`, nunca ABIERTO);
@@ -277,16 +317,17 @@ Port de `js/semanal.js`. **Rotación de soporte por semana** (semanas **Vie→Ju
 ## 7c. Mi Panel ([features/mi-panel/](src/app/features/mi-panel/))
 
 Port de `js/sol-panel.js`. Dashboard del **Scrum Master** (ruta con `solGuard`). 4 KPIs + 4 bloques:
-1. **Acciones pendientes** — tickets del pool marcados con Acción (`hdActions`); botón **"Realizado ✓"**
-   quita la marca (`setHdAction(false)`). Muestra la nota HD (`hdNotes`).
-2. **Notificar al cliente** — tickets `clasificacion === 'CLIENTE PENDIENTE' && diasSinMovimiento >= 3`;
-   cada card permite **nota de seguimiento** (`solNotes`, `getSolNotes`/`setSolNote`).
+1. **Acciones pendientes** — tickets marcados con Acción (`hdActions`).
+2. **Esperando cliente** — tickets `clasificacion === 'CLIENTE PENDIENTE' && diasSinMovimiento >= 3`.
 3. **Próximos a vencer** — stories no-Done con `dueDate` en ≤3 días (incl. vencidas); clic abre `CardDetailDialog`.
 4. **Por asignar** — stories en To Do **sin asignado** (`!s.assignee`); botón **Asignar** abre `CardDetailDialog`.
 
-Lee el **pool de tickets** (`hd.tickets()`); al entrar hace `hd.loadAll()` (carga amplia en paralelo, sin
-mensajes) si está vacío + botón **↻**. Mapas planos (`hdActions`/`hdNotes`/`solNotes`) en signals locales que
-se re-setean tras mutar; stories/team/clients ya son signals.
+- Los bloques 1 y 2 reutilizan **`app-ticket-card`** (mismo diseño que Tickets) con `[mostrarDias]="true"`
+  (badge "Nd"); cablean los mismos handlers (conversación, crear tarea, asignar, estado, nota, ⚑/⏸).
+- **Solo clientes válidos**: ambos bloques filtran por `CLIENTES_VALIDOS` (`ticketsValidos`) — Mi Panel no
+  muestra pendientes de clientes ajenos.
+- Lee `hd.tickets()`; al entrar **siempre** hace `hd.loadAll()` (carga amplia) + botón **↻**. Mapas planos
+  (`hdActions`/`hdNotes`) en signals locales que se re-setean tras mutar.
 
 ---
 
@@ -308,6 +349,22 @@ Tickets marcados como pendientes (⏸ desde Tickets) con **recordatorio fecha + 
 
 ---
 
+## 7e. Burndown / Progreso / Consultas ([features/](src/app/features/))
+
+Port de `js/burndown.js` / `progreso.js` / `consultas.js`. Standalone + signals; usan la capa de datos
+existente (`getProgress`/`addProgressEntry`, `getQueries`/`addQuery`/`resolveQuery`, sprints/stories).
+
+- **Progreso:** lista de avances (avatar, historia, autor, fecha, notas, horas) orden desc; filtros por
+  **historia** (del sprint activo) y **miembro**; formulario inline de **nuevo registro**.
+- **Consultas:** tarjetas (id, título, prioridad/estado, descripción, respuesta); pestañas **Todas /
+  Abiertas / Resueltas** (abiertas primero); **nueva consulta** y **resolver** inline (respuesta + autor).
+- **Burndown:** métricas del sprint (% completado, en progreso, pendientes, días restantes), **gráfico en
+  `<canvas>`** (línea ideal punteada + línea real + punto "hoy"; dibujado en `afterRenderEffect`) y barras
+  de **velocidad** (tareas finalizadas por sprint). ⚠️ la línea "real" es **aproximada** (no se guardan
+  snapshots diarios del trabajo restante; se estima a partir de las finalizadas) — igual que el legacy.
+
+---
+
 ## 8. Theming, datos y persistencia
 
 - **Tema** ([styles.scss](src/styles.scss) + [_theme-colors.scss](src/_theme-colors.scss)): paleta
@@ -321,6 +378,20 @@ Tickets marcados como pendientes (⏸ desde Tickets) con **recordatorio fecha + 
   URLs relativas); prod → Firebase + Cloudflare Worker (`fileReplacements`).
 - **`proxy.py`** (raíz) quedó como alternativa; el flujo actual usa el proxy integrado de `ng serve`
   (no requiere Python). Soporta GET/POST/PUT/PATCH si se usa.
+
+### PWA / actualización automática (`@angular/service-worker`)
+- Activo **solo en producción** (`provideServiceWorker(..., enabled: !isDevMode())` en `app.config.ts`;
+  `"serviceWorker": "ngsw-config.json"` en el build de prod de `angular.json`). En dev/`ng serve` no corre.
+- Config: [ngsw-config.json](ngsw-config.json) (assetGroups: app / static-assets / assets + dataGroup de
+  `/data/*.json`) + [public/manifest.webmanifest](public/manifest.webmanifest).
+- Lógica en el **componente raíz** [app.ts](src/app/app.ts): ante `VERSION_READY` purga del `localStorage`
+  solo lo desechable —**whitelist que CONSERVA** `fit-daily_session` (token + refresh), `fit-daily_v1` y
+  `fit-daily_hd_actions`/`_notes`/`_sol_notes`— y `window.location.reload()`. `checkForUpdate()` al iniciar,
+  en `visibilitychange` y cada 60 s. Así el equipo recibe la versión nueva **sin borrar caché y sin perder
+  la sesión**.
+- **GitHub Pages no permite headers**: igual funciona (el navegador revalida el script del SW y Angular
+  cache-bustea `ngsw.json`); la detección puede tardar unos minutos. Build con `--base-href /fitScrum/angular/`
+  (scope correcto del SW).
 
 ---
 
@@ -345,8 +416,15 @@ componente: 8 kB / 16 kB en `angular.json`.
 | Mi Panel (dashboard Scrum Master: KPIs + acciones/cliente-pendiente/vencer/asignar) | ✅ |
 | Pendientes (tickets marcados ⏸ desde Tickets) | ✅ |
 | Catálogos del API (usuarios, clientes, estados) | ✅ |
-| Burndown, Progreso, Consultas | ⏳ placeholders |
+| Burndown (métricas + gráfico canvas + velocidad) | ✅ |
+| Progreso (avances + filtros + alta) | ✅ |
+| Consultas (tarjetas + filtros + alta + resolver) | ✅ |
+| PWA / actualización automática (service worker) | ✅ |
+| Tickets server-side (filtros/orden/paginación en la consulta) + refresh token | ✅ |
 | TUsuariosPizza | ❌ se elimina |
+
+**Migración a Angular: completa.** Quedan mejoras/dependencias externas (p. ej. que el API acepte
+filtros por lista para paginación 100% exacta).
 
 ### Mapa legacy → Angular
 | Legacy | Angular |

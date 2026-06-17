@@ -13,12 +13,7 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'board' },
-      {
-        path: 'board',
-        loadComponent: () => import('./features/board/board').then((m) => m.Board),
-        // El Board oculta el menú lateral aun en escritorio (Kanban a ancho completo).
-        data: { collapsibleNav: true },
-      },
+      { path: 'board', loadComponent: () => import('./features/board/board').then((m) => m.Board) },
       { path: 'burndown', loadComponent: () => import('./features/burndown/burndown').then((m) => m.Burndown) },
       { path: 'progreso', loadComponent: () => import('./features/progreso/progreso').then((m) => m.Progreso) },
       { path: 'consultas', loadComponent: () => import('./features/consultas/consultas').then((m) => m.Consultas) },

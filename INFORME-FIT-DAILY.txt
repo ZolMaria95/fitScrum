@@ -62,6 +62,7 @@ Base de datos     Firebase Realtime Database       Datos del proyecto (tiempo re
 Sistema externo   API Helpdesk FitBank (REST)      Tickets, usuarios, clientes
 Proxy de API      Cloudflare Worker                Resuelve CORS y oculta el origen
 Hosting           GitHub Pages                     Publicación estática (CDN)
+PWA / Auto-update  @angular/service-worker          Versión nueva sin borrar caché
 Tipografía        Roboto (UI) + JetBrains Mono     Pesos 300–800
 Control de código Git / GitHub                     Repositorio "fitScrum"
 
@@ -127,6 +128,9 @@ Control de código Git / GitHub                     Repositorio "fitScrum"
   • Enrutado por hash (#) para que el refresco de página funcione en GitHub Pages.
   • El Worker de Cloudflare se despliega de forma independiente.
   • Flujo: compilar → publicar artefacto → GitHub Pages distribuye por CDN.
+  • Auto-actualización (PWA): la app incluye un Service Worker que detecta cada
+    versión nueva publicada y la activa sola en el navegador del usuario (recarga
+    automática), sin que nadie tenga que borrar la caché y conservando la sesión.
 
 
 5. HERRAMIENTAS
@@ -141,6 +145,7 @@ Control de código Git / GitHub                     Repositorio "fitScrum"
   • SCSS                   – preprocesador de estilos.
   • Vitest                 – framework de pruebas (configurado).
   • Prettier               – formato de código consistente.
+  • @angular/service-worker – PWA: caché y actualización automática de versión.
 
 
 6. ESTRUCTURA DE LA BASE DE DATOS
@@ -238,7 +243,10 @@ Control de código Git / GitHub                     Repositorio "fitScrum"
     SEMANAL                  – asignación semanal de consultor (calendario).
     PENDIENTES               – tickets marcados como pendientes, con recordatorios
                                por fecha/hora (alerta y opción de posponer/pausar).
-    BURNDOWN / PROGRESO / CONSULTAS – métricas e historiales (en evolución).
+    BURNDOWN   – métricas del sprint (% completado, en curso, pendientes, días
+                 restantes), gráfico de avance y velocidad del equipo por sprint.
+    PROGRESO   – registro de avances por historia, con filtros y alta de registro.
+    CONSULTAS  – consultas/bloqueos del equipo (abiertas/resueltas), alta y resolución.
 
 7.3 Flujos clave
     • De ticket a tarea: desde un ticket se crea la tarea con datos autocompletados
@@ -274,11 +282,13 @@ Control de código Git / GitHub                     Repositorio "fitScrum"
 9. ESTADO DEL PROYECTO
 --------------------------------------------------------------------------------
   • En producción y en uso por el equipo de consultores.
-  • Migración a Angular 22 por fases: Board y Tickets completos; Mi Panel,
-    Semanal y Pendientes operativos; Burndown/Progreso/Consultas en evolución.
-  • Integración con el Helpdesk funcionando (lectura, filtros, asignación,
-    cambio de estado, conversación, adjuntos).
+  • Migración a Angular 22 COMPLETA: todas las pantallas portadas (Board, Tickets,
+    Mi Panel, Semanal, Pendientes, Burndown, Progreso y Consultas).
+  • Integración con el Helpdesk funcionando (lectura, filtros server-side,
+    asignación, cambio de estado, conversación, adjuntos).
   • Sesión robusta con renovación automática de token.
+  • Actualización automática de versión (PWA): tras cada publicación la app se
+    actualiza sola en los navegadores del equipo, sin borrar caché ni cerrar sesión.
 
 
 10. RIESGOS, DEPENDENCIAS Y PRÓXIMOS PASOS
@@ -297,7 +307,6 @@ Control de código Git / GitHub                     Repositorio "fitScrum"
       una máquina encendida; la versión pública (GitHub Pages) no.
 
   Próximos pasos sugeridos
-    • Completar las vistas de métricas (Burndown / Progreso / Consultas).
     • Coordinar con el backend de FitBank el soporte de filtros por lista
       (clientes y estados) para paginación 100% exacta.
     • Evaluar el reemplazo total de la versión anterior una vez cerradas las fases.
