@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, afterRenderEffect, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterNextRender, afterRenderEffect, computed, inject, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
@@ -87,13 +87,25 @@ export class Layout {
     this.destroyRef.onDestroy(() => clearInterval(timer));
 
     // Red de seguridad (zoneless): en modo fijo (side) el contenido NUNCA debe quedar
-    // inerte. Si Material dejó el atributo `inert` pegado tras una transición de modo,
-    // se quita tras cada render (se re-evalúa al cambiar fixed/opened).
+    // inerte. Material puede dejar el atributo `inert` pegado tras la transición de modo
+    // over→side y la limpieza por CD no corre. Dos coberturas:
+    //  1) afterRenderEffect: reacciona a cambios de fixed/opened (p. ej. resize).
     afterRenderEffect(() => {
       this.fixed();
       this.opened();
       const el = this.shellContent()?.nativeElement;
       if (el && this.fixed()) el.removeAttribute('inert');
+    });
+    //  2) MutationObserver: quita `inert` apenas Material lo ponga (lo setea tarde,
+    //     después del render, por eso el efecto solo no alcanza).
+    afterNextRender(() => {
+      const el = this.shellContent()?.nativeElement;
+      if (!el) return;
+      const strip = () => { if (this.fixed() && el.hasAttribute('inert')) el.removeAttribute('inert'); };
+      strip();
+      const obs = new MutationObserver(strip);
+      obs.observe(el, { attributes: true, attributeFilter: ['inert'] });
+      this.destroyRef.onDestroy(() => obs.disconnect());
     });
 
     // En overlay, cerrar el drawer al navegar.
