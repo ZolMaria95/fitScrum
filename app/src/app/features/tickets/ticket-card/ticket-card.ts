@@ -67,4 +67,16 @@ export class TicketCard {
   cancelNota(): void {
     this.editingNota.set(false);
   }
+
+  // Copiar el número de ticket al portapapeles (feedback breve con ✓).
+  readonly copiado = signal(false);
+  copiarTicket(): void {
+    navigator.clipboard
+      ?.writeText(this.ticket().ticket)
+      .then(() => {
+        this.copiado.set(true);
+        setTimeout(() => this.copiado.set(false), 1500);
+      })
+      .catch(() => {});
+  }
 }

@@ -7,6 +7,10 @@
   <div class="tc-head" [style.background]="cliente().bg" [style.borderLeftColor]="cliente().accent">
     <div class="tc-head-top">
       <span class="tc-id">#{{ ticket().ticket }}</span>
+      <button class="tc-copy" (click)="$event.stopPropagation(); copiarTicket()"
+              [matTooltip]="copiado() ? 'Copiado' : 'Copiar número'" aria-label="Copiar número de ticket">
+        <mat-icon>{{ copiado() ? 'check' : 'content_copy' }}</mat-icon>
+      </button>
       @if (mostrarDias() && ticket().diasSinMovimiento > 0) {
         <span class="tc-dias" [class.alto]="ticket().diasSinMovimiento >= 7"
               matTooltip="Días sin movimiento">{{ ticket().diasSinMovimiento }}d</span>

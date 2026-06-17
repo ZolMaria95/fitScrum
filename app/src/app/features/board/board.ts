@@ -254,6 +254,19 @@ export class Board {
     this.mineOnly.set(next);
     if (next) this.activeAssignees.set(new Set());
   }
+
+  // Copiar el número de ticket de una card (feedback breve con ✓).
+  readonly ticketCopiado = signal<string | null>(null);
+  copiarTicket(ticket: string, ev: Event): void {
+    ev.stopPropagation();
+    navigator.clipboard
+      ?.writeText(String(ticket))
+      .then(() => {
+        this.ticketCopiado.set(ticket);
+        setTimeout(() => this.ticketCopiado.set(null), 1500);
+      })
+      .catch(() => {});
+  }
   /** Ids seleccionados como array (para el mat-select multiple y los globos). */
   readonly selectedAssignees = computed(() => [...this.activeAssignees()]);
   /** Reemplaza la selección desde el multi-select. */

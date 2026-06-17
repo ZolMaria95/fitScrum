@@ -183,6 +183,13 @@
           >
             <div class="card-top">
               <span class="card-ticket">#{{ card.ticket || '—' }}</span>
+              @if (card.ticket) {
+                <button class="card-copy" (click)="copiarTicket(card.ticket, $event)"
+                        [matTooltip]="ticketCopiado() === card.ticket ? 'Copiado' : 'Copiar número'"
+                        aria-label="Copiar número de ticket">
+                  <mat-icon>{{ ticketCopiado() === card.ticket ? 'check' : 'content_copy' }}</mat-icon>
+                </button>
+              }
               <span class="prio-badge" [class]="'prio-' + card.priority">{{ $any(PRIORITY_LABELS)[card.priority] }}</span>
               <span class="grow"></span>
               @if (puedeGestionarTodo()) {
