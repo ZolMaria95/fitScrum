@@ -9,6 +9,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HdUser, HelpdeskService } from '../../../core/services/helpdesk.service';
 import { Ticket } from '../ticket-utils';
+import { estadoStyle } from '../tickets-card-utils';
 
 export interface AssignTicketData {
   ticket: Ticket;
@@ -36,6 +37,7 @@ export class AssignTicketDialog {
   private readonly data = inject<AssignTicketData>(MAT_DIALOG_DATA);
 
   readonly ticket = this.data.ticket;
+  readonly estadoStyle = estadoStyle;
   readonly empleados = signal<HdUser[]>(this.hd.hdUsers());
   readonly filtro = signal('');
   readonly busy = signal<string | null>(null);

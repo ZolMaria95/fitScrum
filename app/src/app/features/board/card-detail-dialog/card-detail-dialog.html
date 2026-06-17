@@ -62,6 +62,13 @@
     </div>
   }
 
+  @if (ticketEstatus(); as est) {
+    <div class="ticket-estado">
+      <span class="te-label">Estado del ticket:</span>
+      <span class="te-badge" [style.background]="estadoStyle(est).badgeBg" [style.color]="estadoStyle(est).badgeText">{{ est }}</span>
+    </div>
+  }
+
   @if (ticket.trim()) {
     <button mat-stroked-button type="button" class="conv-btn" (click)="openTicketConversation()">
       <mat-icon>forum</mat-icon> Ver conversación del ticket
@@ -108,11 +115,7 @@
 
     <mat-form-field appearance="outline" class="grow">
       <mat-label>Estado</mat-label>
-      <mat-select [(ngModel)]="status">
-        @for (s of STATUSES; track s) {
-          <mat-option [value]="s" [disabled]="s === 'todo' && salioDeTodo">{{ STATUS_LABELS[s] }}</mat-option>
-        }
-      </mat-select>
+      <input matInput [value]="STATUS_LABELS[status]" readonly />
     </mat-form-field>
   </div>
 

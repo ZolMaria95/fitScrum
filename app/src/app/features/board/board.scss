@@ -79,6 +79,18 @@
   .danger {
     color: var(--mat-sys-error);
   }
+
+  // Atajo "Asignados a mí": resaltado cuando está activo.
+  .mine-toggle {
+    --mat-icon-size: 18px;
+    mat-icon { font-size: 18px; width: 18px; height: 18px; margin-right: 2px; }
+
+    &.active {
+      background: var(--brand, #048abf);
+      color: #fff;
+      border-color: var(--brand, #048abf);
+    }
+  }
 }
 
 .assignee-filter {

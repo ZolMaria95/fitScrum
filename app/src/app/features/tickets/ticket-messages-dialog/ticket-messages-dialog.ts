@@ -11,6 +11,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { HelpdeskService } from '../../../core/services/helpdesk.service';
 import { EMPLEADOS } from '../helpdesk.constants';
 import { Ticket, mapTicket, safeHtml, stripHtml } from '../ticket-utils';
+import { estadoStyle } from '../tickets-card-utils';
 
 interface ConvMsg {
   autor: string;
@@ -44,6 +45,7 @@ export class TicketMessagesDialog {
   private readonly data = inject<TicketMessagesData>(MAT_DIALOG_DATA);
 
   readonly ticketId = this.data.ticketId || this.data.ticket?.ticket || '';
+  readonly estadoStyle = estadoStyle;
   private ticketObj: Ticket | null = this.data.ticket ?? null;
   readonly header = signal({
     cliente: this.data.ticket?.clienteRaw || '',

@@ -20,7 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
   todo: 'To Do',
   in_progress: 'En progreso',
   review: 'En certificación',
-  done: 'Finalizado',
+  done: 'Entregado',
 };
 
 function today(): Date { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
@@ -105,6 +105,7 @@ export class MiPanel {
           title: t.asunto,
           assignee: t.usuarioAsignado,
           assigneeName: t.nombreAsignado,
+          estatus: t.estatus,
         },
       },
       width: '560px',

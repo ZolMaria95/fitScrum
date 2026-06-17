@@ -336,6 +336,7 @@ export class Tickets implements OnDestroy {
           title: t.asunto,
           assignee: t.usuarioAsignado,
           assigneeName: t.nombreAsignado,
+          estatus: t.estatus,
         },
       },
       width: '560px',

@@ -42,6 +42,18 @@
     }
   </mat-button-toggle-group>
 
+  <button
+    type="button"
+    class="mine-toggle"
+    mat-stroked-button
+    [class.active]="mineOnly()"
+    [attr.aria-pressed]="mineOnly()"
+    (click)="toggleMine()"
+    matTooltip="Mostrar solo mis tareas"
+  >
+    <mat-icon>person</mat-icon> Asignados a mí
+  </button>
+
   @if (assigneeChips().length) {
     <div class="assignee-filter">
       <span class="filter-label">Asignado a:</span>

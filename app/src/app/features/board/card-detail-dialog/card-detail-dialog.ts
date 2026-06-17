@@ -17,6 +17,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { DataService, Story } from '../../../core/services/data.service';
 import { HdClient, HdUser, HelpdeskService } from '../../../core/services/helpdesk.service';
 import { TicketMessagesDialog } from '../../tickets/ticket-messages-dialog/ticket-messages-dialog';
+import { estadoStyle } from '../../tickets/tickets-card-utils';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import {
   HD_ESTADO_POR_STATUS,
@@ -29,6 +30,7 @@ import {
   progColor,
   resolveMember,
   roundUp5,
+  statusFromTicketEstado,
 } from '../board-utils';
 
 export interface CardDetailData {
@@ -42,6 +44,7 @@ export interface CardDetailData {
     title?: string;
     assignee?: string;
     assigneeName?: string;
+    estatus?: string;
   };
 }
 
@@ -76,6 +79,9 @@ export class CardDetailDialog {
 
   readonly story = this.input.story;
   readonly isNew = !this.story;
+  /** Estado del ticket asociado (existente: del board; nuevo: se llena al buscar). */
+  readonly ticketEstatus = signal(this.story?.hdEstatus || this.input.prefill?.estatus || '');
+  readonly estadoStyle = estadoStyle;
   /** El usuario Helpdesk (MSC001) puede editar el cliente de tareas SIN ticket. */
   readonly esHelpdesk = this.auth.esMSC001;
   /** Muestra el buscador de cliente: al crear, o al editar una tarea sin ticket siendo Helpdesk. */
@@ -187,6 +193,8 @@ export class CardDetailDialog {
       this.snack.open(`No se encontró el ticket #${num}.`, 'OK', { duration: 3000 });
       return;
     }
+    // Estado del ticket (para mostrarlo en el modal)
+    this.ticketEstatus.set(t.estatus || '');
     // Título = asunto del ticket
     if (t.asunto) this.title = t.asunto;
     // Cliente
@@ -241,7 +249,9 @@ export class CardDetailDialog {
   title = this.story?.title ?? this.input.prefill?.title ?? '';
   priority: Priority = (this.story?.priority as Priority) ?? 'media';
   description = this.story?.description ?? '';
-  status: Status = (this.story?.status as Status) ?? 'todo';
+  // Tarea existente → su estado; tarea nueva desde ticket → el estado del board que le
+  // corresponde según el estatus del ticket (mismo mapeo que el sync del board).
+  status: Status = (this.story?.status as Status) ?? statusFromTicketEstado(this.input.prefill?.estatus || '').status;
   dueDateModel: Date | null = this.story?.dueDate ? new Date(this.story.dueDate + 'T00:00:00') : null;
   assignee = this.story?.assignee ?? this.input.prefill?.assignee ?? '';
   ticket = this.story?.ticket ?? this.input.prefill?.ticket ?? '';

@@ -141,6 +141,8 @@ export class Board {
   readonly activeClients = signal<Set<string>>(new Set());
   readonly activeAssignees = signal<Set<string>>(new Set());
   readonly ticketSearch = signal('');
+  /** Atajo "Asignados a mí": muestra solo las tareas del usuario en sesión. */
+  readonly mineOnly = signal(false);
 
   // ── Permisos ──
   readonly puedeGestionarTodo = this.auth.puedeGestionarTodo;
@@ -219,7 +221,10 @@ export class Board {
     const clients = this.activeClients();
     const assignees = this.activeAssignees();
     const tic = this.ticketSearch().trim();
+    const mine = this.mineOnly();
+    const me = this.myId;
     const filtered = this.visibleStories().filter((s) => {
+      if (mine && String(s.assignee || '').trim().toUpperCase() !== me) return false;
       if (prio !== 'all' && s.priority !== prio) return false;
       if (clients.size > 0 && !(s.client && clients.has(s.client))) return false;
       if (assignees.size > 0 && !(!s.assignee || assignees.has(s.assignee))) return false;
@@ -241,6 +246,13 @@ export class Board {
   setPriority(f: PriorityFilter): void {
     this.priorityFilter.set(f);
     this.activeAssignees.set(new Set()); // paridad con el legacy
+  }
+  /** Atajo: alterna el filtro "Asignados a mí" (solo mis tareas). Al activarlo limpia
+   *  el multi-select de asignados para no mezclar criterios. */
+  toggleMine(): void {
+    const next = !this.mineOnly();
+    this.mineOnly.set(next);
+    if (next) this.activeAssignees.set(new Set());
   }
   /** Ids seleccionados como array (para el mat-select multiple y los globos). */
   readonly selectedAssignees = computed(() => [...this.activeAssignees()]);

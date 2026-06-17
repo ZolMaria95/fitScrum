@@ -1,7 +1,9 @@
 <div class="conv-head" mat-dialog-title>
   <span class="ticket-id">#{{ ticketId }}</span>
   <span class="cliente">{{ header().cliente }}</span>
-  <span class="estatus">{{ header().estatus }}</span>
+  @if (header().estatus; as est) {
+    <span class="estatus" [style.background]="estadoStyle(est).badgeBg" [style.color]="estadoStyle(est).badgeText">{{ est }}</span>
+  }
   <span class="spacer"></span>
   <button mat-icon-button mat-dialog-close aria-label="Cerrar"><mat-icon>close</mat-icon></button>
 </div>

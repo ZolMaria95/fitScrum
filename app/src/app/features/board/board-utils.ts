@@ -13,7 +13,7 @@ export const STATUS_LABELS: Record<Status, string> = {
   todo: 'To Do',
   in_progress: 'In Progress',
   review: 'En Certificación',
-  done: 'Finalizado',
+  done: 'Entregado',
 };
 
 /**
