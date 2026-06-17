@@ -13,7 +13,7 @@
       </div>
     }
 
-    <mat-nav-list class="drawer-nav">
+    <mat-nav-list class="drawer-nav" (click)="drawerOpen.set(false)">
       <h3 matSubheader>Scrum</h3>
       <a mat-list-item routerLink="/board" routerLinkActive="active">Board</a>
       <a mat-list-item routerLink="/burndown" routerLinkActive="active">Burndown</a>

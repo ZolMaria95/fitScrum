@@ -86,22 +86,25 @@ export class Layout {
     const timer = setInterval(() => this.checkReminders(), 5 * 60 * 1000);
     this.destroyRef.onDestroy(() => clearInterval(timer));
 
-    // Red de seguridad (zoneless): en modo fijo (side) el contenido NUNCA debe quedar
-    // inerte. Material puede dejar el atributo `inert` pegado tras la transición de modo
-    // over→side y la limpieza por CD no corre. Dos coberturas:
-    //  1) afterRenderEffect: reacciona a cambios de fixed/opened (p. ej. resize).
+    // Red de seguridad (zoneless): el contenido SOLO debe quedar inerte cuando hay
+    // un drawer overlay ABIERTO encima (over + opened). En cualquier otro caso —modo
+    // fijo (side), o drawer cerrado (incluido el cierre al navegar en over)— debe ser
+    // interactivo. En zoneless Material a veces no quita el `inert` al cerrar/cambiar
+    // de modo, dejando la derecha "viva pero muerta" hasta recargar. Dos coberturas:
+    //  1) afterRenderEffect: reacciona a cambios de fixed/opened (cerrar drawer, resize).
     afterRenderEffect(() => {
-      this.fixed();
-      this.opened();
+      const interactivo = this.fixed() || !this.opened(); // inerte solo si over + abierto
       const el = this.shellContent()?.nativeElement;
-      if (el && this.fixed()) el.removeAttribute('inert');
+      if (el && interactivo) el.removeAttribute('inert');
     });
     //  2) MutationObserver: quita `inert` apenas Material lo ponga (lo setea tarde,
     //     después del render, por eso el efecto solo no alcanza).
     afterNextRender(() => {
       const el = this.shellContent()?.nativeElement;
       if (!el) return;
-      const strip = () => { if (this.fixed() && el.hasAttribute('inert')) el.removeAttribute('inert'); };
+      const strip = () => {
+        if ((this.fixed() || !this.opened()) && el.hasAttribute('inert')) el.removeAttribute('inert');
+      };
       strip();
       const obs = new MutationObserver(strip);
       obs.observe(el, { attributes: true, attributeFilter: ['inert'] });
