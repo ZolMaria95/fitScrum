@@ -1,15 +1,111 @@
-import { Component } from '@angular/core';
-import { MatCardModule } from '@angular/material/card';
+import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { DataService } from '../../core/services/data.service';
 
+interface Query {
+  id: string;
+  title: string;
+  description: string;
+  storyId: string | null;
+  priority: 'alta' | 'media' | 'baja';
+  author: string;
+  date: string;
+  status: 'open' | 'resolved';
+  response: string | null;
+  respondedBy: string | null;
+}
+
+type QFilter = 'all' | 'open' | 'resolved';
+
+/** Consultas y bloqueos del equipo. Port de js/consultas.js. */
 @Component({
   selector: 'app-consultas',
-  imports: [MatCardModule],
-  template: `
-    <mat-card class="ph" appearance="outlined">
-      <h2>Consultas</h2>
-      <p>Pendiente de portar (Fase 2+).</p>
-    </mat-card>
-  `,
-  styles: `.ph { padding: 24px; max-width: 720px; }`,
+  imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule],
+  templateUrl: './consultas.html',
+  styleUrl: './consultas.scss',
 })
-export class Consultas {}
+export class Consultas {
+  private readonly data = inject(DataService);
+
+  readonly team = this.data.team;
+  private readonly queries = signal<Query[]>([]);
+
+  readonly sprintStories = computed(() => {
+    const active = this.data.getActiveSprint()?.id;
+    return active ? this.data.stories().filter((s) => s.sprint === active) : [];
+  });
+
+  readonly filter = signal<QFilter>('all');
+  readonly counts = computed(() => {
+    const q = this.queries();
+    return { all: q.length, open: q.filter((x) => x.status === 'open').length, resolved: q.filter((x) => x.status === 'resolved').length };
+  });
+
+  readonly rows = computed<Query[]>(() => {
+    const f = this.filter();
+    return this.queries()
+      .filter((q) => f === 'all' || q.status === f)
+      .sort((a, b) => {
+        if (a.status === 'open' && b.status !== 'open') return -1;
+        if (a.status !== 'open' && b.status === 'open') return 1;
+        return b.date.localeCompare(a.date);
+      });
+  });
+
+  // ── Alta de consulta ──
+  readonly showForm = signal(false);
+  form = { title: '', description: '', storyId: '', priority: 'media' as Query['priority'], author: '' };
+
+  // ── Resolver (inline por card) ──
+  readonly resolvingId = signal<string | null>(null);
+  resolveDraft = { response: '', respondedBy: '' };
+
+  constructor() {
+    this.data.ensureInit().then(() => this.reload());
+  }
+
+  private reload(): void {
+    this.queries.set([...(this.data.getQueries() as Query[])]);
+  }
+
+  memberName(id: string | null): string { return (id && this.data.getMember(id)?.name) || id || ''; }
+  storyOf(id: string | null) { return id ? this.data.getAllStories().find((s) => s.id === id) : undefined; }
+  fmtDate(str: string): string {
+    return new Date(str + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  toggleForm(): void {
+    this.showForm.update((v) => !v);
+    if (this.showForm()) this.form = { title: '', description: '', storyId: '', priority: 'media', author: this.team()[0]?.id || '' };
+  }
+  canSave(): boolean { return !!this.form.title.trim() && !!this.form.description.trim() && !!this.form.author; }
+  save(): void {
+    if (!this.canSave()) return;
+    this.data.addQuery({
+      title: this.form.title.trim(),
+      description: this.form.description.trim(),
+      storyId: this.form.storyId || null,
+      priority: this.form.priority,
+      author: this.form.author,
+    });
+    this.reload();
+    this.showForm.set(false);
+  }
+
+  startResolve(q: Query): void {
+    this.resolvingId.set(q.id);
+    this.resolveDraft = { response: '', respondedBy: this.team()[0]?.id || '' };
+  }
+  cancelResolve(): void { this.resolvingId.set(null); }
+  confirmResolve(q: Query): void {
+    if (!this.resolveDraft.response.trim() || !this.resolveDraft.respondedBy) return;
+    this.data.resolveQuery(q.id, this.resolveDraft.response.trim(), this.resolveDraft.respondedBy);
+    this.reload();
+    this.resolvingId.set(null);
+  }
+}

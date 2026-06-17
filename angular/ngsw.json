@@ -1,0 +1,132 @@
+{
+  "configVersion": 1,
+  "timestamp": 1781665879013,
+  "index": "/fitScrum/angular/index.html",
+  "assetGroups": [
+    {
+      "name": "app",
+      "installMode": "prefetch",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/fitScrum/angular/favicon.ico",
+        "/fitScrum/angular/index.html",
+        "/fitScrum/angular/manifest.webmanifest"
+      ],
+      "patterns": []
+    },
+    {
+      "name": "static-assets",
+      "installMode": "prefetch",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [
+        "/fitScrum/angular/chunk-BDDHAvWz.js",
+        "/fitScrum/angular/chunk-BQaPQge6.js",
+        "/fitScrum/angular/chunk-BfeYJV1h.js",
+        "/fitScrum/angular/chunk-C1qmADXh.js",
+        "/fitScrum/angular/chunk-C6kEAAiX.js",
+        "/fitScrum/angular/chunk-CDelrz7-.js",
+        "/fitScrum/angular/chunk-CLJhs3fW.js",
+        "/fitScrum/angular/chunk-CPlEP-NS.js",
+        "/fitScrum/angular/chunk-CbEMymLo.js",
+        "/fitScrum/angular/chunk-Cl0biUqy.js",
+        "/fitScrum/angular/chunk-Cl2BaC5L.js",
+        "/fitScrum/angular/chunk-D-iQ8_iB.js",
+        "/fitScrum/angular/chunk-D1mPQATR.js",
+        "/fitScrum/angular/chunk-DDit4Jz4.js",
+        "/fitScrum/angular/chunk-DF-HxHLV.js",
+        "/fitScrum/angular/chunk-DKpvbfMH.js",
+        "/fitScrum/angular/chunk-DRJWT1rA.js",
+        "/fitScrum/angular/chunk-DePqRDB0.js",
+        "/fitScrum/angular/chunk-KBzjbqWX.js",
+        "/fitScrum/angular/chunk-NqCM5ZT7.js",
+        "/fitScrum/angular/chunk-T2GxJfzb.js",
+        "/fitScrum/angular/chunk-ZK4x7S2T.js",
+        "/fitScrum/angular/chunk-tqK9xzx9.js",
+        "/fitScrum/angular/main-C4IQZGKV.js",
+        "/fitScrum/angular/styles-A6KEUKUG.css"
+      ],
+      "patterns": []
+    },
+    {
+      "name": "assets",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "urls": [],
+      "patterns": []
+    }
+  ],
+  "dataGroups": [
+    {
+      "name": "seed-json",
+      "patterns": [
+        "\\/data\\/[^/]*\\.json"
+      ],
+      "strategy": "freshness",
+      "maxSize": 20,
+      "maxAge": 86400000,
+      "timeoutMs": 5000,
+      "cacheQueryOptions": {
+        "ignoreVary": true
+      },
+      "version": 1
+    }
+  ],
+  "hashTable": {
+    "/fitScrum/angular/chunk-BDDHAvWz.js": "6e9ef41db4a37bc93e06735097fa423678733804",
+    "/fitScrum/angular/chunk-BQaPQge6.js": "86d9715d351c60d9003bf55daf326f11dbf34e80",
+    "/fitScrum/angular/chunk-BfeYJV1h.js": "839ac58c2a65f251d733356e06fdea6905e226e7",
+    "/fitScrum/angular/chunk-C1qmADXh.js": "ad9d64e902362807beb447136bbdce038519e2d8",
+    "/fitScrum/angular/chunk-C6kEAAiX.js": "43576563db2d549c0f8f0e357e0d3b9af75e3de8",
+    "/fitScrum/angular/chunk-CDelrz7-.js": "717a45d97184202cbc352b2fe4835483cd3d063f",
+    "/fitScrum/angular/chunk-CLJhs3fW.js": "088864f1aaf3d6f03b4ae8b89414ba7e729bda90",
+    "/fitScrum/angular/chunk-CPlEP-NS.js": "a729740ffd70a43a8965bff6a8d394d131397d06",
+    "/fitScrum/angular/chunk-CbEMymLo.js": "8bfcacb7f13dc286665c5209452002bd46b00762",
+    "/fitScrum/angular/chunk-Cl0biUqy.js": "cb309db2fa5bee991d0a9b8c838107132e2f0026",
+    "/fitScrum/angular/chunk-Cl2BaC5L.js": "638fd6a0305b523282eba533b5d103d9331ef65b",
+    "/fitScrum/angular/chunk-D-iQ8_iB.js": "df3c5180e2a9ecc5e0ebe36d36392aa4f376e978",
+    "/fitScrum/angular/chunk-D1mPQATR.js": "3cc21e20260bd24b2b43b7900decc4acdce11ca3",
+    "/fitScrum/angular/chunk-DDit4Jz4.js": "729172c0fb751e9e2eac25aaf4261e376d611abd",
+    "/fitScrum/angular/chunk-DF-HxHLV.js": "4774fe005c48dd30160b08f917147ab7aec8718c",
+    "/fitScrum/angular/chunk-DKpvbfMH.js": "221cfafb1788b2ba5154ccd7a356cfde667b9d8d",
+    "/fitScrum/angular/chunk-DRJWT1rA.js": "3937300e368fcde889f70650f415efd085d52143",
+    "/fitScrum/angular/chunk-DePqRDB0.js": "4abc49d9e892d3187e40b91f78b64a1bdc4ba03c",
+    "/fitScrum/angular/chunk-KBzjbqWX.js": "4f889bf15a770d8d0cd2c2558b6efcadb3dbc83e",
+    "/fitScrum/angular/chunk-NqCM5ZT7.js": "b9db906dbeb5f5eefb474467b6eb5ca46c4f5d8d",
+    "/fitScrum/angular/chunk-T2GxJfzb.js": "0a071a22796b75342b37490dd4696ea7258572be",
+    "/fitScrum/angular/chunk-ZK4x7S2T.js": "16a1b7c836242258f68ff126393ee63a648ae7bd",
+    "/fitScrum/angular/chunk-tqK9xzx9.js": "99fc59b0a3b177b4e57fba23352405340c9df557",
+    "/fitScrum/angular/favicon.ico": "9c39f434fe1261f68c5e3eefdf734630d99c5670",
+    "/fitScrum/angular/index.html": "19bb8f395032c4e96c731f76e9873393324b5988",
+    "/fitScrum/angular/main-C4IQZGKV.js": "69da033f092f21bb61e350ba0d819828e79e15a3",
+    "/fitScrum/angular/manifest.webmanifest": "60cad8141d6c83e3a1efcfcaf2a2f3574b392912",
+    "/fitScrum/angular/styles-A6KEUKUG.css": "5dd544b78dcadddbb49b8b9672aef7d06d3e0175"
+  },
+  "navigationUrls": [
+    {
+      "positive": true,
+      "regex": "^\\/.*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*\\.[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*$"
+    },
+    {
+      "positive": false,
+      "regex": "^\\/(?:.+\\/)?[^/]*__[^/]*\\/.*$"
+    }
+  ],
+  "navigationRequestStrategy": "performance"
+}

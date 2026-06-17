@@ -304,5 +304,107 @@ Control de código Git / GitHub                     Repositorio "fitScrum"
     • Definir política de respaldos de la base Firebase (ya se realizan exports).
 
 ================================================================================
+            ANEXO A — ARQUITECTURA DEL SISTEMA (DETALLE)
+================================================================================
+
+A.1 SPA QUE CONSUME DOS FUENTES INDEPENDIENTES
+--------------------------------------------------------------------------------
+Fit-Daily es una SPA: el navegador descarga la aplicación una sola vez y, a partir
+de ahí, la navegación entre pantallas ocurre sin recargar la página (router de
+Angular con carga perezosa por vista). El estado vive en memoria con Signals y la
+interfaz se deriva de ese estado.
+
+La app se apoya en DOS fuentes de datos desacopladas, cada una con su propio
+servicio y su propio mecanismo de acceso:
+
+  a) Firebase Realtime Database — datos PROPIOS del proyecto (sprints, tareas,
+     avances, consultas, notas, pendientes). Gestionado por `DataService`.
+  b) API Helpdesk de FitBank (vía proxy) — sistema EXTERNO y fuente de verdad de
+     los tickets, usuarios (consultores) y clientes. Gestionado por
+     `HelpdeskService`.
+
+Beneficio de mantenerlas independientes: el tablero (Firebase) sigue operativo
+aunque el Helpdesk no responda, y la vista de tickets funciona aunque el board no
+tenga datos. La degradación es aislada, no se cae todo junto. El punto de unión es
+lógico (cada tarea referencia el N° de ticket), no técnico.
+
+         Vistas (Signals)
+        ┌──────┴───────┐
+   DataService     HelpdeskService
+        │                │
+   Firebase RTDB    Proxy → API Helpdesk
+
+A.2 FIREBASE: SPRINTS, TAREAS, AVANCES (TIEMPO REAL)
+--------------------------------------------------------------------------------
+Acceso vía REST de Firebase sobre la base `…/fit-daily/<nodo>.json`.
+
+  • Lectura inicial: `ensureInit()` lee los nodos; si están vacíos los SIEMBRA
+    desde los JSON locales (semillas) y si ya tienen datos los carga — nunca pisa
+    información existente.
+  • Escritura: por nodo (PUT/PATCH/DELETE), de forma "fire-and-forget" con captura
+    de error (no bloquea la interfaz).
+  • TIEMPO REAL (lo más relevante): al iniciar, `startStreaming()` abre un
+    EventSource (SSE — Server-Sent Events) sobre el nodo `stories` (las tareas del
+    tablero). Cuando Firebase emite un evento `put`/`patch`, la app dispara una
+    re-sincronización con "debounce" de 250 ms (agrupa ráfagas de cambios). Como
+    respaldo hay un temporizador de seguridad cada 60 s y, si el navegador no
+    soporta EventSource, cae a "polling" periódico.
+  • Conciliación sin pisarse: al llegar cambios remotos se hace un merge por id de
+    tarea, respetando una "ventana de gracia" para las escrituras locales recientes
+    (evita que un cambio que el propio usuario acaba de hacer sea sobrescrito por un
+    eco del servidor → sin parpadeos ni condiciones de carrera). También elimina en
+    local las tareas que ya no existen en remoto.
+  • Resultado: lo que un consultor cambia en el board, los demás lo ven casi al
+    instante, sin recargar.
+  • Respaldo offline: si Firebase no está disponible, `DataService` persiste en
+    localStorage como contingencia.
+
+  Nota: el streaming en vivo aplica al nodo `stories`; sprints, avances y consultas
+  se cargan al inicio y se refrescan al escribir (no requieren SSE permanente).
+
+A.3 INTERCEPTORES HTTP: TOKEN + RENOVACIÓN AUTOMÁTICA (REFRESH)
+--------------------------------------------------------------------------------
+Un interceptor HTTP (`helpdeskAuthInterceptor`) procesa TODAS las llamadas al API
+del Helpdesk de forma centralizada, sin que cada pantalla tenga que ocuparse de la
+autenticación:
+
+  • Inyecta en cada petición la cabecera `Authorization: Bearer <access_token>`
+    tomada de la sesión.
+  • Renovación automática ante 401 (token vencido): llama a `refreshSession()`, que
+    hace `POST /auth/refresh` con el "refresh token"; DEDUPLICA llamadas concurrentes
+    (si varias peticiones fallan 401 a la vez, se hace un solo refresh) y, con el
+    token nuevo, REINTENTA la petición original. Todo transparente: el usuario no se
+    entera ni es expulsado.
+  • Si el refresh también falla (refresh token vencido) o ante un 403 (sin permiso),
+    cierra la sesión y redirige a /login.
+  • Marca de peticiones "tolerables" (HD_SAFE): catálogos y escrituras best-effort
+    que, si fallan, no fuerzan el cierre de sesión.
+  • Diseño a prueba de bucles: el reintento no vuelve a entrar al manejo de error y
+    las rutas de autenticación quedan excluidas.
+
+  Beneficio: sesiones de trabajo largas sin cortes, con tokens de acceso de vida
+  corta (más seguros) renovados de forma silenciosa.
+
+A.4 GUARDS DE RUTAS POR SESIÓN Y POR ROL
+--------------------------------------------------------------------------------
+El acceso a cada pantalla se controla con "guards" (porteros) de ruta:
+
+  • authGuard (sesión): protege TODAS las vistas bajo el shell. Si no hay sesión
+    activa, redirige a /login.
+  • solGuard (rol): la vista "Mi Panel" (supervisión) solo la abren el Scrum Master
+    o el administrador del Helpdesk (MSC001); el resto es redirigido al tablero.
+  • msc001Guard (rol): reservado para acciones exclusivas del administrador
+    (p. ej. borrar el tablero completo).
+
+Los permisos (esMSC001, esSupervisor, puedeVerMiPanel, puedeBorrarBoard,
+puedeGestionarTodo) son valores derivados del ROL que el API del Helpdesk asigna al
+usuario (role_description) y que viaja en la sesión.
+
+Defensa en capas: además del guard que bloquea la navegación, dentro de cada vista
+se valida el permiso por acción concreta (por ejemplo, en el tablero solo el
+asignado, un Supervisor o el administrador pueden mover una tarea ajena o marcar sus
+checks; a quien no tiene permiso se le muestra un aviso y el cambio no se aplica).
+
+================================================================================
                               FIN DEL INFORME
 ================================================================================

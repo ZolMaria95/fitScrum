@@ -1,7 +1,8 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
+import { ApplicationConfig, isDevMode, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideRouter, withHashLocation } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { MAT_DATE_LOCALE, provideNativeDateAdapter } from '@angular/material/core';
+import { provideServiceWorker } from '@angular/service-worker';
 
 import { routes } from './app.routes';
 import { helpdeskAuthInterceptor } from './core/interceptors/helpdesk-auth.interceptor';
@@ -18,5 +19,11 @@ export const appConfig: ApplicationConfig = {
     // Datepicker de Material en es-ES (formato dd/mm/yyyy).
     provideNativeDateAdapter(),
     { provide: MAT_DATE_LOCALE, useValue: 'es-ES' },
+    // Service Worker (PWA): solo en producción. Registra ngsw-worker.js cuando la
+    // app está estable (o a los 30s). La lógica de actualización vive en App.
+    provideServiceWorker('ngsw-worker.js', {
+      enabled: !isDevMode(),
+      registrationStrategy: 'registerWhenStable:30000',
+    }),
   ],
 };

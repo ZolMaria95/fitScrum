@@ -1,0 +1,17 @@
+{
+  "name": "Fit-Daily",
+  "short_name": "Fit-Daily",
+  "description": "Gestión Scrum + Helpdesk del equipo de consultores de Soft Warehouse.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f2f2f2",
+  "theme_color": "#04baf0",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
