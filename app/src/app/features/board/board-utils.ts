@@ -222,17 +222,6 @@ export async function canStartWork(task: Story, d: WorkDeps): Promise<boolean> {
     assigneeId = session?.id ?? null; // quien la mueve es el asignado
   }
 
-  // Límite WIP: máximo 2 tareas en progreso por técnico (en el sprint actual)
-  const active = d.data.sprints().active;
-  const enProgreso = d.data
-    .getStoriesBySprint(active)
-    .filter((s) => s.status === 'in_progress' && s.assignee === assigneeId).length;
-  if (enProgreso >= 2) {
-    const nombre = (d.data.getMember(assigneeId || '') || {}).name || assigneeId;
-    d.snack.open(`${nombre} ya tiene ${enProgreso} tareas en progreso. Debe cerrar alguna antes de iniciar otra.`, 'OK', { duration: 5000 });
-    return false;
-  }
-
   // Confirmación de inicio
   const ok = await firstValueFrom(
     d.dialog
