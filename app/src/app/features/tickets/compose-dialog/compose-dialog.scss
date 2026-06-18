@@ -1,5 +1,10 @@
 :host {
-  display: block;
+  // Alto acotado: cabecera, toolbar y acciones fijos; el editor scrollea en el
+  // medio para que el botón "Listo" nunca quede fuera de pantalla.
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
 }
 
 .compose-head {
@@ -9,6 +14,7 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  flex: 0 0 auto;
 
   .spacer {
     flex: 1;
@@ -20,15 +26,19 @@
   gap: 4px;
   padding: 0 24px 6px;
   border-bottom: 1px solid var(--mat-sys-outline-variant);
+  flex: 0 0 auto;
 }
 
 .compose-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
   padding-top: 12px;
 }
 
 .compose-editor {
-  min-height: 45vh;
-  max-height: 60vh;
+  flex: 1 1 auto;
+  min-height: 160px;
   overflow-y: auto;
   box-sizing: border-box;
   border: 1px solid var(--mat-sys-outline);
@@ -39,6 +49,7 @@
   line-height: 1.5;
   outline: none;
   overflow-wrap: anywhere;
+  white-space: pre-wrap; // conserva espacios y saltos del contenido pegado
 
   &:focus {
     border-color: var(--mat-sys-primary, #048abf);
@@ -49,4 +60,8 @@
     content: 'Escribe tu respuesta…';
     color: var(--mat-sys-on-surface-variant);
   }
+}
+
+[mat-dialog-actions] {
+  flex: 0 0 auto;
 }

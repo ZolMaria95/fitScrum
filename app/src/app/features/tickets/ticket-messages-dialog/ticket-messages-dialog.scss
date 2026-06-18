@@ -1,8 +1,18 @@
+:host {
+  // Diálogo de alto acotado: cabecera y composer fijos, la conversación scrollea
+  // en el medio. Evita que un mensaje largo empuje el botón Enviar fuera de pantalla.
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  overflow: hidden;
+}
+
 .conv-head {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 0;
+  flex: 0 0 auto;
 
   .ticket-id {
     font-family: 'JetBrains Mono', monospace;
@@ -49,8 +59,10 @@
 }
 
 .conv-body {
-  min-height: 240px;
-  max-height: 50vh;
+  // Único elemento que crece/encoge y scrollea (min-height: 0 permite el scroll).
+  flex: 1 1 auto;
+  min-height: 140px;
+  max-height: none;
   background: #f4f6f9;
   padding: 12px;
 }
@@ -171,8 +183,9 @@
   }
 }
 
-// ── Composer ──
+// ── Composer ── (fijo al pie del diálogo, siempre visible)
 .composer {
+  flex: 0 0 auto;
   border-top: 1px solid var(--mat-sys-outline-variant);
   padding: 10px 24px 16px;
 
@@ -185,6 +198,7 @@
     border-radius: 8px;
     padding: 8px;
     resize: vertical;
+    max-height: 28vh; // no empuja el botón Enviar fuera de pantalla
   }
 }
 
@@ -201,6 +215,7 @@
     max-height: 120px;
     overflow-y: auto;
     overflow-wrap: anywhere;
+    white-space: pre-wrap; // refleja espacios/saltos del contenido pegado
 
     :where(b, strong) { font-weight: 700; }
     :where(i, em) { font-style: italic; }
