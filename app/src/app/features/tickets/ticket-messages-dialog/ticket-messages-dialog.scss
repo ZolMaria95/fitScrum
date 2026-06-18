@@ -188,6 +188,34 @@
   }
 }
 
+// Borrador con formato (redactado en el pop-up)
+.composer-draft {
+  border: 1px solid var(--mat-sys-outline);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: text;
+
+  .composer-preview {
+    font-size: 13px;
+    line-height: 1.45;
+    max-height: 120px;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+
+    :where(b, strong) { font-weight: 700; }
+    :where(i, em) { font-style: italic; }
+    :where(u) { text-decoration: underline; }
+  }
+
+  .composer-draft-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    border-top: 1px solid var(--mat-sys-outline-variant);
+    padding-top: 4px;
+  }
+}
+
 .composer-actions {
   display: flex;
   align-items: center;

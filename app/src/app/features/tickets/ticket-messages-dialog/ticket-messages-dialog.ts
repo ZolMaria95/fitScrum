@@ -1,14 +1,17 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
-import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../../core/services/auth.service';
 import { HelpdeskService } from '../../../core/services/helpdesk.service';
+import { ComposeDialog } from '../compose-dialog/compose-dialog';
 import { EMPLEADOS } from '../helpdesk.constants';
 import { Ticket, mapTicket, safeHtml, stripHtml } from '../ticket-utils';
 import { estadoStyle } from '../tickets-card-utils';
@@ -31,7 +34,7 @@ export interface TicketMessagesData {
 /** Conversación completa de un ticket: mensajes, adjuntos, lightbox y composer. */
 @Component({
   selector: 'app-ticket-messages-dialog',
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatIconModule, MatProgressBarModule],
+  imports: [FormsModule, MatDialogModule, MatButtonModule, MatIconModule, MatProgressBarModule, MatTooltipModule],
   templateUrl: './ticket-messages-dialog.html',
   styleUrl: './ticket-messages-dialog.scss',
 })
@@ -40,6 +43,7 @@ export class TicketMessagesDialog {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly dialogRef = inject(MatDialogRef<TicketMessagesDialog>);
+  private readonly dialog = inject(MatDialog);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly snack = inject(MatSnackBar);
   private readonly data = inject<TicketMessagesData>(MAT_DIALOG_DATA);
@@ -69,6 +73,10 @@ export class TicketMessagesDialog {
 
   composerText = '';
   composerFiles: File[] = [];
+  /** Borrador con formato redactado en el pop-up (HTML). Si tiene contenido,
+   *  reemplaza al textarea de respuesta rápida al enviar. */
+  readonly composerHtml = signal('');
+  readonly draftPreview = computed(() => this.sanitizer.bypassSecurityTrustHtml(this.composerHtml()));
   readonly sending = signal(false);
   readonly sendStatus = signal('');
 
@@ -206,9 +214,33 @@ export class TicketMessagesDialog {
     this.composerFiles = input.files ? [...input.files] : [];
   }
 
+  /** Abre el editor amplio con formato (negrita/cursiva/subrayado) en un pop-up. */
+  async openComposer(): Promise<void> {
+    const inicial = this.composerHtml() || this.composerText.trim().replace(/\n/g, '<br>');
+    const html = await firstValueFrom(
+      this.dialog
+        .open(ComposeDialog, {
+          data: { html: inicial },
+          width: '720px',
+          maxWidth: '95vw',
+          autoFocus: false,
+        })
+        .afterClosed(),
+    );
+    if (html === undefined) return; // cancelado
+    this.composerHtml.set(html);
+    if (html) this.composerText = '';
+  }
+
+  /** Descarta el borrador con formato y vuelve al textarea simple. */
+  discardDraft(): void {
+    this.composerHtml.set('');
+  }
+
   async send(): Promise<void> {
-    const detail = this.composerText.trim().replace(/\n/g, '<br>');
-    if (!detail && !this.composerFiles.length) {
+    const detail = this.composerHtml().trim() || this.composerText.trim().replace(/\n/g, '<br>');
+    const vacio = !stripHtml(detail).trim() && !/<img/i.test(detail);
+    if (vacio && !this.composerFiles.length) {
       this.sendStatus.set('Escribe un mensaje o adjunta un archivo.');
       return;
     }
@@ -218,6 +250,7 @@ export class TicketMessagesDialog {
     this.sending.set(false);
     if (ok) {
       this.composerText = '';
+      this.composerHtml.set('');
       this.composerFiles = [];
       this.sendStatus.set('Enviado ✓');
       this.load();

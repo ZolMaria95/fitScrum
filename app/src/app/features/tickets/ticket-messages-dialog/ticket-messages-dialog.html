@@ -66,8 +66,24 @@
 
 @if (!sessionExpired()) {
 <div class="composer">
-  <textarea [(ngModel)]="composerText" rows="2" placeholder="Escribir mensaje…" [disabled]="sending()"></textarea>
+  @if (composerHtml()) {
+    <div class="composer-draft" (click)="openComposer()" title="Editar respuesta">
+      <div class="composer-preview" [innerHTML]="draftPreview()"></div>
+      <div class="composer-draft-actions">
+        <button mat-button (click)="openComposer(); $event.stopPropagation()">
+          <mat-icon>edit</mat-icon> Editar
+        </button>
+        <button mat-button (click)="discardDraft(); $event.stopPropagation()">Descartar formato</button>
+      </div>
+    </div>
+  } @else {
+    <textarea [(ngModel)]="composerText" rows="2" placeholder="Escribir mensaje…" [disabled]="sending()"></textarea>
+  }
   <div class="composer-actions">
+    <button mat-icon-button class="rich-btn" matTooltip="Redactar con formato (negrita, cursiva, subrayado)"
+            (click)="openComposer()" [disabled]="sending()">
+      <mat-icon>edit_note</mat-icon>
+    </button>
     <label class="attach-label" matTooltip="Adjuntar archivo">
       <mat-icon>attach_file</mat-icon>
       <input type="file" multiple hidden (change)="onFiles($event)" />

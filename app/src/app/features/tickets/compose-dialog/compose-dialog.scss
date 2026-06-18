@@ -1,0 +1,52 @@
+:host {
+  display: block;
+}
+
+.compose-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+
+  .spacer {
+    flex: 1;
+  }
+}
+
+.compose-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 0 24px 6px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.compose-content {
+  padding-top: 12px;
+}
+
+.compose-editor {
+  min-height: 45vh;
+  max-height: 60vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  border: 1px solid var(--mat-sys-outline);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  outline: none;
+  overflow-wrap: anywhere;
+
+  &:focus {
+    border-color: var(--mat-sys-primary, #048abf);
+    box-shadow: 0 0 0 2px rgba(4, 138, 191, 0.15);
+  }
+
+  &:empty::before {
+    content: 'Escribe tu respuesta…';
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
