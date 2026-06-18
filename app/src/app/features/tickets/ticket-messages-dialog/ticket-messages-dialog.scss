@@ -187,47 +187,46 @@
 .composer {
   flex: 0 0 auto;
   border-top: 1px solid var(--mat-sys-outline-variant);
-  padding: 10px 24px 16px;
+  padding: 6px 24px 16px;
+}
 
-  textarea {
-    width: 100%;
-    box-sizing: border-box;
-    font: inherit;
-    font-size: 13px;
-    border: 1px solid var(--mat-sys-outline);
-    border-radius: 8px;
-    padding: 8px;
-    resize: vertical;
-    max-height: 28vh; // no empuja el botón Enviar fuera de pantalla
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+
+  .spacer {
+    flex: 1;
   }
 }
 
-// Borrador con formato (redactado en el pop-up)
-.composer-draft {
+// Editor de respuesta con formato (contenteditable). Pegar/escribir aquí
+// conserva el formato porque viaja como HTML.
+.composer-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 46px;
+  max-height: 28vh; // no empuja el botón Enviar fuera de pantalla
+  overflow-y: auto;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
   border: 1px solid var(--mat-sys-outline);
   border-radius: 8px;
   padding: 8px 10px;
-  cursor: text;
+  outline: none;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap; // conserva espacios y saltos del contenido pegado
 
-  .composer-preview {
-    font-size: 13px;
-    line-height: 1.45;
-    max-height: 120px;
-    overflow-y: auto;
-    overflow-wrap: anywhere;
-    white-space: pre-wrap; // refleja espacios/saltos del contenido pegado
-
-    :where(b, strong) { font-weight: 700; }
-    :where(i, em) { font-style: italic; }
-    :where(u) { text-decoration: underline; }
+  &:focus {
+    border-color: var(--mat-sys-primary, #048abf);
+    box-shadow: 0 0 0 2px rgba(4, 138, 191, 0.15);
   }
 
-  .composer-draft-actions {
-    display: flex;
-    gap: 4px;
-    margin-top: 4px;
-    border-top: 1px solid var(--mat-sys-outline-variant);
-    padding-top: 4px;
+  &:empty::before {
+    content: attr(data-placeholder);
+    color: var(--mat-sys-on-surface-variant);
+    pointer-events: none;
   }
 }
 

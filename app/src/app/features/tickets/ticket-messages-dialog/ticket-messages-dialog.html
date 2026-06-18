@@ -66,24 +66,25 @@
 
 @if (!sessionExpired()) {
 <div class="composer">
-  @if (composerHtml()) {
-    <div class="composer-draft" (click)="openComposer()" title="Editar respuesta">
-      <div class="composer-preview" [innerHTML]="draftPreview()"></div>
-      <div class="composer-draft-actions">
-        <button mat-button (click)="openComposer(); $event.stopPropagation()">
-          <mat-icon>edit</mat-icon> Editar
-        </button>
-        <button mat-button (click)="discardDraft(); $event.stopPropagation()">Descartar formato</button>
-      </div>
-    </div>
-  } @else {
-    <textarea [(ngModel)]="composerText" rows="2" placeholder="Escribir mensaje…" [disabled]="sending()"></textarea>
-  }
-  <div class="composer-actions">
-    <button mat-icon-button class="rich-btn" matTooltip="Redactar con formato (negrita, cursiva, subrayado)"
-            (click)="openComposer()" [disabled]="sending()">
-      <mat-icon>edit_note</mat-icon>
+  <div class="composer-toolbar">
+    <button mat-icon-button matTooltip="Negrita" (mousedown)="$event.preventDefault()" (click)="format('bold')" [disabled]="sending()">
+      <mat-icon>format_bold</mat-icon>
     </button>
+    <button mat-icon-button matTooltip="Cursiva" (mousedown)="$event.preventDefault()" (click)="format('italic')" [disabled]="sending()">
+      <mat-icon>format_italic</mat-icon>
+    </button>
+    <button mat-icon-button matTooltip="Subrayado" (mousedown)="$event.preventDefault()" (click)="format('underline')" [disabled]="sending()">
+      <mat-icon>format_underlined</mat-icon>
+    </button>
+    <span class="spacer"></span>
+    <button mat-icon-button matTooltip="Abrir editor ampliado" (click)="openComposer()" [disabled]="sending()">
+      <mat-icon>open_in_full</mat-icon>
+    </button>
+  </div>
+  <div #composerInput class="composer-input" contenteditable="true" role="textbox" aria-multiline="true"
+       aria-label="Escribir mensaje" data-placeholder="Escribir mensaje…"
+       [attr.contenteditable]="sending() ? 'false' : 'true'"></div>
+  <div class="composer-actions">
     <label class="attach-label" matTooltip="Adjuntar archivo">
       <mat-icon>attach_file</mat-icon>
       <input type="file" multiple hidden (change)="onFiles($event)" />

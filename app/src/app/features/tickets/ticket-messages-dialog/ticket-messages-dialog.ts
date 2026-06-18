@@ -1,5 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { Router } from '@angular/router';
@@ -34,7 +33,7 @@ export interface TicketMessagesData {
 /** Conversación completa de un ticket: mensajes, adjuntos, lightbox y composer. */
 @Component({
   selector: 'app-ticket-messages-dialog',
-  imports: [FormsModule, MatDialogModule, MatButtonModule, MatIconModule, MatProgressBarModule, MatTooltipModule],
+  imports: [MatDialogModule, MatButtonModule, MatIconModule, MatProgressBarModule, MatTooltipModule],
   templateUrl: './ticket-messages-dialog.html',
   styleUrl: './ticket-messages-dialog.scss',
 })
@@ -71,12 +70,10 @@ export class TicketMessagesDialog {
   private sortedRaw: any[] = [];
   private cursor = 0;
 
-  composerText = '';
+  // Editor de respuesta con formato (contenteditable): escribir/pegar/dar
+  // formato aquí ya viaja como HTML, así el mensaje conserva el formato.
+  readonly composerInput = viewChild.required<ElementRef<HTMLElement>>('composerInput');
   composerFiles: File[] = [];
-  /** Borrador con formato redactado en el pop-up (HTML). Si tiene contenido,
-   *  reemplaza al textarea de respuesta rápida al enviar. */
-  readonly composerHtml = signal('');
-  readonly draftPreview = computed(() => this.sanitizer.bypassSecurityTrustHtml(this.composerHtml()));
   readonly sending = signal(false);
   readonly sendStatus = signal('');
 
@@ -214,13 +211,19 @@ export class TicketMessagesDialog {
     this.composerFiles = input.files ? [...input.files] : [];
   }
 
-  /** Abre el editor amplio con formato (negrita/cursiva/subrayado) en un pop-up. */
+  /** Aplica negrita/cursiva/subrayado a la selección del editor inline. */
+  format(cmd: 'bold' | 'italic' | 'underline'): void {
+    this.composerInput().nativeElement.focus();
+    document.execCommand(cmd, false);
+  }
+
+  /** Abre el editor en un pop-up amplio con el contenido actual y lo devuelve al cerrar. */
   async openComposer(): Promise<void> {
-    const inicial = this.composerHtml() || this.composerText.trim().replace(/\n/g, '<br>');
+    const el = this.composerInput().nativeElement;
     const html = await firstValueFrom(
       this.dialog
         .open(ComposeDialog, {
-          data: { html: inicial },
+          data: { html: el.innerHTML },
           width: '720px',
           maxWidth: '95vw',
           autoFocus: false,
@@ -228,18 +231,14 @@ export class TicketMessagesDialog {
         .afterClosed(),
     );
     if (html === undefined) return; // cancelado
-    this.composerHtml.set(html);
-    if (html) this.composerText = '';
-  }
-
-  /** Descarta el borrador con formato y vuelve al textarea simple. */
-  discardDraft(): void {
-    this.composerHtml.set('');
+    el.innerHTML = html;
+    el.focus();
   }
 
   async send(): Promise<void> {
-    const detail = this.composerHtml().trim() || this.composerText.trim().replace(/\n/g, '<br>');
-    const vacio = !stripHtml(detail).trim() && !/<img/i.test(detail);
+    const el = this.composerInput().nativeElement;
+    const detail = el.innerHTML.trim();
+    const vacio = !el.textContent?.trim() && !el.querySelector('img');
     if (vacio && !this.composerFiles.length) {
       this.sendStatus.set('Escribe un mensaje o adjunta un archivo.');
       return;
@@ -249,8 +248,7 @@ export class TicketMessagesDialog {
     const ok = await this.hd.sendMessage(this.ticketId, detail, this.composerFiles);
     this.sending.set(false);
     if (ok) {
-      this.composerText = '';
-      this.composerHtml.set('');
+      el.innerHTML = '';
       this.composerFiles = [];
       this.sendStatus.set('Enviado ✓');
       this.load();
