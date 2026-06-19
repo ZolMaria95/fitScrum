@@ -131,6 +131,35 @@
   :where(pre, code) {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  :where(pre) {
+    background: rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    font-size: 12px;
+  }
+  :where(code) {
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 4px;
+    padding: 1px 4px;
+    font-size: 0.92em;
+  }
+  :where(pre code) { // código dentro de bloque: sin doble fondo
+    background: none;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  // Viñetas y numeración: sangría dentro del globo.
+  :where(ul, ol) {
+    margin: 4px 0;
+    padding-left: 22px;
+  }
+  :where(li) {
+    margin: 2px 0;
   }
 
   :where(img) {
@@ -201,19 +230,23 @@
 }
 
 // Editor de respuesta con formato (contenteditable). Pegar/escribir aquí
-// conserva el formato porque viaja como HTML.
+// conserva el formato porque viaja como HTML (negrita/cursiva/subrayado,
+// colores, etc.). Burbuja redondeada como el chat input del Helpdesk; arranca
+// compacta (44px) y CRECE con el texto para escribir cómodo, con scroll al tope.
 .composer-input {
   width: 100%;
   box-sizing: border-box;
-  min-height: 46px;
-  max-height: 28vh; // no empuja el botón Enviar fuera de pantalla
+  min-height: 44px;
+  max-height: 45vh; // crece bastante antes de hacer scroll (escribir cómodo)
   overflow-y: auto;
   font: inherit;
-  font-size: 13px;
-  line-height: 1.45;
-  border: 1px solid var(--mat-sys-outline);
-  border-radius: 8px;
-  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  border: 1px solid #d4d6db;
+  border-radius: 18px;
+  padding: 10px 14px;
+  background: #fff;
+  color: var(--mat-sys-on-surface);
   outline: none;
   overflow-wrap: anywhere;
   white-space: pre-wrap; // conserva espacios y saltos del contenido pegado
@@ -227,6 +260,33 @@
     content: attr(data-placeholder);
     color: var(--mat-sys-on-surface-variant);
     pointer-events: none;
+  }
+
+  // Mismo aspecto que el mensaje publicado al escribir/pegar código y viñetas.
+  :where(pre) {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    background: rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 6px 0;
+    font-size: 12px;
+  }
+  :where(code) {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 4px;
+    padding: 1px 4px;
+    font-size: 0.92em;
+  }
+  :where(pre code) {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+  }
+  :where(ul, ol) {
+    margin: 4px 0;
+    padding-left: 22px;
   }
 }
 

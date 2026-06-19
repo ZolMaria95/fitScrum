@@ -14,10 +14,13 @@
   <button mat-icon-button type="button" matTooltip="Subrayado" (mousedown)="$event.preventDefault()" (click)="format('underline')">
     <mat-icon>format_underlined</mat-icon>
   </button>
+  <button mat-icon-button type="button" matTooltip="Bloque de código" (mousedown)="$event.preventDefault()" (click)="codeBlock()">
+    <mat-icon>code</mat-icon>
+  </button>
 </div>
 
 <mat-dialog-content class="compose-content">
-  <div #editor class="compose-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Mensaje"></div>
+  <div #editor class="compose-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Mensaje" (paste)="onPaste($event)"></div>
 </mat-dialog-content>
 
 <div mat-dialog-actions align="end">

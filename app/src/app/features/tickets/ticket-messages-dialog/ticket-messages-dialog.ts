@@ -12,7 +12,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { HelpdeskService } from '../../../core/services/helpdesk.service';
 import { ComposeDialog } from '../compose-dialog/compose-dialog';
 import { EMPLEADOS } from '../helpdesk.constants';
-import { Ticket, mapTicket, safeHtml, stripHtml } from '../ticket-utils';
+import { Ticket, clipboardToHtml, insertCodeBlock, mapTicket, safeHtml, stripHtml } from '../ticket-utils';
 import { estadoStyle } from '../tickets-card-utils';
 
 interface ConvMsg {
@@ -215,6 +215,24 @@ export class TicketMessagesDialog {
   format(cmd: 'bold' | 'italic' | 'underline'): void {
     this.composerInput().nativeElement.focus();
     document.execCommand(cmd, false);
+  }
+
+  /** Marca la selección como bloque de código (monoespaciado, conserva sangría). */
+  codeBlock(): void {
+    insertCodeBlock(this.composerInput().nativeElement);
+  }
+
+  /**
+   * Al pegar, inserta HTML saneado (conserva formato, descarta el ruido que el
+   * backend tiraba y publicaba el mensaje vacío). Sin esto se pegaba el HTML
+   * crudo del portapapeles.
+   */
+  onPaste(e: ClipboardEvent): void {
+    const data = e.clipboardData;
+    if (!data) return;
+    e.preventDefault();
+    const limpio = clipboardToHtml(data.getData('text/html'), data.getData('text/plain'));
+    document.execCommand('insertHTML', false, limpio);
   }
 
   /** Abre el editor en un pop-up amplio con el contenido actual y lo devuelve al cerrar. */

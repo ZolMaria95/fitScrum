@@ -3,6 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { clipboardToHtml, insertCodeBlock } from '../ticket-utils';
 
 export interface ComposeData {
   /** HTML inicial a editar (borrador previo). */
@@ -50,6 +51,20 @@ export class ComposeDialog {
   format(cmd: 'bold' | 'italic' | 'underline'): void {
     this.editor().nativeElement.focus();
     document.execCommand(cmd, false);
+  }
+
+  /** Marca la selección como bloque de código (monoespaciado, conserva sangría). */
+  codeBlock(): void {
+    insertCodeBlock(this.editor().nativeElement);
+  }
+
+  /** Al pegar, inserta HTML saneado (conserva formato, descarta ruido del portapapeles). */
+  onPaste(e: ClipboardEvent): void {
+    const data = e.clipboardData;
+    if (!data) return;
+    e.preventDefault();
+    const limpio = clipboardToHtml(data.getData('text/html'), data.getData('text/plain'));
+    document.execCommand('insertHTML', false, limpio);
   }
 
   done(): void {

@@ -1,4 +1,4 @@
-import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParameterCodec, HttpParams } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -14,6 +14,21 @@ import {
 
 const HD_USERS_LS_KEY = 'fit-daily_hd_users';
 const HD_ROLES_LS_KEY = 'fit-daily_hd_roles';
+
+/**
+ * Codec de form-urlencoded que percent-codifica TODO el valor. El codec por
+ * defecto de Angular deja crudos `; = + : / , ? $ @`: si el `detail` del mensaje
+ * lleva HTML/CSS (p. ej. `color: red; font-weight: bold;`), esos `;` y `=` el
+ * API los lee como separadores de parámetros y parte el mensaje (se publicaba
+ * vacío o solo la primera palabra). Con encodeURIComponent el valor viaja íntegro.
+ */
+class FullEncodingCodec implements HttpParameterCodec {
+  encodeKey(k: string): string { return encodeURIComponent(k); }
+  encodeValue(v: string): string { return encodeURIComponent(v); }
+  decodeKey(k: string): string { return decodeURIComponent(k); }
+  decodeValue(v: string): string { return decodeURIComponent(v); }
+}
+const FORM_CODEC = new FullEncodingCodec();
 
 // Seed de empleados conocidos del Helpdesk. Solo es el fallback offline: la
 // fuente real es la consulta al catálogo de usuarios del API (/users/catalog).
@@ -384,28 +399,26 @@ export class HelpdeskService {
     }
   }
 
-  private async uploadAttachment(file: File): Promise<string> {
-    const fd = new FormData();
-    fd.append('file', file);
-    const data = await firstValueFrom(
-      this.http.post<any>(`${this.base}/attachments`, fd, { context: new HttpContext().set(HD_SAFE, true) }),
-    );
-    return data.id || data.attach_id || data.attachment_id;
-  }
-
-  /** Envía un mensaje al ticket (sube adjuntos primero). Devuelve true si ok.
-   *  Form-urlencoded (igual que el resto de escrituras del API). */
+  /**
+   * Envía un mensaje al ticket. Devuelve true si ok.
+   * - Con adjuntos: un único POST **multipart** (igual que el Helpdesk original):
+   *   `detail` + cada archivo en el campo `attachments`. El backend almacena el
+   *   adjunto y devuelve el mensaje con `attach_ids`. (NO hay upload por separado.)
+   * - Solo texto: form-urlencoded con FORM_CODEC (escapa todo, ver arriba).
+   */
   async sendMessage(ticketId: string, detail: string, files: File[] = []): Promise<boolean> {
+    const url = `${this.base}/tickets/${ticketId}/messages`;
+    const context = new HttpContext().set(HD_SAFE, true);
     try {
-      const attach_ids: string[] = [];
-      for (const f of files) attach_ids.push(await this.uploadAttachment(f));
-      let body = new HttpParams().set('detail', detail);
-      for (const id of attach_ids) body = body.append('attach_ids', id);
-      await firstValueFrom(
-        this.http.post(`${this.base}/tickets/${ticketId}/messages`, body, {
-          context: new HttpContext().set(HD_SAFE, true),
-        }),
-      );
+      if (files.length) {
+        const fd = new FormData();
+        fd.append('detail', detail);
+        for (const f of files) fd.append('attachments', f);
+        await firstValueFrom(this.http.post(url, fd, { context }));
+      } else {
+        const body = new HttpParams({ encoder: FORM_CODEC }).set('detail', detail);
+        await firstValueFrom(this.http.post(url, body, { context }));
+      }
       return true;
     } catch {
       return false;
