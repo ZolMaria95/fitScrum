@@ -65,7 +65,12 @@
 </mat-dialog-content>
 
 @if (!sessionExpired()) {
-<div class="composer">
+<div class="composer" [class.drag-over]="dragOver()"
+     (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)">
+  <div class="composer-drop-hint">
+    <mat-icon>upload_file</mat-icon>
+    <span>Suelta los archivos para adjuntarlos</span>
+  </div>
   <div class="composer-toolbar">
     <button mat-icon-button matTooltip="Negrita" (mousedown)="$event.preventDefault()" (click)="format('bold')" [disabled]="sending()">
       <mat-icon>format_bold</mat-icon>
@@ -93,7 +98,16 @@
       <input type="file" multiple hidden (change)="onFiles($event)" />
     </label>
     @if (composerFiles.length) {
-      <span class="files">{{ composerFiles.length }} archivo(s)</span>
+      <div class="files">
+        @for (f of composerFiles; track $index) {
+          <span class="file-chip">
+            <mat-icon>insert_drive_file</mat-icon>
+            <span class="file-name">{{ f.name }}</span>
+            <button type="button" class="file-remove" aria-label="Quitar adjunto"
+                    (click)="removeFile(f)" [disabled]="sending()">✕</button>
+          </span>
+        }
+      </div>
     }
     <span class="spacer"></span>
     <span class="send-status">{{ sendStatus() }}</span>

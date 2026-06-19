@@ -76,6 +76,8 @@ export class TicketMessagesDialog {
   composerFiles: File[] = [];
   readonly sending = signal(false);
   readonly sendStatus = signal('');
+  // Resaltado del área de mensaje mientras se arrastran archivos encima.
+  readonly dragOver = signal(false);
 
   constructor() {
     this.load();
@@ -209,6 +211,41 @@ export class TicketMessagesDialog {
   onFiles(e: Event): void {
     const input = e.target as HTMLInputElement;
     this.composerFiles = input.files ? [...input.files] : [];
+  }
+
+  /** Quita un adjunto de la lista (botón ✕ junto al archivo). */
+  removeFile(file: File): void {
+    this.composerFiles = this.composerFiles.filter((f) => f !== file);
+  }
+
+  // ── Arrastrar y soltar archivos sobre el área de mensaje ──
+  // Solo intercepta cuando lo arrastrado son archivos; el texto arrastrado
+  // sigue su curso normal hacia el editor.
+  private hasFiles(e: DragEvent): boolean {
+    return !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  }
+
+  onDragOver(e: DragEvent): void {
+    if (this.sending() || !this.hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = 'copy';
+    this.dragOver.set(true);
+  }
+
+  onDragLeave(e: DragEvent): void {
+    // Ignora el "leave" hacia un hijo del propio contenedor (evita parpadeo).
+    const to = e.relatedTarget as Node | null;
+    if (to && e.currentTarget instanceof Node && e.currentTarget.contains(to)) return;
+    this.dragOver.set(false);
+  }
+
+  onDrop(e: DragEvent): void {
+    if (!this.hasFiles(e)) return;
+    e.preventDefault();
+    this.dragOver.set(false);
+    if (this.sending()) return;
+    const dropped = e.dataTransfer?.files ? [...e.dataTransfer.files] : [];
+    if (dropped.length) this.composerFiles = [...this.composerFiles, ...dropped];
   }
 
   /** Aplica negrita/cursiva/subrayado a la selección del editor inline. */
