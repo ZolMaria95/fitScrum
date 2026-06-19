@@ -54,6 +54,29 @@ function escapeText(s: string): string {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/**
+ * Conserva la sangría sobre texto YA escapado: tabs y secuencias de 2+ espacios
+ * pasan a `&nbsp;` para que no se colapsen al mostrar el mensaje (`.conv-text`
+ * usa white-space normal). Un espacio suelto se deja normal para no romper el wrap.
+ */
+function preserveSpaces(escaped: string): string {
+  return escaped
+    .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+    .replace(/ {2,}/g, (m) => '&nbsp;'.repeat(m.length));
+}
+
+/**
+ * Markdown en línea sobre texto YA escapado: `` `código` ``, `**negrita**` y
+ * `*cursiva*`. La cursiva exige que el `*` toque texto (no espacio) para no
+ * confundir multiplicaciones (`3 * 4`).
+ */
+function inlineMarkdown(escaped: string): string {
+  return escaped
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^\n*]+)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[\s(>])\*(?!\s)([^\n*]+?)(?<!\s)\*/g, '$1<i>$2</i>');
+}
+
 // Estilos inline que conservamos al pegar (formato visible, sin layout).
 const STYLE_KEEP = ['color', 'background-color', 'font-size', 'font-family'];
 
@@ -82,12 +105,18 @@ export function insertCodeBlock(el: HTMLElement): void {
 
 /**
  * Convierte el contenido del portapapeles en HTML limpio listo para enviar.
- * Si hay `text/html`, lo reduce a un subconjunto seguro; si no, escapa el
- * texto plano y conserva los saltos de línea.
+ * - Si el texto plano trae markdown (`**negrita**`, `` `código` ``), se usa la
+ *   ruta de texto plano: respeta los párrafos (`\n\n` → línea en blanco) e
+ *   interpreta el markdown. El `text/html` de fuentes de markdown mete los
+ *   párrafos en bloques que pierden la línea en blanco, por eso se prefiere el plano.
+ * - Si hay `text/html` (formato real: colores, fuentes), se reduce a seguro.
+ * - Si no, texto plano con markdown/sangría y saltos a `<br>`.
  */
 export function clipboardToHtml(html: string, plain: string): string {
-  if (html && html.trim()) return sanitizePastedHtml(html);
-  return escapeText(plain).replace(/\r?\n/g, '<br>');
+  const looksMarkdown = /\*\*[^\n*]+\*\*|`[^`\n]+`/.test(plain);
+  if (html && html.trim() && !looksMarkdown) return sanitizePastedHtml(html);
+  const escaped = preserveSpaces(escapeText(plain));
+  return inlineMarkdown(escaped).replace(/\r?\n/g, '<br>');
 }
 
 /**
@@ -102,11 +131,25 @@ export function sanitizePastedHtml(html: string): string {
   return serializePasted(doc.body).replace(/(<br>\s*)+$/, '').trim();
 }
 
-function serializePasted(node: Node): string {
+/**
+ * @param preWs  el contenedor preserva los espacios (white-space: pre*); entonces
+ *               los saltos pasan a `<br>` y la sangría a `&nbsp;`. Si no, el texto
+ *               se colapsa como hace el navegador (y los bloques añaden el salto).
+ * @param inCode dentro de `<code>`: texto verbatim, sin markdown ni saltos.
+ */
+function serializePasted(node: Node, preWs = false, inCode = false): string {
   let out = '';
   node.childNodes.forEach((child) => {
     if (child.nodeType === Node.TEXT_NODE) {
-      out += escapeText(child.textContent || '');
+      const raw = child.textContent || '';
+      if (inCode) {
+        out += escapeText(raw);
+      } else if (preWs) {
+        out += inlineMarkdown(preserveSpaces(escapeText(raw))).replace(/\r?\n/g, '<br>');
+      } else {
+        // Flujo normal: los saltos/espacios del fuente HTML se colapsan a uno.
+        out += inlineMarkdown(escapeText(raw.replace(/\s+/g, ' ')));
+      }
       return;
     }
     if (child.nodeType !== Node.ELEMENT_NODE) return;
@@ -124,7 +167,9 @@ function serializePasted(node: Node): string {
       return;
     }
 
-    let frag = serializePasted(el);
+    const style = (el.getAttribute('style') || '').toLowerCase();
+    const childPreWs = preWs || /white-space:\s*pre/.test(style);
+    let frag = serializePasted(el, childPreWs, inCode || tag === 'code');
 
     // Estructura que se conserva como tal: viñetas/numeración y código en línea.
     if (tag === 'ul' || tag === 'ol') {
@@ -140,7 +185,6 @@ function serializePasted(node: Node): string {
       return;
     }
 
-    const style = (el.getAttribute('style') || '').toLowerCase();
     const peso = /font-weight:\s*(bold(?:er)?|\d+)/.exec(style)?.[1];
     // Los encabezados (markdown `## …`) se ven en negrita pero llegan como <h1>–<h6>.
     const bold =
