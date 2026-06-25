@@ -83,6 +83,7 @@ export class Tickets implements OnDestroy {
   readonly filterEstatus = signal(''); // nombre de estado (server-side); '' = todos
   readonly filterTicket = signal('');
   readonly remoteResult = signal<Ticket | null>(null);
+  readonly searching = signal(false); // buscando un ticket por número en el API
   // Orden server-side: el API ordena por `<campo>_order=asc|desc`.
   readonly sortField = signal('modified_date');
   readonly sortDir = signal<'asc' | 'desc'>('desc');
@@ -136,14 +137,19 @@ export class Tickets implements OnDestroy {
   // Cliente/Estatus/Asignado ya vienen filtrados del API. Aquí solo el refinamiento
   // derivado de Pendientes (operativos), que la API no expresa como parámetro.
   private readonly base = computed<Ticket[]>(() => {
-    if (this.remoteResult()) return [this.remoteResult()!];
-    if (this.filterTicket()) return this.tickets();
+    // Búsqueda por número: SIEMPRE server-side (lookup exacto). Mientras se busca
+    // o si no se encontró, la lista va vacía; nunca se filtra en memoria.
+    if (this.filterTicket()) return this.remoteResult() ? [this.remoteResult()!] : [];
     if (this.tab() === 'pendientes') return this.operativos();
     return this.tickets(); // asignados (server-side) / generales
   });
 
-  /** Total server-side de la consulta actual (denominador de "X de Y"). */
-  readonly tabTotal = computed(() => this.hd.total());
+  /** Total server-side de la consulta actual (denominador de "X de Y"). En búsqueda
+   *  por número el universo es ese único resultado (1 si se encontró, 0 si no), no el
+   *  total del listado: así la paginación es 1 sola página y no marca "más resultados". */
+  readonly tabTotal = computed(() =>
+    this.filterTicket() ? (this.remoteResult() ? 1 : 0) : this.hd.total(),
+  );
   /** ¿Hay datos cargados? (para el estado vacío). */
   readonly tabHasData = computed(() => this.tickets().length > 0);
 
@@ -169,12 +175,9 @@ export class Tickets implements OnDestroy {
   });
   readonly optEstatusF = computed(() => this.fOpt(this.optEstatus(), this.buscarEstatus()));
 
-  readonly rows = computed<Ticket[]>(() => {
-    let base = this.base();
-    const tic = this.filterTicket();
-    if (tic && !this.remoteResult()) base = base.filter((t) => String(t.ticket).includes(tic));
-    return base; // el orden lo aplica el API (sortField/sortDir) en la consulta
-  });
+  // El orden lo aplica el API (sortField/sortDir) y la búsqueda por número va
+  // server-side vía base(): aquí no se filtra nada en memoria.
+  readonly rows = computed<Ticket[]>(() => this.base());
 
   readonly hasFilters = computed(
     () => !!(this.filterClientes().length || this.filterEstatus() || this.filterTicket() || this.remoteResult()),
@@ -185,11 +188,12 @@ export class Tickets implements OnDestroy {
   // usa el `total` del API; en Pendientes la página puede mostrar menos por el
   // refinamiento de operativos.
   readonly pagedRows = computed<Ticket[]>(() => this.rows());
-  readonly paginatorLength = computed(() => this.hd.total());
-  /** Total de páginas según el `total` del API (para "Página X de Y"). */
-  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.hd.total() / this.pageSize())));
-  /** ¿Hay más páginas después de la actual? (indicador de "siguiente"). */
-  readonly hayMasPaginas = computed(() => this.pageIndex() + 1 < this.totalPages());
+  // Paginación basada en tabTotal: en búsqueda por número es 1 sola página.
+  readonly paginatorLength = computed(() => this.tabTotal());
+  /** Total de páginas (para "Página X de Y"). */
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.tabTotal() / this.pageSize())));
+  /** ¿Hay más páginas después de la actual? En búsqueda por número nunca hay más. */
+  readonly hayMasPaginas = computed(() => !this.filterTicket() && this.pageIndex() + 1 < this.totalPages());
 
   readonly stats = computed(() => {
     const all = this.operativos();
@@ -299,10 +303,12 @@ export class Tickets implements OnDestroy {
   }
 
   async clearFilters(): Promise<void> {
+    clearTimeout(this.searchTimer);
     this.filterClientes.set([]);
     this.filterEstatus.set('');
     this.filterTicket.set('');
     this.remoteResult.set(null);
+    this.searching.set(false);
     this.buscarCliente.set('');
     this.buscarEstatus.set('');
     this.pageIndex.set(0);
@@ -313,15 +319,18 @@ export class Tickets implements OnDestroy {
     const v = value.trim();
     this.filterTicket.set(v);
     this.remoteResult.set(null);
+    this.searching.set(false);
     this.pageIndex.set(0);
     clearTimeout(this.searchTimer);
     if (!v || !/^\d+$/.test(v)) return;
+    // SIEMPRE consulta al API (lookup exacto por número); nunca filtra en memoria.
+    this.searching.set(true);
     this.searchTimer = setTimeout(async () => {
-      // Ya está en el pool en memoria → no consultar al API.
-      if (this.tickets().some((t) => String(t.ticket).includes(v))) return;
       const t = await this.hd.searchTicketRemote(v);
-      if (t) this.remoteResult.set(t);
-    }, 450);
+      if (this.filterTicket() !== v) return; // respuesta vieja: el usuario siguió escribiendo
+      this.remoteResult.set(t);
+      this.searching.set(false);
+    }, 400);
   }
 
   // ── Crear tarea desde el ticket (mismo modal del board) ──

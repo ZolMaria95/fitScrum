@@ -3,6 +3,9 @@
   // en el medio. Evita que un mensaje largo empuje el botón Enviar fuera de pantalla.
   display: flex;
   flex-direction: column;
+  // Piso de altura para que el área de lectura sea cómoda aun con pocos mensajes
+  // (se acota a la pantalla en viewports cortos). El techo es 88vh.
+  min-height: min(520px, 88vh);
   max-height: 88vh;
   overflow: hidden;
 }
@@ -49,19 +52,37 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 0 24px 8px;
+  padding: 0 24px 6px;
 
   .ticket-attach-label {
     font-size: 12px;
     font-weight: 600;
     color: var(--mat-sys-on-surface-variant);
   }
+
+  // Botón de descarga compacto: roba menos alto y deja más para la lectura.
+  .mat-mdc-outlined-button {
+    --mdc-outlined-button-container-height: 30px;
+    min-height: 30px;
+    line-height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
+
+    mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      margin-right: 4px;
+    }
+  }
 }
 
 .conv-body {
-  // Único elemento que crece/encoge y scrollea (min-height: 0 permite el scroll).
+  // Único elemento que crece/encoge y scrollea. min-height: 0 permite que encoja
+  // por debajo de su contenido (y por tanto scrollee) en pantallas cortas, en vez
+  // de empujar el composer fuera del diálogo y cortarlo.
   flex: 1 1 auto;
-  min-height: 140px;
+  min-height: 0;
   max-height: none;
   background: #f4f6f9;
   padding: 12px;
@@ -114,7 +135,7 @@
 
   .conv-user {
     font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: inherit; // nombre completo del usuario: se lee mejor en fuente normal
   }
   .conv-date {
     color: var(--mat-sys-on-surface-variant);
@@ -215,7 +236,16 @@
 // ── Composer ── (fijo al pie del diálogo, siempre visible)
 .composer {
   position: relative;
-  flex: 0 0 auto;
+  // Flex column que puede encoger, pero NO por debajo de su contenido (barra +
+  // texto mínimo + fila Enviar): por eso NO lleva `min-height: 0` — con él, el
+  // reparto de flex lo encogía bajo su contenido y la fila de Enviar se recortaba
+  // contra el borde del diálogo. La conversación (`.conv-body`, con `min-height: 0`)
+  // es la que absorbe la falta de espacio y scrollea. El tope 55vh evita que un
+  // mensaje largo acapare toda la altura (el área de texto scrollea dentro).
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  max-height: 55vh;
   border-top: 1px solid var(--mat-sys-outline-variant);
   padding: 6px 24px 16px;
 
@@ -254,6 +284,7 @@
 }
 
 .composer-toolbar {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -268,10 +299,11 @@
 // colores, etc.). Burbuja redondeada como el chat input del Helpdesk; arranca
 // compacta (44px) y CRECE con el texto para escribir cómodo, con scroll al tope.
 .composer-input {
+  flex: 0 1 auto; // dentro del composer flex: encoge y scrollea cuando falta espacio
   width: 100%;
   box-sizing: border-box;
   min-height: 44px;
-  max-height: 45vh; // crece bastante antes de hacer scroll (escribir cómodo)
+  max-height: none; // el alto efectivo lo limita el composer (55vh); aquí solo scroll
   overflow-y: auto;
   font: inherit;
   font-size: 14px;
@@ -325,6 +357,7 @@
 }
 
 .composer-actions {
+  flex: 0 0 auto; // Enviar/adjuntos siempre visibles al pie del composer
   display: flex;
   align-items: center;
   gap: 10px;

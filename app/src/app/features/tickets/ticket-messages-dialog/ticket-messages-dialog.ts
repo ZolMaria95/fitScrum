@@ -179,7 +179,8 @@ export class TicketMessagesDialog {
     if (!texto && !html.includes('<img') && !adjuntos.length) return null;
     if (html.includes('<img')) html = await this.hidratarImgs(html);
     return {
-      autor: esSys ? 'Sistema' : m.entry_user_id || '—',
+      // Nombre completo para identificar fácil; el código (entry_user_id) es el fallback.
+      autor: esSys ? 'Sistema' : m.entry_user_name || m.entry_user_id || '—',
       tipo: esSys ? 'sys' : this.esEmpleado(m) ? 'emp' : 'cli',
       fecha: m.entry_date ? String(m.entry_date).replace('T', ' ').slice(0, 16) : '',
       html: texto || html.includes('<img') ? this.sanitizer.bypassSecurityTrustHtml(html) : null,

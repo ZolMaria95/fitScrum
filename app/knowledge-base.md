@@ -44,7 +44,9 @@ app/src/app/
 └─ features/
    ├─ board/         # ✅ Kanban + sprints + dialogs
    ├─ tickets/       # ✅ grid de cards Helpdesk + conversación + asignación + estados
-   │  └─ ticket-card/  # card presentacional (header/cuerpo/pie + menú ⋮)
+   │  ├─ ticket-card/   # card presentacional (header/cuerpo/pie + menú ⋮)
+   │  ├─ ticket-messages-dialog/  # conversación + composer con formato
+   │  └─ compose-dialog/  # editor de respuesta con formato en pop-up (B/I/U + pegado)
    └─ burndown, progreso, consultas, semanal, mi-panel, pendientes, login
 ```
 
@@ -87,6 +89,11 @@ Login `POST /auth/login` → guarda `access_token` + `refresh_token` → `GET /u
 Permisos: `esMSC001`, `esSupervisor`, `puedeVerMiPanel`, `puedeBorrarBoard`, `puedeGestionarTodo`.
 - **`refreshSession()`**: `POST /auth/refresh` con el `refresh_token` → nuevo `access_token` (rota el
   refresh si el API manda uno). **Dedup**: varios 401 concurrentes comparten un solo refresh.
+- **Refresh proactivo** (`scheduleProactiveRefresh`): lee el `exp` del JWT y programa el refresh ~60 s
+  antes de vencer (o a mitad de vida si el token es corto), reprogramando tras cada refresh con el token
+  rotado → la sesión **no se pierde mientras se usa la app** (p. ej. escribiendo un mensaje). Al volver el
+  foco a la pestaña (`visibilitychange`) refresca si está por vencer (cubre el timer congelado en 2º plano).
+  El 401 reactivo del interceptor queda como red de seguridad.
 - `verifySession()`: valida contra `GET /users/me`; en 401 intenta `refreshSession()` antes de rendirse;
   si falla (o 403) limpia la sesión.
 
@@ -117,14 +124,21 @@ Todas las llamadas usan el contexto **`HD_SAFE`** (no desloguea en 401/403).
 - ⚠️ El API solo acepta filtros server-side por **un** estado / **un** asignado, y `client_id` como
   lista por comas. "No finalizado" (excluir aprobados/cerrados) no se puede expresar → la tab
   Pendientes lo refina en el cliente (puede dejar páginas con <12).
+- **Búsqueda por número (`searchTicketRemote`)**: SIEMPRE server-side, **lookup exacto**
+  `GET /tickets/tickets/:id` (con el número completo; no substring ni filtrado en memoria). Mientras el
+  filtro de número está activo, la vista muestra ese único ticket (o "no encontrado") y la paginación es
+  **1 sola página** (`tabTotal` = 1/0, sin "más resultados").
 
 **Escrituras (form-urlencoded):**
 - `assignTicket(id, userId)` → `PUT /tickets/tickets/:id` con `assigned_user_id`.
 - `setTicketStatus(id, nombre)` → `PUT /tickets/tickets/:id` con `ticket_status_id` (traduce el
   nombre a código vía el catálogo). El estado se escribe **por código, no por texto**. Nunca permite
   cambiar a **ABIERTO**.
-- `sendMessage(id, detail, files)` → sube adjuntos (`POST /attachments` multipart) y
-  `POST /tickets/:id/messages` con `detail` (+ `attach_ids`).
+- `sendMessage(id, detail, files)` → **un solo `POST /tickets/:id/messages`** (NO hay upload separado a
+  `/attachments`): con adjuntos va **multipart** (`detail` + cada archivo en el campo **`attachments`**,
+  igual que el Helpdesk original; el API responde con `attach_ids`); solo texto va **form-urlencoded** con
+  **`FullEncodingCodec`** (percent-codifica TODO el valor — el codec por defecto de Angular deja crudos
+  `;`/`=`, y esos del HTML/CSS pegado partían el `detail` upstream → el mensaje se publicaba vacío o a medias).
 
 Modelo `Ticket` y funciones puras (`mapTicket`, `evaluarFechas`, `clasificar`, `applyMessages`,
 `safeHtml`) en [features/tickets/ticket-utils.ts](src/app/features/tickets/ticket-utils.ts);
@@ -190,7 +204,7 @@ badge, avatar = **código de usuario** (igual que los filtros).
 - **`sprint-dialog/`** — crear/editar/borrar sprint.
 - **`confirm-dialog/`** — confirmación reutilizable (variante "escribí BORRAR").
 
-**Funciona:** drag&drop (CDK) con permisos + WIP, filtros (prioridad/asignado/cliente/**N° ticket**), progreso,
+**Funciona:** drag&drop (CDK) con permisos, filtros (prioridad/asignado/cliente/**N° ticket**), progreso,
 certificar, esperando cliente, borrar card / Borrar Board. **Regla:** una tarea que salió de To Do
 **no puede volver** (drag y modal). Las done-finalizadas **salen del board a los 2 días**.
 **Permiso `puedeOperar(card)`** (mover la tarea por drag + marcar sus checks): el **asignado**, el
@@ -199,8 +213,10 @@ o marcar un check, sale una **advertencia** (`avisoSinPermiso`) y no se aplica (
 desmarca). No se bloquea/deshabilita el control: se deja intentar para poder avisar.
 
 **Todo cambio de columna pide confirmación** (`ConfirmDialog`): por **drag** (`To Do→In Progress` usa
-`canStartWork` con WIP+permisos; el resto un confirm "Mover tarea") y por el **check "Certificado"**
-(`onCert`, mueve a Finalizado; si se cancela, se desmarca el checkbox con `ev.source.checked = false`).
+`canStartWork`: solo permisos —técnico asignado / Helpdesk— + confirmación de inicio; el resto un confirm
+"Mover tarea") y por el **check "Certificado"** (`onCert`, mueve a Finalizado; si se cancela, se desmarca el
+checkbox con `ev.source.checked = false`). ⚠️ **Sin límite WIP:** un técnico puede tener N tareas en progreso
+(el tope de 2 se quitó).
 
 **Filtros "Asignado a" y "Cliente"** (mismo patrón): `mat-select` **multiple** poblado con los valores
 **presentes en las tareas del board** —empleados por **nombre completo** (`assigneeChips`) y clientes por
@@ -290,10 +306,25 @@ y filtros **Cliente** (multi-selección), **Estatus** y **Ordenar por**, + búsq
   **Crear tarea** → `CardDetailDialog` precargado; **Nota/acción/pendiente** → `DataService` (local).
 - **Conversación** (`ticket-messages-dialog/`): mensajes clasificados (empleado/cliente/sistema),
   adjuntos por mensaje, **imágenes embebidas hidratadas con auth** + **lightbox** (popup, no pestaña),
-  adjunto a nivel ticket, y **composer** para responder (texto + adjuntos). Reutilizado por el board.
+  adjunto a nivel ticket, y **composer con formato** para responder (+ adjuntos). Reutilizado por el board.
   Los mensajes se **paginan** (bloque de 15 más recientes + **"Ver mensajes anteriores"**): solo se
   procesa/hidrata el bloque visible, no todos de golpe. **Al abrir verifica la sesión** (`verifySession`):
   si expiró, muestra un estado **"Iniciar sesión"** (→ login) en vez de cargar vacío.
+  - **Composer con formato (`contenteditable`):** escribir o dar formato con la toolbar
+    **negrita/cursiva/subrayado** (`document.execCommand`) + botón **`</>`** (bloque de código,
+    `insertCodeBlock`) viaja como **HTML**. **Pegado saneado** (`clipboardToHtml`/`sanitizePastedHtml` en
+    `ticket-utils`, handler `(paste)`): conserva negrita/cursiva/subrayado, color/fondo/fuente, enlaces,
+    encabezados (`h1-h6`→negrita), **viñetas** (`ul/ol/li`) y **código** (`pre/code`); descarta el ruido
+    (`<style>`/`<meta>`/clases/scripts) que el backend tiraba (publicaba vacío). **Markdown en texto plano**:
+    `**negrita**`, `*cursiva*`, `` `código` ``; si el texto plano trae markdown se usa la ruta de texto plano
+    (respeta `\n\n` como párrafos y la sangría con `&nbsp;`), porque el `text/html` de esas fuentes mete los
+    párrafos en bloques y los pega. **Arrastrar y soltar** archivos sobre el área de mensaje los adjunta
+    (chips con ✕). El autor del mensaje se muestra con el **nombre completo** (`entry_user_name`, fallback al
+    código `entry_user_id`). Botón **⤢ ampliar** → `compose-dialog/` (mismo editor con pegado/`</>` en pop-up).
+  - **Layout del diálogo (flex column):** piso de altura `min(520px, 88vh)` (lectura cómoda con pocos
+    mensajes) y techo 88vh; la conversación (`.conv-body`, **`min-height: 0`**) crece/encoge y scrollea; el
+    **composer es flex y puede encoger** (tope 55vh): el área de texto scrollea dentro y la **fila de Enviar
+    queda fija abajo, siempre visible** (antes un mensaje largo la empujaba fuera de pantalla y la cortaba).
 
 ---
 

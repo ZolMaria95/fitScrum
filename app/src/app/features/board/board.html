@@ -54,6 +54,12 @@
     <mat-icon>person</mat-icon> Asignados a mí
   </button>
 
+  <mat-form-field appearance="outline" class="ticket-search" subscriptSizing="dynamic">
+    <mat-label>N° ticket</mat-label>
+    <input matInput [value]="ticketSearch()" (input)="ticketSearch.set($any($event.target).value)" inputmode="numeric" placeholder="Buscar ticket…" />
+    <mat-icon matSuffix>search</mat-icon>
+  </mat-form-field>
+
   @if (assigneeChips().length) {
     <div class="assignee-filter">
       <span class="filter-label">Asignado a:</span>
@@ -128,12 +134,6 @@
       }
     </div>
   }
-
-  <mat-form-field appearance="outline" class="ticket-search" subscriptSizing="dynamic">
-    <mat-label>N° ticket</mat-label>
-    <input matInput [value]="ticketSearch()" (input)="ticketSearch.set($any($event.target).value)" inputmode="numeric" placeholder="Buscar ticket…" />
-    <mat-icon matSuffix>search</mat-icon>
-  </mat-form-field>
 
   <span class="spacer"></span>
 

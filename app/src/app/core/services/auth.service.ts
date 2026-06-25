@@ -33,6 +33,58 @@ export class AuthService {
 
   get token(): string | null { return this._session()?.token ?? null; }
 
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor() {
+    // Mantiene la sesión viva sola: programa el refresh antes de que venza el
+    // access_token (no hace falta dispararlo en cada acción).
+    if (this._session()) this.scheduleProactiveRefresh();
+    // Si el navegador suspendió el timer con la pestaña en 2º plano, al volver
+    // al foco re-evaluamos (refresca ya si está por vencer).
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this.ensureFreshSoon();
+      });
+    }
+  }
+
+  /** `exp` (epoch en segundos) del JWT, o null si no se puede leer. */
+  private jwtExp(token: string): number | null {
+    try {
+      const part = token.split('.')[1];
+      if (!part) return null;
+      const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+      const payload = JSON.parse(atob(padded));
+      return typeof payload.exp === 'number' ? payload.exp : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Programa el refresh antes de que venza el access_token: 60 s antes si el
+   * token es de larga vida, o a mitad del tiempo restante si es corto (evita un
+   * bucle de refrescos seguidos).
+   */
+  private scheduleProactiveRefresh(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
+    const exp = this.token ? this.jwtExp(this.token) : null;
+    if (!exp) return;
+    const remaining = exp * 1000 - Date.now();
+    const ms = remaining > 120_000 ? remaining - 60_000 : Math.max(remaining * 0.5, 3_000);
+    this.refreshTimer = setTimeout(() => this.refreshSession(), ms);
+  }
+
+  /** Tras volver al foco: refresca ya si falta <60 s para vencer; si no, reprograma. */
+  private ensureFreshSoon(): void {
+    const exp = this.token ? this.jwtExp(this.token) : null;
+    if (!exp) return;
+    if (exp * 1000 - Date.now() < 60_000) this.refreshSession();
+    else this.scheduleProactiveRefresh();
+  }
+
   private readSession(): Session | null {
     try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
     catch { return null; }
@@ -65,6 +117,7 @@ export class AuthService {
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     this._session.set(session);
+    this.scheduleProactiveRefresh();
     return session;
   }
 
@@ -80,6 +133,8 @@ export class AuthService {
 
   /** Limpia la sesión (lo usa el interceptor en 401/403). */
   clearSession(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
     localStorage.removeItem(SESSION_KEY);
     this._session.set(null);
   }
@@ -114,6 +169,7 @@ export class AuthService {
       const next: Session = { ...cur, token: access, refreshToken: data.refresh_token || rt };
       localStorage.setItem(SESSION_KEY, JSON.stringify(next));
       this._session.set(next);
+      this.scheduleProactiveRefresh(); // reprograma el siguiente refresh con el token nuevo
       return access;
     } catch {
       return null;

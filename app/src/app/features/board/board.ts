@@ -354,9 +354,10 @@ export class Board {
       this.avisoSinPermiso();
       return;
     }
-    // Regla: una tarea que ya salió de To Do no puede volver a To Do.
-    if (target === 'todo') {
-      this.snack.open('Una tarea que ya salió de To Do no puede volver.', 'OK', { duration: 3000 });
+    // Regla: una tarea CON ticket que ya salió de To Do no puede volver (su estado
+    // lo gobierna el ticket en el Helpdesk). Las tareas SIN ticket sí pueden volver.
+    if (target === 'todo' && task.ticket) {
+      this.snack.open('Una tarea con ticket no puede volver a To Do.', 'OK', { duration: 3000 });
       return;
     }
     if (task.status === 'todo' && target === 'in_progress') {

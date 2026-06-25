@@ -107,7 +107,9 @@
 } @else {
   @if (!rows().length) {
     <div class="hd-empty">
-      @if (loading()) { Cargando tickets… }
+      @if (searching()) { Buscando ticket #{{ filterTicket() }} en el sistema… }
+      @else if (filterTicket()) { No se encontró el ticket #{{ filterTicket() }}. }
+      @else if (loading()) { Cargando tickets… }
       @else if (tabHasData()) { Sin tickets que coincidan con el filtro. }
       @else { No hay tickets. Usa el botón <strong>↻</strong> para refrescar. }
     </div>
