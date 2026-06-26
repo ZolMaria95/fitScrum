@@ -85,25 +85,38 @@
   </div>
 
   @if (clientePendiente().length) {
-    <div class="mp-ticket-grid">
-      @for (t of clientePendiente(); track t.ticket) {
-        <app-ticket-card
-          [ticket]="t"
-          [statusOptions]="statusOptions()"
-          [nota]="noteOf(t)"
-          [esAccion]="isAction(t)"
-          [esPendiente]="isPending(t)"
-          [yaEnBoard]="ticketsEnBoard().has(t.ticket)"
-          [mostrarDias]="true"
-          (verConversacion)="openConversation(t)"
-          (crearTarea)="openTicketTask(t)"
-          (asignar)="openAssign(t)"
-          (cambiarEstado)="changeStatus(t, $event)"
-          (guardarNota)="onGuardarNota(t, $event)"
-          (toggleAccion)="toggleAction(t)"
-          (togglePendiente)="togglePending(t)" />
-      }
-    </div>
+    @for (g of clientePendientePorCliente(); track g.cliente) {
+      <div class="mp-cli-group">
+        <div class="mp-cli-group-head">
+          <span class="mp-cli-group-name">{{ g.cliente }}</span>
+          <span class="mp-cli-group-count">{{ g.tickets.length }}</span>
+          <button mat-stroked-button class="copy-btn" (click)="copiarTicketsGrupo(g.cliente, g.tickets)"
+                  matTooltip="Copiar los N° de ticket separados por coma para notificar al cliente">
+            <mat-icon>content_copy</mat-icon>
+            {{ copiadoGrupo() === g.cliente ? 'Copiado ✓' : 'Copiar N° tickets' }}
+          </button>
+        </div>
+        <div class="mp-ticket-grid">
+          @for (t of g.tickets; track t.ticket) {
+            <app-ticket-card
+              [ticket]="t"
+              [statusOptions]="statusOptions()"
+              [nota]="noteOf(t)"
+              [esAccion]="isAction(t)"
+              [esPendiente]="isPending(t)"
+              [yaEnBoard]="ticketsEnBoard().has(t.ticket)"
+              [mostrarDias]="true"
+              (verConversacion)="openConversation(t)"
+              (crearTarea)="openTicketTask(t)"
+              (asignar)="openAssign(t)"
+              (cambiarEstado)="changeStatus(t, $event)"
+              (guardarNota)="onGuardarNota(t, $event)"
+              (toggleAccion)="toggleAction(t)"
+              (togglePendiente)="togglePending(t)" />
+          }
+        </div>
+      </div>
+    }
   } @else {
     <div class="mp-empty">✓ Sin tickets pendientes de notificación al cliente.</div>
   }

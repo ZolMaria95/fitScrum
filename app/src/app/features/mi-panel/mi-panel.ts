@@ -86,6 +86,35 @@ export class MiPanel {
       .sort((a, b) => b.diasSinMovimiento - a.diasSinMovimiento),
   );
 
+  /** "Esperando cliente" agrupado por cliente, para notificar el conjunto a cada uno. */
+  readonly clientePendientePorCliente = computed(() => {
+    const grupos = new Map<string, Ticket[]>();
+    for (const t of this.clientePendiente()) {
+      const key = t.clienteRaw || '—';
+      const arr = grupos.get(key);
+      if (arr) arr.push(t);
+      else grupos.set(key, [t]);
+    }
+    return [...grupos.entries()]
+      .map(([cliente, tickets]) => ({ cliente, tickets }))
+      .sort((a, b) => a.cliente.localeCompare(b.cliente));
+  });
+
+  /** Cliente cuyo grupo se acaba de copiar (feedback "Copiado ✓"). */
+  readonly copiadoGrupo = signal<string | null>(null);
+
+  /** Copia los N° de ticket del grupo separados por coma (para notificar al cliente). */
+  copiarTicketsGrupo(cliente: string, tickets: Ticket[]): void {
+    const nums = tickets.map((t) => t.ticket).join(', ');
+    navigator.clipboard
+      ?.writeText(nums)
+      .then(() => {
+        this.copiadoGrupo.set(cliente);
+        setTimeout(() => { if (this.copiadoGrupo() === cliente) this.copiadoGrupo.set(null); }, 2000);
+      })
+      .catch(() => this.snack.open('No se pudo copiar.', 'OK', { duration: 3000 }));
+  }
+
   // ── Acciones de la card (mismas que la vista Tickets) ──
   isAction(t: Ticket): boolean { return !!this.actions()[t.ticket]; }
   isPending(t: Ticket): boolean { return !!this.pendientes()[t.ticket]; }
