@@ -89,8 +89,8 @@ Login `POST /auth/login` → guarda `access_token` + `refresh_token` → `GET /u
 Permisos: `esMSC001`, `esSupervisor`, `puedeVerMiPanel`, `puedeBorrarBoard`, `puedeGestionarTodo`.
 - **`refreshSession()`**: `POST /auth/refresh` con el `refresh_token` → nuevo `access_token` (rota el
   refresh si el API manda uno). **Dedup**: varios 401 concurrentes comparten un solo refresh.
-- **Refresh proactivo** (`scheduleProactiveRefresh`): lee el `exp` del JWT y programa el refresh ~60 s
-  antes de vencer (o a mitad de vida si el token es corto), reprogramando tras cada refresh con el token
+- **Refresh proactivo** (`scheduleProactiveRefresh`): programa el refresh **cada 20 min** (`REFRESH_EVERY_MS`),
+  adelantándolo a ~30 s antes si el `exp` del JWT vence antes, y reprogramando tras cada refresh con el token
   rotado → la sesión **no se pierde mientras se usa la app** (p. ej. escribiendo un mensaje). Al volver el
   foco a la pestaña (`visibilitychange`) refresca si está por vencer (cubre el timer congelado en 2º plano).
   El 401 reactivo del interceptor queda como red de seguridad.

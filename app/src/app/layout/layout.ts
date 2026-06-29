@@ -7,12 +7,13 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatSidenavModule } from '@angular/material/sidenav';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter, map } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { DataService } from '../core/services/data.service';
 import { ShellService } from '../core/services/shell.service';
+import { ReminderAlertDialog, ReminderItem } from '../features/pendientes/reminder-alert-dialog/reminder-alert-dialog';
 
 /**
  * Shell responsive: menú hamburguesa lateral (`mat-sidenav`). En escritorio el
@@ -41,9 +42,14 @@ export class Layout {
   private readonly data = inject(DataService);
   private readonly router = inject(Router);
   private readonly breakpoints = inject(BreakpointObserver);
-  private readonly snack = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
   readonly shell = inject(ShellService);
+
+  /** Evita apilar varias alertas de recordatorio a la vez. */
+  private alertOpen = false;
+  /** AudioContext perezoso para el sonido de la alerta. */
+  private audioCtx: AudioContext | null = null;
 
   readonly session = this.auth.session;
   readonly puedeVerMiPanel = this.auth.puedeVerMiPanel;
@@ -75,9 +81,26 @@ export class Layout {
       this.data.startStreaming();
       this.checkReminders();
     });
-    // Recordatorios de tickets pendientes: revisa cada 5 min (capta la hora/relevo de día).
-    const timer = setInterval(() => this.checkReminders(), 5 * 60 * 1000);
+    // Recordatorios de tickets pendientes: revisa cada 30s para que la alerta salte
+    // cerca de la hora exacta (la lista vive en memoria, sin costo de red).
+    const timer = setInterval(() => this.checkReminders(), 30 * 1000);
     this.destroyRef.onDestroy(() => clearInterval(timer));
+
+    // Desbloquea el audio con la primera interacción del usuario (política de
+    // autoplay): así el sonido de la alerta sí suena cuando llegue la hora.
+    if (typeof window !== 'undefined') {
+      const unlock = () => {
+        try { this.ensureAudio()?.resume(); } catch { /* sin audio */ }
+        window.removeEventListener('pointerdown', unlock);
+        window.removeEventListener('keydown', unlock);
+      };
+      window.addEventListener('pointerdown', unlock);
+      window.addEventListener('keydown', unlock);
+      this.destroyRef.onDestroy(() => {
+        window.removeEventListener('pointerdown', unlock);
+        window.removeEventListener('keydown', unlock);
+      });
+    }
 
     // Red de seguridad (zoneless): el contenido SOLO debe quedar inerte cuando hay
     // un drawer overlay ABIERTO encima (over + opened). En cualquier otro caso —modo
@@ -115,8 +138,9 @@ export class Layout {
       });
   }
 
-  /** Alerta recurrente de tickets pendientes cuya fecha/hora ya llegó (1 vez por día,
-   *  hasta que se pause o se redefina la fecha en el panel de Pendientes). */
+  /** Alerta de tickets pendientes cuya fecha/hora ya llegó: diálogo visible en
+   *  cualquier página (desde el shell) + sonido. Cada ticket alerta 1 vez por día,
+   *  hasta que se pause o se redefina la fecha en el panel de Pendientes. */
   private checkReminders(): void {
     const now = Date.now();
     const p = (n: number) => String(n).padStart(2, '0');
@@ -130,16 +154,59 @@ export class Layout {
       return at <= now;
     }) as any[];
     if (!due.length) return;
+    // Si ya hay una alerta abierta, no marcar ni apilar: estos vencidos saldrán
+    // en el siguiente chequeo, cuando se cierre la alerta actual.
+    if (this.alertOpen) return;
 
     due.forEach((x) => this.data.updateHdPendiente(x.ticket, { lastAlerted: todayStr }));
-    const msg =
-      due.length === 1
-        ? `Ticket #${due[0].ticket} pendiente de analizar.`
-        : `Tenés ${due.length} tickets pendientes de analizar.`;
-    this.snack
-      .open(msg, 'Ver pendientes', { duration: 12000 })
-      .onAction()
-      .subscribe(() => this.router.navigate(['/pendientes']));
+    this.playAlertSound();
+
+    const items: ReminderItem[] = due.map((x) => ({ ticket: x.ticket, clienteRaw: x.clienteRaw, asunto: x.asunto, nota: x.nota }));
+    this.alertOpen = true;
+    this.dialog
+      .open(ReminderAlertDialog, { data: { items }, width: '460px', maxWidth: '95vw', autoFocus: false })
+      .afterClosed()
+      .subscribe((r) => {
+        this.alertOpen = false;
+        // Lleva a Pendientes resaltando los tickets que acaban de sonar.
+        if (r === 'ver') {
+          this.router.navigate(['/pendientes'], { queryParams: { resaltar: items.map((i) => i.ticket).join(',') } });
+        }
+      });
+  }
+
+  /** Crea (perezoso) el AudioContext del sonido de alerta. */
+  private ensureAudio(): AudioContext | null {
+    if (this.audioCtx) return this.audioCtx;
+    const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return null;
+    this.audioCtx = new Ctx();
+    return this.audioCtx;
+  }
+
+  /** Sonido "ding-dong" de la alerta (Web Audio, sin archivo). */
+  private playAlertSound(): void {
+    try {
+      const ctx = this.ensureAudio();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      const tones: [number, number][] = [ [880, 0], [660, 0.18] ];
+      for (const [freq, offset] of tones) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const t0 = ctx.currentTime + offset;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.55);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.6);
+      }
+    } catch {
+      /* autoplay bloqueado o sin Web Audio: la alerta visual igual aparece */
+    }
   }
 
   async logout(): Promise<void> {

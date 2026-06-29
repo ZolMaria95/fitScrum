@@ -204,8 +204,8 @@
               }
             </div>
 
-            @if (cl) {
-              <span class="client-name">{{ cl.name }}</span>
+            @if (card.clientName || cl) {
+              <span class="client-name">{{ card.clientName || cl?.name }}</span>
             }
             <div class="card-title">{{ card.title }}</div>
 

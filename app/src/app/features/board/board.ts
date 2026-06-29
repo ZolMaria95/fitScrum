@@ -103,9 +103,12 @@ export class Board {
       conTicket.map(async (s) => {
         const raw = await this.helpdesk.fetchTicketRaw(s.ticket);
         if (!raw) return;
-        // El cliente de una tarea con ticket lo define el ticket.
+        // El cliente de una tarea con ticket lo define el ticket (id + nombre, para
+        // mostrar el nombre aunque el cliente no esté en el catálogo).
         const clientId = String(raw.client_id ?? '').trim();
         if (clientId && s.client !== clientId) this.data.updateStoryClient(s.id, clientId);
+        const clientName = String(raw.cliente ?? '').trim();
+        if (clientName && s.clientName !== clientName) this.data.updateStoryClientName(s.id, clientName);
         // Asignación: si la tarea tiene asignado y el ticket no lo refleja, empújalo al API.
         const ticketAssignee = String(raw.assigned_user_id || '').trim().toUpperCase();
         const taskAssignee = String(s.assignee || '').trim().toUpperCase();

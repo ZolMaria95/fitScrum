@@ -1,4 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
@@ -13,6 +15,7 @@ interface PendItem {
   ticket: string;
   clienteRaw?: string;
   asunto?: string;
+  nota?: string; // motivo del pendiente (opcional)
   addedAt?: string;
   dueDate?: string; // YYYY-MM-DD
   dueTime?: string; // HH:mm
@@ -35,12 +38,25 @@ export function pendienteDueAt(p: { dueDate?: string; dueTime?: string }): Date 
 export class Pendientes {
   private readonly data = inject(DataService);
   private readonly dialog = inject(MatDialog);
+  private readonly route = inject(ActivatedRoute);
 
   private readonly pend = signal<Record<string, PendItem>>(this.data.getHdPendientes());
+  /** Tickets a resaltar al llegar desde la alerta (`?resaltar=#,#`). */
+  readonly resaltados = signal<Set<string>>(new Set());
 
   constructor() {
     this.data.ensureInit().then(() => this.pend.set({ ...this.data.getHdPendientes() }));
+    // Resalta (y baja a la vista) los tickets que acaban de sonar en la alerta.
+    this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((q) => {
+      const raw = q.get('resaltar');
+      if (!raw) { this.resaltados.set(new Set()); return; }
+      this.resaltados.set(new Set(raw.split(',').filter(Boolean)));
+      setTimeout(() => document.querySelector('tr.resaltado')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+      setTimeout(() => this.resaltados.set(new Set()), 12000); // se desvanece solo
+    });
   }
+
+  esResaltado(ticket: string): boolean { return this.resaltados().has(ticket); }
 
   readonly items = computed<PendItem[]>(() =>
     Object.values(this.pend()).sort((a, b) => {
@@ -50,6 +66,21 @@ export class Pendientes {
       return (b.addedAt || '').localeCompare(a.addedAt || '');
     }),
   );
+
+  /** Pendientes agrupados por cliente (grupos alfabéticos; dentro, el orden por
+   *  recordatorio de `items`). */
+  readonly itemsPorCliente = computed(() => {
+    const grupos = new Map<string, PendItem[]>();
+    for (const it of this.items()) {
+      const key = it.clienteRaw || '—';
+      const arr = grupos.get(key);
+      if (arr) arr.push(it);
+      else grupos.set(key, [it]);
+    }
+    return [...grupos.entries()]
+      .map(([cliente, items]) => ({ cliente, items }))
+      .sort((a, b) => a.cliente.localeCompare(b.cliente));
+  });
 
   private refresh(): void { this.pend.set({ ...this.data.getHdPendientes() }); }
 
@@ -91,14 +122,14 @@ export class Pendientes {
     const res = (await firstValueFrom(
       this.dialog
         .open(PendienteDateDialog, {
-          data: { title: 'Postergar recordatorio', ticket: it.ticket, dueDate: it.dueDate, dueTime: it.dueTime },
+          data: { title: 'Postergar recordatorio', ticket: it.ticket, dueDate: it.dueDate, dueTime: it.dueTime, nota: it.nota },
           width: '420px',
           maxWidth: '95vw',
         })
         .afterClosed(),
     )) as PendienteDateResult | undefined;
     if (!res) return;
-    this.data.updateHdPendiente(it.ticket, { dueDate: res.dueDate, dueTime: res.dueTime, paused: false, lastAlerted: null });
+    this.data.updateHdPendiente(it.ticket, { dueDate: res.dueDate, dueTime: res.dueTime, nota: res.nota, paused: false, lastAlerted: null });
     this.refresh();
   }
   remove(ticket: string): void {

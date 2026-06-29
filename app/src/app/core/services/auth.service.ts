@@ -62,26 +62,29 @@ export class AuthService {
     }
   }
 
+  /** Cadencia del refresh proactivo: cada 20 min. */
+  private static readonly REFRESH_EVERY_MS = 20 * 60 * 1000;
+
   /**
-   * Programa el refresh antes de que venza el access_token: 60 s antes si el
-   * token es de larga vida, o a mitad del tiempo restante si es corto (evita un
-   * bucle de refrescos seguidos).
+   * Programa el refresh cada 20 min. Si el access_token venciera antes de esos
+   * 20 min, lo adelanta a ~30 s antes de vencer para no perder la sesión (si el
+   * token dura ≥20 min, en la práctica es exactamente cada 20). Tras cada refresh
+   * se reprograma con el token nuevo (rotado).
    */
   private scheduleProactiveRefresh(): void {
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = null;
-    const exp = this.token ? this.jwtExp(this.token) : null;
-    if (!exp) return;
-    const remaining = exp * 1000 - Date.now();
-    const ms = remaining > 120_000 ? remaining - 60_000 : Math.max(remaining * 0.5, 3_000);
+    if (!this.token) return;
+    const exp = this.jwtExp(this.token);
+    const untilExp = exp ? exp * 1000 - Date.now() - 30_000 : Infinity;
+    const ms = Math.max(Math.min(AuthService.REFRESH_EVERY_MS, untilExp), 5_000);
     this.refreshTimer = setTimeout(() => this.refreshSession(), ms);
   }
 
-  /** Tras volver al foco: refresca ya si falta <60 s para vencer; si no, reprograma. */
+  /** Tras volver al foco: refresca ya si está por vencer; si no, reprograma los 20 min. */
   private ensureFreshSoon(): void {
     const exp = this.token ? this.jwtExp(this.token) : null;
-    if (!exp) return;
-    if (exp * 1000 - Date.now() < 60_000) this.refreshSession();
+    if (exp && exp * 1000 - Date.now() < 60_000) this.refreshSession();
     else this.scheduleProactiveRefresh();
   }
 

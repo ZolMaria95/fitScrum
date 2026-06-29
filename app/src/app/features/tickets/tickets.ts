@@ -401,6 +401,7 @@ export class Tickets implements OnDestroy {
       clienteRaw: t.clienteRaw,
       dueDate: res.dueDate,
       dueTime: res.dueTime,
+      nota: res.nota,
     });
     this.pendientes.set({ ...this.data.getHdPendientes() });
   }

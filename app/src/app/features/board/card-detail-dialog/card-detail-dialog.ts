@@ -101,7 +101,9 @@ export class CardDetailDialog {
     const api = this.helpdesk.clients().find((c) => c.id === id);
     if (api) return { id: api.id, name: api.name };
     const local = this.data.getClient(id) as { id: string; name: string; color?: string } | undefined;
-    return local ?? { id, name: id };
+    if (local) return local;
+    // Nombre guardado en la tarea (de su ticket), por si el cliente no está en los catálogos.
+    return { id, name: this.story?.clientName || id };
   }
 
   // Clientes del API (consulta independiente + cache). Fallback a los locales

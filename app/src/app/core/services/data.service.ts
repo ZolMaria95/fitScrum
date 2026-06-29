@@ -22,6 +22,7 @@ export interface Story {
   waitingDate: string | null;
   title?: string;
   hdEstatus?: string;
+  clientName?: string; // nombre del cliente (de tareas con ticket) para no depender del catálogo
   [k: string]: unknown;
 }
 
@@ -294,6 +295,7 @@ export class DataService {
   updateStoryDescription(id: string, description: string) { this.patchStoryField(id, { description }); }
   updateStoryAssignee(id: string, assignee: string | null) { this.patchStoryField(id, { assignee }); }
   updateStoryClient(id: string, client: string | null) { this.patchStoryField(id, { client }); }
+  updateStoryClientName(id: string, clientName: string) { this.patchStoryField(id, { clientName }); }
   updateStoryHdEstatus(id: string, hdEstatus: string) { this.patchStoryField(id, { hdEstatus }); }
   updateStoryPriority(id: string, priority: string) { this.patchStoryField(id, { priority }); }
   approveStory(id: string) { this.patchStoryField(id, { approved: true, approvedDate: new Date().toISOString().split('T')[0] }); }
