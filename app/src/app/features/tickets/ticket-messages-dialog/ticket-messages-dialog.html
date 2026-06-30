@@ -14,7 +14,7 @@
   <div class="ticket-attach">
     <span class="ticket-attach-label">Adjunto del ticket:</span>
     @for (id of ticketAttachments(); track id; let i = $index) {
-      <button mat-stroked-button (click)="openAttachment(id, 'ticket_' + ticketId + '_adjunto')">
+      <button mat-stroked-button (click)="openAttachment(id, 'adjunto-general_' + ticketId + (ticketAttachments().length > 1 ? '_' + (i + 1) : ''))">
         <mat-icon>attach_file</mat-icon> Descargar{{ ticketAttachments().length > 1 ? ' ' + (i + 1) : '' }}
       </button>
     }

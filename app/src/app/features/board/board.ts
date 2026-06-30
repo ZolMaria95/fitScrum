@@ -258,6 +258,26 @@ export class Board {
     if (next) this.activeAssignees.set(new Set());
   }
 
+  /** ¿Hay algún filtro activo? (para mostrar el botón "Limpiar filtros"). */
+  readonly hasFilters = computed(
+    () =>
+      this.priorityFilter() !== 'all' ||
+      this.mineOnly() ||
+      this.selectedAssignees().length > 0 ||
+      this.selectedClients().length > 0 ||
+      !!this.ticketSearch().trim(),
+  );
+  /** Limpia todos los filtros del board (prioridad, mis tareas, asignados, clientes, N° ticket). */
+  clearFilters(): void {
+    this.priorityFilter.set('all');
+    this.mineOnly.set(false);
+    this.activeAssignees.set(new Set());
+    this.activeClients.set(new Set());
+    this.ticketSearch.set('');
+    this.buscarAsignado.set('');
+    this.buscarCliente.set('');
+  }
+
   // Copiar el número de ticket de una card (feedback breve con ✓).
   readonly ticketCopiado = signal<string | null>(null);
   copiarTicket(ticket: string, ev: Event): void {

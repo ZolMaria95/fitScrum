@@ -30,6 +30,15 @@ class FullEncodingCodec implements HttpParameterCodec {
 }
 const FORM_CODEC = new FullEncodingCodec();
 
+/** Nombre real del archivo desde el header Content-Disposition (p. ej. `adjunto_27732_6.pdf`). */
+function attachFilename(cd: string | null): string {
+  if (!cd) return '';
+  const star = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(cd);
+  if (star) { try { return decodeURIComponent(star[1].trim().replace(/^"|"$/g, '')); } catch { return star[1].trim(); } }
+  const plain = /filename="?([^";]+)"?/i.exec(cd);
+  return plain ? plain[1].trim() : '';
+}
+
 // Seed de empleados conocidos del Helpdesk. Solo es el fallback offline: la
 // fuente real es la consulta al catálogo de usuarios del API (/users/catalog).
 const EMPLEADOS = [
@@ -384,7 +393,7 @@ export class HelpdeskService {
     }
   }
 
-  /** URL blob (con auth) de un adjunto, para `<img>`/descarga. */
+  /** URL blob (con auth) de un adjunto, para `<img>` embebidas. */
   async attachmentUrl(attachId: string): Promise<string | null> {
     try {
       const blob = await firstValueFrom(
@@ -394,6 +403,23 @@ export class HelpdeskService {
         }),
       );
       return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Blob URL + nombre real (de Content-Disposition) de un adjunto, para descargarlo. */
+  async fetchAttachment(attachId: string): Promise<{ url: string; filename: string } | null> {
+    try {
+      const resp = await firstValueFrom(
+        this.http.get(`${this.base}/attachments/${attachId}`, {
+          responseType: 'blob',
+          observe: 'response',
+          context: new HttpContext().set(HD_SAFE, true),
+        }),
+      );
+      if (!resp.body) return null;
+      return { url: URL.createObjectURL(resp.body), filename: attachFilename(resp.headers.get('Content-Disposition')) };
     } catch {
       return null;
     }

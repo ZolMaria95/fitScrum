@@ -60,6 +60,12 @@
     <mat-icon matSuffix>search</mat-icon>
   </mat-form-field>
 
+  @if (hasFilters()) {
+    <button mat-stroked-button class="clear-filters" (click)="clearFilters()" matTooltip="Quitar todos los filtros">
+      <mat-icon>filter_alt_off</mat-icon> Limpiar filtros
+    </button>
+  }
+
   @if (assigneeChips().length) {
     <div class="assignee-filter">
       <span class="filter-label">Asignado a:</span>

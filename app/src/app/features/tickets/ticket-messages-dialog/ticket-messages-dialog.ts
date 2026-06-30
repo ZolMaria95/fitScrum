@@ -69,6 +69,8 @@ export class TicketMessagesDialog {
   readonly loadingOlder = signal(false);
   private sortedRaw: any[] = [];
   private cursor = 0;
+  // N° de secuencia global de cada adjunto (id → N), en orden cronológico.
+  private adjNumById = new Map<string, number>();
 
   // Editor de respuesta con formato (contenteditable): escribir/pegar/dar
   // formato aquí ya viaja como HTML, así el mensaje conserva el formato.
@@ -104,6 +106,19 @@ export class TicketMessagesDialog {
     this.sortedRaw = [...msgs].sort(
       (a, b) => new Date(a.entry_date || 0).getTime() - new Date(b.entry_date || 0).getTime(),
     );
+    // N° de secuencia GLOBAL por adjunto, en orden cronológico → el nombre lleva ese
+    // N: adjunto_<ticket>-<N>. Estable aunque los bloques se carguen por partes.
+    this.adjNumById = new Map<string, number>();
+    let adjNum = 0;
+    for (const m of this.sortedRaw) {
+      const ids: any[] = [];
+      if (m.attach_id) ids.push(m.attach_id);
+      if (Array.isArray(m.attach_ids)) ids.push(...m.attach_ids);
+      for (const id of ids) {
+        const s = String(id);
+        if (id && !this.adjNumById.has(s)) this.adjNumById.set(s, ++adjNum);
+      }
+    }
     this.cursor = this.sortedRaw.length;
     this.messages.set([]);
     this.loading.set(false);
@@ -145,15 +160,14 @@ export class TicketMessagesDialog {
     if (m.attach_id) ids.push(m.attach_id);
     if (Array.isArray(m.attach_ids)) ids.push(...m.attach_ids);
     const seen = new Set<string>();
-    const out: { id: string; nombre: string }[] = [];
+    const unicos: string[] = [];
     ids.forEach((id) => {
       const s = String(id);
-      if (id && !seen.has(s)) {
-        seen.add(s);
-        out.push({ id: s, nombre: `adjunto_${s.slice(-6)}` });
-      }
+      if (id && !seen.has(s)) { seen.add(s); unicos.push(s); }
     });
-    return out;
+    // Cada adjunto: adjunto_<ticket>-<N° de secuencia global>. La extensión real
+    // se añade al descargar (Content-Disposition).
+    return unicos.map((id) => ({ id, nombre: `adjunto_${this.ticketId}-${this.adjNumById.get(id) ?? 1}` }));
   }
 
   /** Reemplaza el src de las imágenes embebidas por blob URLs con auth. */
@@ -197,16 +211,18 @@ export class TicketMessagesDialog {
   }
 
   async openAttachment(id: string, nombre: string): Promise<void> {
-    const url = await this.hd.attachmentUrl(id);
-    if (!url) {
+    const res = await this.hd.fetchAttachment(id);
+    if (!res) {
       this.snack.open('No se pudo abrir el adjunto.', 'OK', { duration: 3000 });
       return;
     }
     const a = document.createElement('a');
-    a.href = url;
-    a.download = nombre;
+    a.href = res.url;
+    // Nombre con nuestra convención + la extensión real del header (para que abra bien).
+    const ext = (res.filename.match(/\.[^.\s]+$/) || [''])[0];
+    a.download = nombre ? `${nombre}${nombre.endsWith(ext) ? '' : ext}` : res.filename || `adjunto_${this.ticketId}`;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setTimeout(() => URL.revokeObjectURL(res.url), 10000);
   }
 
   onFiles(e: Event): void {
