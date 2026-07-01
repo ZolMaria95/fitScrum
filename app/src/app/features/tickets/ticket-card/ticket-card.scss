@@ -3,6 +3,7 @@
 }
 
 .ticket-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -23,6 +24,23 @@
   }
   &.is-pendiente {
     border-left: 4px solid #9c27b0;
+  }
+
+  // Orden 1 (máxima prioridad): card sombreada en rojo con borde y realce.
+  &.orden-uno {
+    border-color: #e53935;
+    box-shadow: 0 0 0 1px rgba(229, 57, 53, 0.55), 0 3px 12px rgba(229, 57, 53, 0.22);
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(229, 57, 53, 0.1);
+      pointer-events: none;
+    }
+    &:hover {
+      box-shadow: 0 0 0 1px rgba(229, 57, 53, 0.55), 0 5px 16px rgba(229, 57, 53, 0.3);
+    }
   }
 }
 
@@ -91,6 +109,31 @@
   }
 
   &:hover { background: rgba(0, 0, 0, 0.08); color: #2b2b3a; }
+}
+
+// Badge de orden/prioridad del ticket (nº del Helpdesk; 1-2 = alta → acento).
+.tc-orden {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 7px 1px 4px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #e8eef5;
+  color: #34506b;
+
+  mat-icon {
+    font-size: 13px;
+    width: 13px;
+    height: 13px;
+  }
+
+  &.alta {
+    background: #fde2e0;
+    color: #b3261e;
+  }
 }
 
 // Badge de días sin movimiento (Mi Panel). Ámbar normal, rojo si ≥ 7 días.

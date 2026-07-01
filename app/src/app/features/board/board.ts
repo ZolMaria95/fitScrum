@@ -115,6 +115,9 @@ export class Board {
         if (taskAssignee && taskAssignee !== ticketAssignee) this.helpdesk.assignTicket(s.ticket, taskAssignee);
         const estado = String(raw.estado || '');
         if (estado && s.hdEstatus !== estado) this.data.updateStoryHdEstatus(s.id, estado);
+        // Orden/prioridad del ticket (nº del Helpdesk; 1 = más alta) para mostrarlo en la card.
+        const orden = parseInt(String(raw.priority ?? ''), 10);
+        if (Number.isFinite(orden) && s.hdOrden !== orden) this.data.updateStoryHdOrden(s.id, orden);
         const m = statusFromTicketEstado(estado);
         if (s.status !== m.status) this.data.updateStoryStatus(s.id, m.status);
         // El check "Finalizado" lo define siempre el ticket (marca o desmarca).

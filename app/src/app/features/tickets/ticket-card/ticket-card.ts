@@ -39,6 +39,11 @@ export class TicketCard {
 
   readonly estado = computed(() => estadoStyle(this.ticket().estatus));
   readonly tipo = computed(() => tipoStyle(this.ticket().tipo));
+  // Orden/prioridad del ticket (nº del Helpdesk; 1 = más alta). Se oculta el 999 (sin definir).
+  readonly orden = computed(() => {
+    const o = this.ticket().orden;
+    return Number.isFinite(o) && o > 0 && o < 999 ? o : null;
+  });
   // Color por cliente (mismo criterio que el board: tinte claro + acento).
   readonly cliente = computed(() => clientStyle({ id: this.ticket().clientId || this.ticket().clienteRaw }));
   readonly fIngreso = computed(() => fmtIngreso(this.ticket().fechaIngreso));

@@ -22,6 +22,7 @@ export interface Story {
   waitingDate: string | null;
   title?: string;
   hdEstatus?: string;
+  hdOrden?: number; // orden/prioridad del ticket en el Helpdesk (1 = más alta)
   clientName?: string; // nombre del cliente (de tareas con ticket) para no depender del catálogo
   [k: string]: unknown;
 }
@@ -297,6 +298,7 @@ export class DataService {
   updateStoryClient(id: string, client: string | null) { this.patchStoryField(id, { client }); }
   updateStoryClientName(id: string, clientName: string) { this.patchStoryField(id, { clientName }); }
   updateStoryHdEstatus(id: string, hdEstatus: string) { this.patchStoryField(id, { hdEstatus }); }
+  updateStoryHdOrden(id: string, hdOrden: number) { this.patchStoryField(id, { hdOrden }); }
   updateStoryPriority(id: string, priority: string) { this.patchStoryField(id, { priority }); }
   approveStory(id: string) { this.patchStoryField(id, { approved: true, approvedDate: new Date().toISOString().split('T')[0] }); }
   unapproveStory(id: string) { this.patchStoryField(id, { approved: false, approvedDate: null }); }

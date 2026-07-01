@@ -197,6 +197,11 @@
                 </button>
               }
               <span class="prio-badge" [class]="'prio-' + card.priority">{{ $any(PRIORITY_LABELS)[card.priority] }}</span>
+              @if (card.ticket && card.hdOrden && card.hdOrden < 999) {
+                <span class="orden-badge" [class.alta]="card.hdOrden === 1" matTooltip="Orden / prioridad del ticket">
+                  <mat-icon>low_priority</mat-icon>{{ card.hdOrden }}
+                </span>
+              }
               <span class="grow"></span>
               @if (puedeGestionarTodo()) {
                 <button

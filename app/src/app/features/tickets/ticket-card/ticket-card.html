@@ -2,6 +2,7 @@
   class="ticket-card"
   [class.is-accion]="esAccion()"
   [class.is-pendiente]="esPendiente()"
+  [class.orden-uno]="orden() === 1"
   (click)="verConversacion.emit()">
 
   <div class="tc-head" [style.background]="cliente().bg" [style.borderLeftColor]="cliente().accent">
@@ -11,6 +12,11 @@
               [matTooltip]="copiado() ? 'Copiado' : 'Copiar número'" aria-label="Copiar número de ticket">
         <mat-icon>{{ copiado() ? 'check' : 'content_copy' }}</mat-icon>
       </button>
+      @if (orden() !== null) {
+        <span class="tc-orden" [class.alta]="orden() === 1" matTooltip="Orden / prioridad del ticket">
+          <mat-icon>low_priority</mat-icon>{{ orden() }}
+        </span>
+      }
       @if (mostrarDias() && ticket().diasSinMovimiento > 0) {
         <span class="tc-dias" [class.alto]="ticket().diasSinMovimiento >= 7"
               matTooltip="Días sin movimiento">{{ ticket().diasSinMovimiento }}d</span>
