@@ -16,6 +16,7 @@ import { DataService } from '../../core/services/data.service';
 import { HelpdeskService, TicketFilters } from '../../core/services/helpdesk.service';
 import { ShellService } from '../../core/services/shell.service';
 import { CardDetailDialog } from '../board/card-detail-dialog/card-detail-dialog';
+import { esEstadoFinalizado } from '../board/board-utils';
 import { TicketMessagesDialog } from './ticket-messages-dialog/ticket-messages-dialog';
 import { AssignTicketDialog } from './assign-ticket-dialog/assign-ticket-dialog';
 import { PendienteDateDialog, PendienteDateResult } from '../pendientes/pendiente-date-dialog/pendiente-date-dialog';
@@ -35,8 +36,7 @@ interface StatRow {
 
 /** Ticket finalizado (aprobado/cerrado) → fuera de las tabs operativas. */
 function esFinalizado(t: Ticket): boolean {
-  const e = (t.estatus || '').toUpperCase();
-  return e.includes('APROBADO') || e.includes('CERRADO POR EL CLIENTE');
+  return esEstadoFinalizado(t.estatus);
 }
 
 /** Vista Tickets (grid de cards del Helpdesk). Port de js/helpdesk-panel.js. */

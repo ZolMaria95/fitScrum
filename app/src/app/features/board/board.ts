@@ -109,10 +109,9 @@ export class Board {
         if (clientId && s.client !== clientId) this.data.updateStoryClient(s.id, clientId);
         const clientName = String(raw.cliente ?? '').trim();
         if (clientName && s.clientName !== clientName) this.data.updateStoryClientName(s.id, clientName);
-        // Asignación: si la tarea tiene asignado y el ticket no lo refleja, empújalo al API.
-        const ticketAssignee = String(raw.assigned_user_id || '').trim().toUpperCase();
-        const taskAssignee = String(s.assignee || '').trim().toUpperCase();
-        if (taskAssignee && taskAssignee !== ticketAssignee) this.helpdesk.assignTicket(s.ticket, taskAssignee);
+        // La carga es SOLO LECTURA contra el HelpDesk: se lee el ticket para ubicar/mostrar
+        // la tarjeta, pero NUNCA se escribe. La asignación al HelpDesk solo ocurre por acción
+        // explícita del usuario (diálogo de asignar / detalle de tarjeta).
         const estado = String(raw.estado || '');
         if (estado && s.hdEstatus !== estado) this.data.updateStoryHdEstatus(s.id, estado);
         // Orden/prioridad del ticket (nº del Helpdesk; 1 = más alta) para mostrarlo en la card.

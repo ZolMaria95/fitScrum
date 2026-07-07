@@ -17,8 +17,22 @@ export const STATUS_LABELS: Record<Status, string> = {
 };
 
 /**
+ * Estado de ticket que cuenta como FINALIZADO. Criterio ÚNICO reutilizado por el
+ * board (statusFromTicketEstado / check "Finalizado") y la vista Tickets
+ * (esFinalizado), para que no se desincronicen. Incluye APROBADO, CERRADO POR EL
+ * CLIENTE y CERRADO POR FALTA DE RESPUESTA (del cliente).
+ */
+export function esEstadoFinalizado(estado: string | null | undefined): boolean {
+  const e = (estado || '').toUpperCase();
+  return e.includes('APROBADO')
+    || e.includes('CERRADO POR EL CLIENTE')
+    || e.includes('CERRADO POR FALTA DE RESPUESTA');
+}
+
+/**
  * Mapea el estado del ticket del API a la columna del board (+ flags).
- * - APROBADO / CERRADO POR EL CLIENTE → Done con el check "Finalizado" marcado.
+ * - APROBADO / CERRADO POR EL CLIENTE / CERRADO POR FALTA DE RESPUESTA → Done con
+ *   el check "Finalizado" marcado.
  * - ENTREGADO → Done con el check desmarcado.
  * - INSTALADO PARA CERTIFICACIÓN → En Certificación.
  * - INFO PENDIENTE CLIENTE → In Progress + "esperando cliente".
@@ -28,7 +42,7 @@ export const STATUS_LABELS: Record<Status, string> = {
  */
 export function statusFromTicketEstado(estado: string): { status: Status; waiting?: boolean; approved?: boolean } {
   const e = (estado || '').toUpperCase();
-  if (e.includes('APROBADO') || e.includes('CERRADO POR EL CLIENTE')) return { status: 'done', approved: true };
+  if (esEstadoFinalizado(e)) return { status: 'done', approved: true };
   if (e.includes('ENTREGADO')) return { status: 'done', approved: false };
   if (e.includes('INSTALADO') || e.includes('CERTIFICAC')) return { status: 'review' };
   if (e.includes('INFO PENDIENTE')) return { status: 'in_progress', waiting: true };
