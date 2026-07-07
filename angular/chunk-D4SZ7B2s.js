@@ -1,0 +1,1 @@
+import {M as Mo,bo as se}from'./main-XMYGUHBF.js';var i=class e{filters=Mo(null);setFilters(t){this.filters.set(t);}clear(){this.filters.set(null);}static \u0275fac=function(o){return new(o||e)};static \u0275prov=se({token:e,factory:e.\u0275fac,providedIn:"root"})};export{i};
