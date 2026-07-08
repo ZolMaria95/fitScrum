@@ -22,12 +22,17 @@
     font-weight: 700;
     color: var(--mat-sys-primary);
   }
-  .cliente {
+  .cliente,
+  .tipo {
     font-size: 12px;
     font-weight: 600;
-    background: var(--mat-sys-surface-container-high);
     padding: 2px 8px;
     border-radius: 10px;
+  }
+  .cliente { background: var(--mat-sys-surface-container-high); }
+  .tipo {
+    border: 1px solid var(--mat-sys-outline-variant);
+    color: var(--mat-sys-on-surface-variant);
   }
   .estatus {
     font-size: 12px;
@@ -128,8 +133,8 @@
 
 .conv-meta {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 4px;
   font-size: 11px;
 
@@ -138,7 +143,32 @@
     font-family: inherit; // nombre completo del usuario: se lee mejor en fuente normal
   }
   .conv-date {
+    margin-left: auto; // empuja fecha (y botón editar) a la derecha
     color: var(--mat-sys-on-surface-variant);
+  }
+  // Botón "Editar" (solo mensajes propios dentro de la ventana de 10 min).
+  .conv-edit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--mat-sys-on-surface-variant);
+    cursor: pointer;
+    border-radius: 50%;
+
+    mat-icon {
+      font-size: 15px;
+      width: 15px;
+      height: 15px;
+    }
+    &:hover {
+      background: rgba(0, 0, 0, 0.08);
+      color: var(--brand, #048abf);
+    }
   }
 }
 
@@ -280,6 +310,36 @@
     font-size: 28px;
     width: 28px;
     height: 28px;
+  }
+}
+
+// Banner cuando se está editando un mensaje ya enviado.
+.composer-editing {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand, #048abf);
+  background: color-mix(in srgb, var(--brand, #048abf) 12%, transparent);
+
+  mat-icon {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+  }
+  .composer-editing-cancel {
+    margin-left: auto;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
   }
 }
 

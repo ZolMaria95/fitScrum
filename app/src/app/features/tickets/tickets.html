@@ -2,9 +2,12 @@
 <ng-template #filtersTpl>
   <div class="hd-filters-panel">
     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="f-search">
-      <mat-label>N° ticket</mat-label>
-      <input matInput [ngModel]="filterTicket()" (ngModelChange)="onSearchInput($event)" inputmode="numeric" />
-      <mat-icon matSuffix>search</mat-icon>
+      <mat-label>Buscar (N° o palabra)</mat-label>
+      <input matInput [ngModel]="searchTerm()" (ngModelChange)="onSearchInput($event)"
+             (keydown.enter)="submitSearch()" placeholder="Ej. 27732 o crédito" />
+      <button matSuffix mat-icon-button aria-label="Buscar" (click)="submitSearch()"><mat-icon>search</mat-icon></button>
+      @if (searchPending()) { <mat-hint>Presiona Enter o 🔍 para buscar</mat-hint> }
+      @else if (filterTexto()) { <mat-hint>Resultados por contenido en todos los tickets</mat-hint> }
     </mat-form-field>
 
     @if (filterClientes().length) {
@@ -108,8 +111,9 @@
   @if (!rows().length) {
     <div class="hd-empty">
       @if (searching()) { Buscando ticket #{{ filterTicket() }} en el sistema… }
-      @else if (filterTicket()) { No se encontró el ticket #{{ filterTicket() }}. }
       @else if (loading()) { Cargando tickets… }
+      @else if (filterTicket()) { No se encontró el ticket #{{ filterTicket() }}. }
+      @else if (filterTexto()) { No se encontraron tickets que contengan “{{ filterTexto() }}”. }
       @else if (tabHasData()) { Sin tickets que coincidan con el filtro. }
       @else { No hay tickets. Usa el botón <strong>↻</strong> para refrescar. }
     </div>

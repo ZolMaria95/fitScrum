@@ -12,6 +12,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { filter, map } from 'rxjs';
 import { AuthService } from '../core/services/auth.service';
 import { DataService } from '../core/services/data.service';
+import { HelpdeskService } from '../core/services/helpdesk.service';
 import { ShellService } from '../core/services/shell.service';
 import { ReminderAlertDialog, ReminderItem } from '../features/pendientes/reminder-alert-dialog/reminder-alert-dialog';
 
@@ -40,6 +41,7 @@ import { ReminderAlertDialog, ReminderItem } from '../features/pendientes/remind
 export class Layout {
   private readonly auth = inject(AuthService);
   private readonly data = inject(DataService);
+  private readonly helpdesk = inject(HelpdeskService);
   private readonly router = inject(Router);
   private readonly breakpoints = inject(BreakpointObserver);
   private readonly dialog = inject(MatDialog);
@@ -81,6 +83,11 @@ export class Layout {
       this.data.startStreaming();
       this.checkReminders();
     });
+    // Carga los catálogos de empleados y clientes al entrar (ya con sesión), para
+    // que los nombres de consultor/cliente estén listos app-wide y no dependan de
+    // abrir una vista concreta. Reintentan solos si la 1ª petición falla.
+    this.helpdesk.getHdUsers();
+    this.helpdesk.getClients();
     // Recordatorios de tickets pendientes: revisa cada 30s para que la alerta salte
     // cerca de la hora exacta (la lista vive en memoria, sin costo de red).
     const timer = setInterval(() => this.checkReminders(), 30 * 1000);

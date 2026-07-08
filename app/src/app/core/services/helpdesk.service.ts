@@ -92,6 +92,8 @@ export class HelpdeskService {
   readonly hdUsers = this._users.asReadonly();
 
   private loadPromise: Promise<HdUser[]> | null = null;
+  private usersLoaded = false; // ¿el catálogo se cargó del API con éxito?
+  private usersRetries = 0; // reintentos automáticos en background tras un fallo
 
   /** Clientes del Helpdesk (signal). Arranca con el cache de localStorage y se
    *  llena con la consulta al API. Alimenta el campo Cliente del modal y resuelve
@@ -99,6 +101,8 @@ export class HelpdeskService {
   private readonly _clients = signal<HdClient[]>(this.seedClients());
   readonly clients = this._clients.asReadonly();
   private clientsPromise: Promise<HdClient[]> | null = null;
+  private clientsLoaded = false; // ¿el catálogo de clientes se cargó del API con éxito?
+  private clientsRetries = 0;
 
   // ── Tickets ──
   // `loadFiltered` consulta UNA página filtrada server-side (client_id /
@@ -128,7 +132,17 @@ export class HelpdeskService {
    * _tryFetchAllHdUsers + getHdUsers de js/helpdesk-panel.js.
    */
   getHdUsers(): Promise<HdUser[]> {
-    return (this.loadPromise ??= this.fetchAll());
+    if (this.usersLoaded) return Promise.resolve(this._users());
+    return (this.loadPromise ??= this.fetchAll().finally(() => {
+      // Si el catálogo NO se cargó del API (timing del token / red), NO cacheamos
+      // el fallo: liberamos la promesa para que el próximo init reintente, y
+      // programamos un reintento en background (acotado). hdUsers es signal, así
+      // que al cargar finalmente los nombres se actualizan solos.
+      if (!this.usersLoaded) {
+        this.loadPromise = null;
+        if (this.usersRetries++ < 3) setTimeout(() => this.getHdUsers(), 4000);
+      }
+    }));
   }
 
   private async fetchAll(): Promise<HdUser[]> {
@@ -171,6 +185,7 @@ export class HelpdeskService {
         this.saveRoles();
         this._users.set(users);
         this.saveUsers(users);
+        this.usersLoaded = true; // carga real del API → ya no reintenta
         return users;
       } catch {
         /* prueba el siguiente endpoint */
@@ -186,7 +201,14 @@ export class HelpdeskService {
    * Cliente del modal; el legacy usaba un JSON local estático de 14 clientes.
    */
   getClients(): Promise<HdClient[]> {
-    return (this.clientsPromise ??= this.fetchAllClients());
+    if (this.clientsLoaded) return Promise.resolve(this._clients());
+    return (this.clientsPromise ??= this.fetchAllClients().finally(() => {
+      // Igual que getHdUsers: no cachear el fallo; reintentar (init + background).
+      if (!this.clientsLoaded) {
+        this.clientsPromise = null;
+        if (this.clientsRetries++ < 3) setTimeout(() => this.getClients(), 4000);
+      }
+    }));
   }
 
   private async fetchAllClients(): Promise<HdClient[]> {
@@ -216,6 +238,7 @@ export class HelpdeskService {
           .sort((a, b) => a.name.localeCompare(b.name, 'es'));
         this._clients.set(clients);
         this.saveClients(clients);
+        this.clientsLoaded = true; // carga real del API → ya no reintenta
         return clients;
       } catch {
         /* prueba el siguiente endpoint */
@@ -341,6 +364,70 @@ export class HelpdeskService {
     }
   }
 
+  /**
+   * Búsqueda por PALABRA server-side: `GET /tickets/tickets/search?q=…` (hermano de
+   * /tickets/tickets; mismo { items, total }). Puebla `_tickets`/`_total` igual que
+   * loadFiltered, así la vista pagina sobre el resultado global. Solo por palabra.
+   */
+  async searchTickets(
+    q: string,
+    pageIndex: number,
+    pageSize: number,
+    sort: { field: string; dir: 'asc' | 'desc' } = { field: 'modified_date', dir: 'desc' },
+  ): Promise<void> {
+    const term = q.trim();
+    if (!term || this.loading()) return;
+    this.loading.set(true);
+    this.setStatus(`Buscando "${term}"...`, 'loading');
+    try {
+      const params = new HttpParams()
+        .set('q', term)
+        .set('limit', String(pageSize))
+        .set('offset', String(pageIndex * pageSize))
+        .set(`${sort.field}_order`, sort.dir);
+      const data = await firstValueFrom(this.http.get<any>(`${this.base}/tickets/tickets/search`, { params }));
+      const items = (data?.items || []).map(mapTicket).map(evaluarFechas).map(clasificar);
+      this._tickets.set(items);
+      this._total.set(Number(data?.total ?? items.length));
+      this.hasMore.set((pageIndex + 1) * pageSize < this._total());
+      this.setStatus(`✓ ${items.length} de ${this._total()} coinciden con "${term}"`, 'ok');
+    } catch (err: any) {
+      const msg = err?.message || '';
+      const esRed = /fetch|failed|load failed|network|0/i.test(msg);
+      this.setStatus(esRed ? 'No se pudo conectar al API.' : `Error: ${msg}`, 'error');
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  /**
+   * Números de ticket que coinciden con una palabra (para intersectar con el board).
+   * Pagina el /search hasta `cap` resultados y junta los ticket_id. No toca señales.
+   */
+  async searchTicketNumbers(q: string, cap = 300): Promise<Set<string>> {
+    const term = q.trim();
+    const numbers = new Set<string>();
+    if (!term) return numbers;
+    const LIMIT = 50;
+    try {
+      for (let offset = 0; offset < cap; offset += LIMIT) {
+        const params = new HttpParams().set('q', term).set('limit', String(LIMIT)).set('offset', String(offset));
+        const data = await firstValueFrom(
+          this.http.get<any>(`${this.base}/tickets/tickets/search`, { params, context: new HttpContext().set(HD_SAFE, true) }),
+        );
+        const items: any[] = data?.items || [];
+        for (const it of items) {
+          const id = String(it.ticket_id ?? '').trim();
+          if (id) numbers.add(id);
+        }
+        if (items.length < LIMIT) break;
+      }
+    } catch {
+      /* devuelve lo acumulado */
+    }
+    return numbers;
+  }
+
   /** Mensajes crudos de un ticket. */
   async fetchMessages(ticketId: string): Promise<any[]> {
     try {
@@ -448,6 +535,29 @@ export class HelpdeskService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Edita un mensaje ya enviado: `PATCH /tickets/:ticketId/messages/:messageId` con
+   * `detail` **form-urlencoded** (igual que sendMessage; el API lo lee de form, no de
+   * JSON — con JSON responde "El detalle es obligatorio"). La ventana de 10 min y "solo
+   * el autor" las valida el propio API (campos `can_edit` / `can_edit_until`); si venció
+   * o no es tuyo, responde error y devolvemos { ok:false, error }.
+   */
+  async editMessage(ticketId: string, messageId: string, detail: string): Promise<{ ok: boolean; error?: string }> {
+    if (!ticketId || !messageId) return { ok: false, error: 'Falta el identificador del mensaje.' };
+    const url = `${this.base}/tickets/${ticketId}/messages/${messageId}`;
+    const context = new HttpContext().set(HD_SAFE, true);
+    try {
+      const body = new HttpParams({ encoder: FORM_CODEC }).set('detail', detail);
+      await firstValueFrom(this.http.patch(url, body, { context }));
+      return { ok: true };
+    } catch (e: any) {
+      // Superficie el mensaje real del API ({ error: { code, message } }); p. ej.
+      // "Solo puedes editar tus propios mensajes" o la ventana de 10 min vencida.
+      const error = e?.error?.error?.message || e?.error?.message || 'No se pudo editar el mensaje.';
+      return { ok: false, error };
     }
   }
 

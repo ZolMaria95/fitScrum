@@ -104,6 +104,52 @@ export function insertCodeBlock(el: HTMLElement): void {
 }
 
 /**
+ * Serializa el contenido del editor (contenteditable) para ENVIARLO como mensaje.
+ * El editor usa `white-space: pre-wrap`, así que Enter puede llegar de dos formas y
+ * el backend del Helpdesk DESCARTA ambas (perdía los saltos: "a\nb" → "ab"):
+ *  - bloques `<div>`/`<p>` (algunos navegadores) → se aplanan a `<br>`;
+ *  - saltos literales `\n` en el texto → se convierten a `<br>`.
+ * Los `<br>` sí los conserva el backend (igual que el pegado multilínea). Se deja
+ * intacto el resto: formato en línea, imágenes, listas y `<pre>` de código (donde el
+ * `\n` se preserva verbatim, no se toca).
+ */
+export function editorToMessageHtml(el: HTMLElement): string {
+  const clone = el.cloneNode(true) as HTMLElement;
+  // 1) Aplana los bloques <div>/<p> a <br>. Un bloque "vacío" = una línea en blanco.
+  const esBloqueVacio = (b: Element) => !b.textContent?.trim() && !b.querySelector('img');
+  let bloque = clone.querySelector('div, p');
+  while (bloque) {
+    const padre = bloque.parentNode!;
+    if (esBloqueVacio(bloque)) {
+      padre.insertBefore(document.createElement('br'), bloque);
+    } else {
+      // Salto ANTES del bloque (salvo si abre el contenedor) + su contenido en línea.
+      if (bloque.previousSibling) padre.insertBefore(document.createElement('br'), bloque);
+      while (bloque.firstChild) padre.insertBefore(bloque.firstChild, bloque);
+    }
+    padre.removeChild(bloque);
+    bloque = clone.querySelector('div, p');
+  }
+  // 2) Convierte los saltos literales \n (Enter con white-space:pre-wrap) a <br>,
+  //    salvo dentro de <pre>/<code> (código: se conserva tal cual).
+  const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
+  const textos: Text[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) textos.push(n as Text);
+  for (const tn of textos) {
+    if (!tn.nodeValue || !tn.nodeValue.includes('\n') || tn.parentElement?.closest('pre, code')) continue;
+    const partes = tn.nodeValue.split('\n');
+    const frag = document.createDocumentFragment();
+    partes.forEach((parte, i) => {
+      if (i > 0) frag.appendChild(document.createElement('br'));
+      if (parte) frag.appendChild(document.createTextNode(parte));
+    });
+    tn.parentNode!.replaceChild(frag, tn);
+  }
+  // Quita los <br> sobrantes al final (Enter final o bloques vacíos de cierre).
+  return clone.innerHTML.replace(/(\s*<br\s*\/?>\s*)+$/i, '').trim();
+}
+
+/**
  * Convierte el contenido del portapapeles en HTML limpio listo para enviar.
  * - Si el texto plano trae markdown (`**negrita**`, `` `código` ``), se usa la
  *   ruta de texto plano: respeta los párrafos (`\n\n` → línea en blanco) e

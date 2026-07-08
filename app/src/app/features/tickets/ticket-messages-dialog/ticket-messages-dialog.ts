@@ -12,7 +12,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { HelpdeskService } from '../../../core/services/helpdesk.service';
 import { ComposeDialog } from '../compose-dialog/compose-dialog';
 import { EMPLEADOS } from '../helpdesk.constants';
-import { Ticket, clipboardToHtml, insertCodeBlock, mapTicket, safeHtml, stripHtml } from '../ticket-utils';
+import { Ticket, clipboardToHtml, editorToMessageHtml, insertCodeBlock, mapTicket, safeHtml, stripHtml } from '../ticket-utils';
 import { estadoStyle } from '../tickets-card-utils';
 
 interface ConvMsg {
@@ -21,6 +21,11 @@ interface ConvMsg {
   fecha: string;
   html: SafeHtml | null;
   adjuntos: { id: string; nombre: string }[];
+  // Edición: id del mensaje, si el API lo deja editar (autor + ventana de 10 min, lo
+  // decide el servidor) y el HTML original (sin hidratar imágenes) para recargarlo.
+  id: string;
+  canEdit: boolean;
+  rawDetail: string;
 }
 
 export interface TicketMessagesData {
@@ -52,6 +57,7 @@ export class TicketMessagesDialog {
   private ticketObj: Ticket | null = this.data.ticket ?? null;
   readonly header = signal({
     cliente: this.data.ticket?.clienteRaw || '',
+    tipo: this.data.ticket?.tipo || '',
     estatus: this.data.ticket?.estatus || '',
     asunto: this.data.ticket?.asunto || '',
   });
@@ -81,8 +87,17 @@ export class TicketMessagesDialog {
   // Resaltado del área de mensaje mientras se arrastran archivos encima.
   readonly dragOver = signal(false);
 
+  // ── Edición de mensajes (ventana de 10 min, solo el autor; lo valida el API) ──
+  /** Id del mensaje que se está editando (null = redactando uno nuevo). */
+  readonly editingId = signal<string | null>(null);
+
   constructor() {
     this.load();
+  }
+
+  /** ¿El mensaje es editable? Lo decide el API (autor + ventana de 10 min) vía can_edit. */
+  puedeEditar(m: ConvMsg): boolean {
+    return m.canEdit && !!m.id;
   }
 
   private async load(): Promise<void> {
@@ -99,7 +114,7 @@ export class TicketMessagesDialog {
       const raw = await this.hd.fetchTicketRaw(this.ticketId);
       if (raw) {
         this.ticketObj = mapTicket(raw);
-        this.header.set({ cliente: this.ticketObj.clienteRaw, estatus: this.ticketObj.estatus, asunto: this.ticketObj.asunto });
+        this.header.set({ cliente: this.ticketObj.clienteRaw, tipo: this.ticketObj.tipo, estatus: this.ticketObj.estatus, asunto: this.ticketObj.asunto });
       }
     }
     const msgs = await this.hd.fetchMessages(this.ticketId);
@@ -188,6 +203,8 @@ export class TicketMessagesDialog {
   private async procesar(m: any): Promise<ConvMsg | null> {
     const esSys = m.system_message === true;
     let html = safeHtml(m.detail || '');
+    // HTML original (URLs sin hidratar) para recargarlo en el composer al editar.
+    const rawDetail = html;
     const texto = stripHtml(html).trim();
     const adjuntos = this.attachsDeMensaje(m);
     if (!texto && !html.includes('<img') && !adjuntos.length) return null;
@@ -199,6 +216,10 @@ export class TicketMessagesDialog {
       fecha: m.entry_date ? String(m.entry_date).replace('T', ' ').slice(0, 16) : '',
       html: texto || html.includes('<img') ? this.sanitizer.bypassSecurityTrustHtml(html) : null,
       adjuntos,
+      // Edición: id del mensaje y can_edit (autor + ventana de 10 min) los da el API.
+      id: String(m.id ?? '').trim(),
+      canEdit: m.can_edit === true,
+      rawDetail,
     };
   }
 
@@ -307,25 +328,54 @@ export class TicketMessagesDialog {
     el.focus();
   }
 
+  /** Empieza a editar un mensaje propio: carga su texto en el composer (edición de texto,
+   *  sin tocar adjuntos). El botón "Enviar" pasa a "Guardar cambios". */
+  startEdit(m: ConvMsg): void {
+    if (!this.puedeEditar(m)) return;
+    const el = this.composerInput().nativeElement;
+    el.innerHTML = m.rawDetail;
+    this.editingId.set(m.id);
+    this.composerFiles = []; // editar solo cambia el texto
+    this.sendStatus.set('');
+    el.focus();
+    el.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** Cancela la edición y vacía el composer. */
+  cancelEdit(): void {
+    this.editingId.set(null);
+    this.composerInput().nativeElement.innerHTML = '';
+    this.sendStatus.set('');
+  }
+
   async send(): Promise<void> {
     const el = this.composerInput().nativeElement;
-    const detail = el.innerHTML.trim();
+    // Aplana los bloques del contenteditable a <br> para no perder los saltos de línea.
+    const detail = editorToMessageHtml(el);
     const vacio = !el.textContent?.trim() && !el.querySelector('img');
-    if (vacio && !this.composerFiles.length) {
-      this.sendStatus.set('Escribe un mensaje o adjunta un archivo.');
+    const editId = this.editingId();
+    if (vacio && (editId || !this.composerFiles.length)) {
+      this.sendStatus.set(editId ? 'El mensaje no puede quedar vacío.' : 'Escribe un mensaje o adjunta un archivo.');
       return;
     }
     this.sending.set(true);
-    this.sendStatus.set('Enviando...');
-    const ok = await this.hd.sendMessage(this.ticketId, detail, this.composerFiles);
+    this.sendStatus.set(editId ? 'Guardando…' : 'Enviando...');
+    let ok: boolean;
+    if (editId) {
+      const res = await this.hd.editMessage(this.ticketId, editId, detail);
+      ok = res.ok;
+      if (!ok) this.sendStatus.set(res.error || 'No se pudo editar el mensaje.');
+    } else {
+      ok = await this.hd.sendMessage(this.ticketId, detail, this.composerFiles);
+      if (!ok) this.sendStatus.set('Error al enviar.');
+    }
     this.sending.set(false);
     if (ok) {
       el.innerHTML = '';
       this.composerFiles = [];
-      this.sendStatus.set('Enviado ✓');
+      this.editingId.set(null);
+      this.sendStatus.set(editId ? 'Cambios guardados ✓' : 'Enviado ✓');
       this.load();
-    } else {
-      this.sendStatus.set('Error al enviar.');
     }
   }
 }

@@ -81,14 +81,24 @@ export class Tickets implements OnDestroy {
   readonly tab = signal<Tab>('pendientes');
   readonly filterClientes = signal<string[]>([]); // client_ids (server-side, multi); [] = todos
   readonly filterEstatus = signal(''); // nombre de estado (server-side); '' = todos
+  // Búsqueda unificada (N° o palabra) con disparo EXPLÍCITO (Enter / 🔍):
+  //  - searchTerm: lo que se está escribiendo (no dispara nada).
+  //  - filterTicket: N° aplicado (lookup exacto server-side, remoteResult).
+  //  - filterTexto: palabra aplicada (búsqueda por contenido server-side, puebla tickets()).
+  readonly searchTerm = signal('');
   readonly filterTicket = signal('');
+  readonly filterTexto = signal('');
   readonly remoteResult = signal<Ticket | null>(null);
   readonly searching = signal(false); // buscando un ticket por número en el API
+  /** Hay término escrito pero aún sin aplicar (para el hint "Presiona Enter o 🔍"). */
+  readonly searchPending = computed(() => {
+    const v = this.searchTerm().trim();
+    return !!v && v !== this.filterTicket() && v !== this.filterTexto();
+  });
   // Orden server-side: el API ordena por `<campo>_order=asc|desc`.
   readonly sortField = signal('modified_date');
   readonly sortDir = signal<'asc' | 'desc'>('desc');
   readonly sortValue = computed(() => `${this.sortField()}|${this.sortDir()}`);
-  private searchTimer: any = null;
 
   // Paginación server-side: cada página = una consulta con su offset; `total` del API.
   readonly pageIndex = signal(0);
@@ -140,6 +150,8 @@ export class Tickets implements OnDestroy {
     // Búsqueda por número: SIEMPRE server-side (lookup exacto). Mientras se busca
     // o si no se encontró, la lista va vacía; nunca se filtra en memoria.
     if (this.filterTicket()) return this.remoteResult() ? [this.remoteResult()!] : [];
+    // Búsqueda por palabra: resultado GLOBAL del API (sin el refinamiento de Pendientes).
+    if (this.filterTexto()) return this.tickets();
     if (this.tab() === 'pendientes') return this.operativos();
     return this.tickets(); // asignados (server-side) / generales
   });
@@ -180,7 +192,7 @@ export class Tickets implements OnDestroy {
   readonly rows = computed<Ticket[]>(() => this.base());
 
   readonly hasFilters = computed(
-    () => !!(this.filterClientes().length || this.filterEstatus() || this.filterTicket() || this.remoteResult()),
+    () => !!(this.filterClientes().length || this.filterEstatus() || this.filterTicket() || this.filterTexto() || this.remoteResult()),
   );
 
   // ── Paginación server-side ──
@@ -239,6 +251,14 @@ export class Tickets implements OnDestroy {
   private async query(): Promise<void> {
     if (this.tab() === 'estadisticas') {
       await this.hd.loadAll();
+      return;
+    }
+    // Búsqueda por palabra aplicada → /search (global, paginada). Puebla tickets()/total().
+    if (this.filterTexto()) {
+      await this.hd.searchTickets(this.filterTexto(), this.pageIndex(), this.pageSize(), {
+        field: this.sortField(),
+        dir: this.sortDir(),
+      });
       return;
     }
     await this.hd.loadFiltered(this.buildFilters(), this.pageIndex(), this.pageSize(), {
@@ -303,34 +323,61 @@ export class Tickets implements OnDestroy {
   }
 
   async clearFilters(): Promise<void> {
-    clearTimeout(this.searchTimer);
     this.filterClientes.set([]);
     this.filterEstatus.set('');
-    this.filterTicket.set('');
-    this.remoteResult.set(null);
-    this.searching.set(false);
+    this.searchTerm.set('');
+    this.clearSearchState();
     this.buscarCliente.set('');
     this.buscarEstatus.set('');
     this.pageIndex.set(0);
     await this.query();
   }
 
+  /** Tipear NO dispara la búsqueda: solo guarda el término. Vaciar la caja sí restaura. */
   onSearchInput(value: string): void {
-    const v = value.trim();
-    this.filterTicket.set(v);
+    this.searchTerm.set(value);
+    if (!value.trim()) {
+      this.clearSearchState();
+      this.pageIndex.set(0);
+      this.query();
+    }
+  }
+
+  /** Limpia lo aplicado (N° y palabra), sin tocar el texto que se está escribiendo. */
+  private clearSearchState(): void {
+    this.filterTicket.set('');
+    this.filterTexto.set('');
     this.remoteResult.set(null);
     this.searching.set(false);
+  }
+
+  /** Disparo EXPLÍCITO (Enter / 🔍): N° → lookup exacto; palabra → búsqueda por contenido. */
+  async submitSearch(): Promise<void> {
+    const v = this.searchTerm().trim();
     this.pageIndex.set(0);
-    clearTimeout(this.searchTimer);
-    if (!v || !/^\d+$/.test(v)) return;
-    // SIEMPRE consulta al API (lookup exacto por número); nunca filtra en memoria.
-    this.searching.set(true);
-    this.searchTimer = setTimeout(async () => {
+    if (!v) {
+      this.clearSearchState();
+      await this.query();
+      return;
+    }
+    if (/^\d+$/.test(v)) {
+      // N° → lookup exacto server-side (remoteResult).
+      this.filterTexto.set('');
+      this.remoteResult.set(null);
+      this.filterTicket.set(v);
+      this.searching.set(true);
       const t = await this.hd.searchTicketRemote(v);
-      if (this.filterTicket() !== v) return; // respuesta vieja: el usuario siguió escribiendo
+      if (this.searchTerm().trim() !== v) return; // el usuario siguió escribiendo
       this.remoteResult.set(t);
       this.searching.set(false);
-    }, 400);
+      return;
+    }
+    // Palabra → búsqueda por contenido (global, paginada).
+    this.filterTicket.set('');
+    this.remoteResult.set(null);
+    this.searching.set(false);
+    this.filterTexto.set(v);
+    await this.query();
   }
 
   // ── Crear tarea desde el ticket (mismo modal del board) ──

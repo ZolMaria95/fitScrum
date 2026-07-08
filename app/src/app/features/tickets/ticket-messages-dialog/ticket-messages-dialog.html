@@ -1,6 +1,7 @@
 <div class="conv-head" mat-dialog-title>
   <span class="ticket-id">#{{ ticketId }}</span>
   <span class="cliente">{{ header().cliente }}</span>
+  @if (header().tipo; as tipo) { <span class="tipo">{{ tipo }}</span> }
   @if (header().estatus; as est) {
     <span class="estatus" [style.background]="estadoStyle(est).badgeBg" [style.color]="estadoStyle(est).badgeText">{{ est }}</span>
   }
@@ -46,6 +47,11 @@
         <div class="conv-meta">
           <span class="conv-user">{{ m.autor }}</span>
           <span class="conv-date">{{ m.fecha }}</span>
+          @if (puedeEditar(m)) {
+            <button class="conv-edit" (click)="startEdit(m)" matTooltip="Editar (hasta 10 min)" aria-label="Editar mensaje">
+              <mat-icon>edit</mat-icon>
+            </button>
+          }
         </div>
         @if (m.html) {
           <div class="conv-text" [innerHTML]="m.html"></div>
@@ -71,6 +77,13 @@
     <mat-icon>upload_file</mat-icon>
     <span>Suelta los archivos para adjuntarlos</span>
   </div>
+  @if (editingId()) {
+    <div class="composer-editing">
+      <mat-icon>edit</mat-icon>
+      <span>Editando tu mensaje</span>
+      <button type="button" class="composer-editing-cancel" (click)="cancelEdit()" [disabled]="sending()">Cancelar</button>
+    </div>
+  }
   <div class="composer-toolbar">
     <button mat-icon-button matTooltip="Negrita" (mousedown)="$event.preventDefault()" (click)="format('bold')" [disabled]="sending()">
       <mat-icon>format_bold</mat-icon>
@@ -93,10 +106,12 @@
        aria-label="Escribir mensaje" data-placeholder="Escribir mensaje…" (paste)="onPaste($event)"
        [attr.contenteditable]="sending() ? 'false' : 'true'"></div>
   <div class="composer-actions">
-    <label class="attach-label" matTooltip="Adjuntar archivo">
-      <mat-icon>attach_file</mat-icon>
-      <input type="file" multiple hidden (change)="onFiles($event)" />
-    </label>
+    @if (!editingId()) {
+      <label class="attach-label" matTooltip="Adjuntar archivo">
+        <mat-icon>attach_file</mat-icon>
+        <input type="file" multiple hidden (change)="onFiles($event)" />
+      </label>
+    }
     @if (composerFiles.length) {
       <div class="files">
         @for (f of composerFiles; track $index) {
@@ -111,7 +126,10 @@
     }
     <span class="spacer"></span>
     <span class="send-status">{{ sendStatus() }}</span>
-    <button mat-flat-button color="primary" (click)="send()" [disabled]="sending()">Enviar</button>
+    @if (editingId()) {
+      <button mat-button (click)="cancelEdit()" [disabled]="sending()">Cancelar</button>
+    }
+    <button mat-flat-button color="primary" (click)="send()" [disabled]="sending()">{{ editingId() ? 'Guardar cambios' : 'Enviar' }}</button>
   </div>
 </div>
 }

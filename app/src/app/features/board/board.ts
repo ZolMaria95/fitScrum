@@ -145,7 +145,19 @@ export class Board {
   readonly priorityFilter = signal<PriorityFilter>('all');
   readonly activeClients = signal<Set<string>>(new Set());
   readonly activeAssignees = signal<Set<string>>(new Set());
+  // Búsqueda con disparo EXPLÍCITO (Enter / 🔍):
+  //  - ticketSearch: lo que se escribe (no filtra hasta aplicar).
+  //  - searchedTerm: término ya aplicado (N° local, o palabra → matchedTickets).
+  //  - matchedTickets: nº de ticket que coinciden con la palabra (del /search del API).
   readonly ticketSearch = signal('');
+  readonly matchedTickets = signal<Set<string> | null>(null);
+  readonly searchingTickets = signal(false);
+  readonly searchedTerm = signal('');
+  /** Hay término escrito pero aún sin aplicar (para el hint "Presiona Enter o 🔍"). */
+  readonly searchPending = computed(() => {
+    const v = this.ticketSearch().trim();
+    return !!v && v !== this.searchedTerm();
+  });
   /** Atajo "Asignados a mí": muestra solo las tareas del usuario en sesión. */
   readonly mineOnly = signal(false);
 
@@ -225,7 +237,11 @@ export class Board {
     const prio = this.priorityFilter();
     const clients = this.activeClients();
     const assignees = this.activeAssignees();
-    const tic = this.ticketSearch().trim();
+    // Búsqueda aplicada: N° → filtro local por inclusión; palabra → intersección con los
+    // nº de ticket que devolvió el /search del API (matchedTickets).
+    const term = this.searchedTerm().trim();
+    const isNum = /^\d+$/.test(term);
+    const matched = this.matchedTickets();
     const mine = this.mineOnly();
     const me = this.myId;
     const filtered = this.visibleStories().filter((s) => {
@@ -233,7 +249,13 @@ export class Board {
       if (prio !== 'all' && s.priority !== prio) return false;
       if (clients.size > 0 && !(s.client && clients.has(s.client))) return false;
       if (assignees.size > 0 && !(!s.assignee || assignees.has(s.assignee))) return false;
-      if (tic && !(s.ticket && String(s.ticket).includes(tic))) return false;
+      if (term) {
+        if (isNum) {
+          if (!(s.ticket && String(s.ticket).includes(term))) return false;
+        } else if (!(s.ticket && matched?.has(String(s.ticket)))) {
+          return false;
+        }
+      }
       return true;
     });
     return STATUSES.map((status) => ({
@@ -276,8 +298,39 @@ export class Board {
     this.activeAssignees.set(new Set());
     this.activeClients.set(new Set());
     this.ticketSearch.set('');
+    this.matchedTickets.set(null);
+    this.searchingTickets.set(false);
+    this.searchedTerm.set('');
     this.buscarAsignado.set('');
     this.buscarCliente.set('');
+  }
+
+  /** Tipear NO filtra: solo guarda el término. Vaciar la caja sí restaura de inmediato. */
+  onTicketSearchInput(value: string): void {
+    this.ticketSearch.set(value);
+    if (!value.trim()) {
+      this.matchedTickets.set(null);
+      this.searchingTickets.set(false);
+      this.searchedTerm.set('');
+    }
+  }
+
+  /** Disparo EXPLÍCITO (Enter / 🔍): N° → filtro local; palabra → /search del API e intersección. */
+  async submitTicketSearch(): Promise<void> {
+    const v = this.ticketSearch().trim();
+    if (!v || /^\d+$/.test(v)) {
+      this.matchedTickets.set(null);
+      this.searchingTickets.set(false);
+      this.searchedTerm.set(v);
+      return;
+    }
+    this.searchingTickets.set(true);
+    this.matchedTickets.set(null);
+    this.searchedTerm.set(v);
+    const set = await this.helpdesk.searchTicketNumbers(v);
+    if (this.ticketSearch().trim() !== v) return; // el usuario siguió escribiendo
+    this.matchedTickets.set(set);
+    this.searchingTickets.set(false);
   }
 
   // Copiar el número de ticket de una card (feedback breve con ✓).

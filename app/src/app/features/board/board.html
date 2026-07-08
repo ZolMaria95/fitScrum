@@ -55,9 +55,12 @@
   </button>
 
   <mat-form-field appearance="outline" class="ticket-search" subscriptSizing="dynamic">
-    <mat-label>N° ticket</mat-label>
-    <input matInput [value]="ticketSearch()" (input)="ticketSearch.set($any($event.target).value)" inputmode="numeric" placeholder="Buscar ticket…" />
-    <mat-icon matSuffix>search</mat-icon>
+    <mat-label>Buscar (N° o palabra)</mat-label>
+    <input matInput [value]="ticketSearch()" (input)="onTicketSearchInput($any($event.target).value)"
+           (keydown.enter)="submitTicketSearch()" placeholder="N° o palabra…" />
+    <button matSuffix mat-icon-button aria-label="Buscar" (click)="submitTicketSearch()"><mat-icon>search</mat-icon></button>
+    @if (searchingTickets()) { <mat-hint>Buscando en el HelpDesk…</mat-hint> }
+    @else if (searchPending()) { <mat-hint>Presiona Enter o 🔍 para buscar</mat-hint> }
   </mat-form-field>
 
   @if (hasFilters()) {
